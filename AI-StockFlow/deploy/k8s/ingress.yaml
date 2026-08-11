@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: stockflow
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"          # NFR-07: TLS only
+    nginx.ingress.kubernetes.io/limit-rpm: "300"              # per-tenant rate limit
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [app.stockflow.example.com, api.stockflow.example.com]
+      secretName: stockflow-tls
+  rules:
+    - host: api.stockflow.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: stockflow-backend, port: { number: 80 } } }
+    - host: app.stockflow.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: stockflow-frontend, port: { number: 80 } } }
