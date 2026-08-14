@@ -99,11 +99,17 @@ class Product(Base, TenantMixin):
     attributes = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utcnow)
-
     stock_items = relationship("StockItem", back_populates="product")
 
-    __table_args__ = (Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),)
+    parent = relationship(
+        "Product",
+        remote_side=[id],
+        backref="variants",
+    )
 
+__table_args__ = (
+    Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),
+)
 
 class StockItem(Base, TenantMixin):
     """Current stock position per product per warehouse (FR-INV-05, FR-INV-09)."""

@@ -28,6 +28,7 @@ class ProductIn(BaseModel):
     attributes: dict = Field(default_factory=dict)
     track_batch: bool = False
     track_serial: bool = False
+    parent_id: int | None = None
 class ProductOut(BaseModel):
     id: int
     sku: str
@@ -129,7 +130,6 @@ def list_products(
         out.append(item)
     return out
 
-
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(
     body: ProductIn,
@@ -138,20 +138,46 @@ def create_product(
 ):
     exists = scoped(db, Product, user.tenant_id).filter(Product.sku == body.sku).first()
     if exists:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"SKU {body.sku} is already in use.")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"SKU {body.sku} is already in use."
+        )
 
-    product = Product(tenant_id=user.tenant_id, **body.model_dump())
+    if body.parent_id is not None:
+        parent = (
+            scoped(db, Product, user.tenant_id)
+            .filter(
+                Product.id == body.parent_id,
+                Product.is_active.is_(True),
+            )
+            .first()
+        )
+        if not parent:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                "Parent product does not exist.",
+            )
+
+    product = Product(
+        tenant_id=user.tenant_id,
+        **body.model_dump()
+    )
+
     db.add(product)
     db.flush()
+
     db.add(AuditLog(
-        tenant_id=user.tenant_id, user_id=user.id, action="inventory.product.create",
-        entity_type="product", entity_id=product.id, details={"sku": product.sku},
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        action="inventory.product.create",
+        entity_type="product",
+        entity_id=product.id,
+        details={"sku": product.sku},
     ))
+
     db.commit()
     db.refresh(product)
     return ProductOut.model_validate(product)
-
-
 # ------------------------------------------------------------------ stock
 @router.get("/stock")
 def stock_positions(
