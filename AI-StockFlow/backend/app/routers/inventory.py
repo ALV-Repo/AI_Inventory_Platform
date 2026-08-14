@@ -12,9 +12,6 @@ from app.models.entities import (
 from app.services.logic import weighted_average_cost
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
-
-
-# ------------------------------------------------------------------ schemas
 class ProductIn(BaseModel):
     sku: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=220)
@@ -28,10 +25,9 @@ class ProductIn(BaseModel):
     reorder_level: int = Field(default=10, ge=0)
     safety_stock: int = Field(default=5, ge=0)
     barcode: str | None = None
+    attributes: dict = Field(default_factory=dict)
     track_batch: bool = False
     track_serial: bool = False
-
-
 class ProductOut(BaseModel):
     id: int
     sku: str
@@ -39,16 +35,21 @@ class ProductOut(BaseModel):
     category: str | None
     brand: str | None
     uom: str
+    hsn_code: str | None
     gst_rate: float
     cost_price: float
     selling_price: float
     reorder_level: int
+    safety_stock: int
+    barcode: str | None
+    attributes: dict
+    track_batch: bool
+    track_serial: bool
     on_hand: float = 0
     reserved: float = 0
     available: float = 0
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class AdjustmentIn(BaseModel):
     """FR-INV-08 — a reason code is mandatory."""
