@@ -426,7 +426,6 @@ class TestAiDecisionFlow:
 
         assert r.status_code == 404
 
-
 class TestLoginLockout:
 
     def test_five_failures_lock_the_account(self, client, db):
@@ -473,6 +472,69 @@ class TestLoginLockout:
         assert "Retry-After" in r.headers
 
 
+class TestForecastEndpoints:
+    """API tests for demand forecast and forecast accuracy."""
+
+    def test_product_forecast(self, client):
+        r = client.get(
+            "/api/v1/ai/forecast/1?horizon_days=30&seasonality_index=1",
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 200
+
+        body = r.json()
+
+        assert body["product_id"] == 1
+        assert body["horizon_days"] == 30
+        assert body["predicted_demand"] >= 0
+        assert body["daily_rate"] >= 0
+        assert 0 <= body["confidence"] <= 1
+        assert "method" in body
+
+    def test_forecast_accuracy(self, client):
+        r = client.get(
+            "/api/v1/ai/forecast-accuracy/1",
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 200
+
+        body = r.json()
+
+        assert body["product_id"] == 1
+        assert "mape" in body
+        assert "accuracy_pct" in body
+        assert "sample_count" in body
+        assert "confidence" in body
+
+        if body["mape"] is not None:
+            assert body["mape"] >= 0
+
+        if body["accuracy_pct"] is not None:
+            assert 0 <= body["accuracy_pct"] <= 100
+
+    def test_forecast_requires_authentication(self, client):
+        r = client.get(
+            "/api/v1/ai/forecast/1?horizon_days=30"
+        )
+
+        assert r.status_code == 401
+
+    def test_forecast_accuracy_requires_authentication(self, client):
+        r = client.get(
+            "/api/v1/ai/forecast-accuracy/1"
+        )
+
+        assert r.status_code == 401
 class TestInventoryEndpoints:
 
     def test_stock_positions(self, client):
