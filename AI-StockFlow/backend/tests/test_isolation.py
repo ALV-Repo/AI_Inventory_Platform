@@ -65,13 +65,13 @@ def db():
             tenant_id=tenant.id,
             sku=sku,
             name=f"{name} Secret Product",
+            category="Electronics",
             cost_price=100,
             selling_price=200,
             gst_rate=18,
         )
         session.add(product)
         session.flush()
-
         session.add(
             StockItem(
                 tenant_id=tenant.id,
@@ -495,7 +495,6 @@ class TestForecastEndpoints:
         assert body["daily_rate"] >= 0
         assert 0 <= body["confidence"] <= 1
         assert "method" in body
-
     def test_forecast_accuracy(self, client):
         r = client.get(
             "/api/v1/ai/forecast-accuracy/1",
@@ -522,19 +521,49 @@ class TestForecastEndpoints:
         if body["accuracy_pct"] is not None:
             assert 0 <= body["accuracy_pct"] <= 100
 
-    def test_forecast_requires_authentication(self, client):
-        r = client.get(
-            "/api/v1/ai/forecast/1?horizon_days=30"
-        )
-
-        assert r.status_code == 401
-
     def test_forecast_accuracy_requires_authentication(self, client):
         r = client.get(
             "/api/v1/ai/forecast-accuracy/1"
         )
 
         assert r.status_code == 401
+
+    def test_category_forecast_requires_authentication(self, client):
+        r = client.get(
+            "/api/v1/ai/forecast/category/electronics?horizon_days=30"
+        )
+
+        assert r.status_code == 401
+    def test_category_forecast_requires_authentication(self, client):
+        r = client.get(
+            "/api/v1/ai/forecast/category/electronics?horizon_days=30"
+        )
+
+        assert r.status_code == 401
+
+    def test_category_forecast(self, client):
+        r = client.get(
+            "/api/v1/ai/forecast/category/Electronics?horizon_days=30",
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 200
+
+        body = r.json()
+
+        assert body["category"] == "Electronics"
+        assert body["product_count"] >= 1
+        assert body["horizon_days"] == 30
+        assert body["predicted_demand"] >= 0
+        assert body["daily_rate"] >= 0
+        assert 0 <= body["confidence"] <= 1
+        assert "method" in body
+        assert "is_heuristic" in body
+
 class TestInventoryEndpoints:
 
     def test_stock_positions(self, client):

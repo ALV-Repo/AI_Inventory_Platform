@@ -9,12 +9,25 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, scoped
 from app.core.security import require
 from app.models.entities import (
-    AIRecommendation, AuditLog, ForecastResult, Product, PurchaseOrder,
-    PurchaseOrderLine, SalesOrder, SalesOrderLine, StockItem, Supplier, User,
+    AIRecommendation,
+    AuditLog,
+    ForecastResult,
+    Product,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    SalesOrder,
+    SalesOrderLine,
+    StockItem,
+    Supplier,
+    User,
 )
 from app.services.copilot import answer_question
 from app.services.logic import (
-    business_health_score, classify_stock, forecast_demand, recommend_price, suggest_reorder,
+    business_health_score,
+    classify_stock,
+    forecast_demand,
+    recommend_price,
+    suggest_reorder,
 )
 
 router = APIRouter(prefix="/ai", tags=["AI"])
@@ -24,24 +37,141 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     """Normalise DB datetimes: treat naive values as UTC, convert aware ones."""
     if dt is None:
         return None
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+    return (
+        dt.replace(tzinfo=timezone.utc)
+        if dt.tzinfo is None
+        else dt.astimezone(timezone.utc)
+    )
 
 
 # ------------------------------------------------------------------ helpers
-def _daily_sales(db: Session, tenant_id: int, product_id: int, days: int = 180) -> list[float]:
+def _daily_sales(
+    db: Session,
+    tenant_id: int,
+    product_id: int,
+    days: int = 180,
+) -> list[float]:
     """Daily sold quantity for one product, zero-filled across the window."""
+
     since = datetime.now(timezone.utc) - timedelta(days=days)
+
     rows = (
         scoped(db, SalesOrderLine, tenant_id)
         .join(SalesOrder, SalesOrderLine.order_id == SalesOrder.id)
-        .filter(SalesOrderLine.product_id == product_id, SalesOrder.order_date >= since)
-        .with_entities(func.date(SalesOrder.order_date), func.sum(SalesOrderLine.quantity))
+        .filter(
+            SalesOrderLine.product_id == product_id,
+            SalesOrder.order_date >= since,
+        )
+        .with_entities(
+            func.date(SalesOrder.order_date),
+            func.sum(SalesOrderLine.quantity),
+        )
         .group_by(func.date(SalesOrder.order_date))
         .all()
     )
-    by_day = {str(d): float(q or 0) for d, q in rows}
-    start = (datetime.now(timezone.utc) - timedelta(days=days)).date()
-    return [by_day.get(str(start + timedelta(days=i)), 0.0) for i in range(days)]
+
+    by_day = {
+        str(d): float(q or 0)
+        for d, q in rows
+    }
+
+    start = (
+        datetime.now(timezone.utc) - timedelta(days=days)
+    ).date()
+
+    return [
+        by_day.get(
+            str(start + timedelta(days=i)),
+            0.0,
+        )
+        for i in range(days)
+    ]
+
+
+def _daily_category_sales(
+    db: Session,
+    tenant_id: int,
+    category: str,
+    days: int = 180,
+) -> list[float]:
+    """Daily sold quantity aggregated across products in a category."""
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = (
+        scoped(db, SalesOrderLine, tenant_id)
+        .join(
+            SalesOrder,
+            SalesOrderLine.order_id == SalesOrder.id,
+        )
+        .join(
+            Product,
+            SalesOrderLine.product_id == Product.id,
+        )
+        .filter(
+            Product.category == category,
+            Product.is_active.is_(True),
+            SalesOrder.order_date >= since,
+        )
+        .with_entities(
+            func.date(SalesOrder.order_date),
+            func.sum(SalesOrderLine.quantity),
+        )
+        .group_by(func.date(SalesOrder.order_date))
+        .all()
+    )
+
+    by_day = {
+        str(day): float(quantity or 0)
+        for day, quantity in rows
+    }
+
+    start = (
+        datetime.now(timezone.utc) - timedelta(days=days)
+    ).date()
+
+    return [
+        by_day.get(
+            str(start + timedelta(days=i)),
+            0.0,
+        )
+        for i in range(days)
+    ]
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = (
+        scoped(db, SalesOrderLine, tenant_id)
+        .join(SalesOrder, SalesOrderLine.order_id == SalesOrder.id)
+        .join(Product, SalesOrderLine.product_id == Product.id)
+        .filter(
+            Product.category == category,
+            Product.is_active.is_(True),
+            SalesOrder.order_date >= since,
+        )
+        .with_entities(
+            func.date(SalesOrder.order_date),
+            func.sum(SalesOrderLine.quantity),
+        )
+        .group_by(func.date(SalesOrder.order_date))
+        .all()
+    )
+
+    by_day = {
+        str(day): float(quantity or 0)
+        for day, quantity in rows
+    }
+
+    start = (
+        datetime.now(timezone.utc) - timedelta(days=days)
+    ).date()
+
+    return [
+        by_day.get(
+            str(start + timedelta(days=i)),
+            0.0,
+        )
+        for i in range(days)
+    ]
 
 
 def _stock_totals(db: Session, tenant_id: int, product_id: int) -> tuple[float, float, float]:
@@ -496,7 +626,6 @@ def forecast_accuracy(
     # Convert MAPE into a simple accuracy indicator.
     # Clamp between 0 and 100 so the result stays meaningful.
     accuracy_pct = max(0.0, min(100.0, 100.0 - mape))
-
     # More historical observations = higher confidence.
     confidence = min(1.0, len(errors) / 90)
 
@@ -509,4 +638,51 @@ def forecast_accuracy(
         "sample_count": len(errors),
         "confidence": round(confidence, 2),
         "method": "one-step-backtest-v1",
+    }
+@router.get("/forecast/category/{category}")
+def category_forecast(
+    category: str,
+    horizon_days: int = Query(30, ge=1, le=365),
+    seasonality_index: float = Query(1.0, ge=0.1, le=5.0),
+    user: User = Depends(require("ai:read")),
+    db: Session = Depends(get_db),
+):
+    """Demand forecast aggregated for one category."""
+
+    products = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.category == category,
+            Product.is_active.is_(True),
+        )
+        .all()
+    )
+
+    if not products:
+        raise HTTPException(
+            status_code=404,
+            detail="That category does not exist.",
+        )
+
+    history = _daily_category_sales(
+        db,
+        user.tenant_id,
+        category,
+    )
+
+    f = forecast_demand(
+        history,
+        horizon_days=horizon_days,
+        seasonality_index=seasonality_index,
+    )
+
+    return {
+        "category": category,
+        "product_count": len(products),
+        "horizon_days": horizon_days,
+        "predicted_demand": f.predicted_demand,
+        "daily_rate": f.daily_rate,
+        "confidence": f.confidence,
+        "method": f.method,
+        "is_heuristic": f.method.startswith("heuristic"),
     }
