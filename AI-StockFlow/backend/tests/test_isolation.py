@@ -403,7 +403,6 @@ class TestAiDecisionFlow:
         )
 
         assert second.status_code == 409
-
     def test_cannot_decide_another_tenants_recommendation(
         self,
         client,
@@ -425,6 +424,27 @@ class TestAiDecisionFlow:
         )
 
         assert r.status_code == 404
+
+    def test_reorder_suggestions_requires_authentication(self, client):
+        r = client.get(
+            "/api/v1/ai/reorder-suggestions?limit=25"
+        )
+
+        assert r.status_code == 401
+    def test_reorder_suggestions(self, client):
+        r = client.get(
+            "/api/v1/ai/reorder-suggestions?limit=25",
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 200, r.text
+
+        body = r.json()
+        assert isinstance(body, list)
 
 class TestLoginLockout:
 
@@ -470,8 +490,6 @@ class TestLoginLockout:
 
         assert r.status_code == 429
         assert "Retry-After" in r.headers
-
-
 class TestForecastEndpoints:
     """API tests for demand forecast and forecast accuracy."""
 
@@ -534,13 +552,7 @@ class TestForecastEndpoints:
         )
 
         assert r.status_code == 401
-    def test_category_forecast_requires_authentication(self, client):
-        r = client.get(
-            "/api/v1/ai/forecast/category/electronics?horizon_days=30"
-        )
-
-        assert r.status_code == 401
-
+   
     def test_category_forecast(self, client):
         r = client.get(
             "/api/v1/ai/forecast/category/Electronics?horizon_days=30",
