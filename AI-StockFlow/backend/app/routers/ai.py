@@ -406,3 +406,107 @@ def health_score(
         supplier_on_time_rate=float(on_time),
         customer_repeat_rate=0.45,
     )
+# ------------------------------------------------------------------
+# Forecast Accuracy / MAPE (FR-AI-FOR-02)
+# ------------------------------------------------------------------
+
+@router.get("/forecast-accuracy/{product_id}")
+def forecast_accuracy(
+    product_id: int,
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    """
+    Calculate forecast accuracy using Mean Absolute Percentage Error (MAPE).
+
+    Uses historical daily sales to perform a simple one-step-ahead
+    backtest: forecast the next day using the sales history available
+    before that day, then compare the forecast with actual sales.
+    """
+
+    # Make sure the product belongs to the current tenant
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(Product.id == product_id, Product.is_active.is_(True))
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status_code=404,
+            detail="That product does not exist.",
+        )
+
+    # Get daily sales history
+    history = _daily_sales(db, user.tenant_id, product_id)
+
+    # Not enough history to calculate meaningful accuracy
+    if len(history) < 7:
+        return {
+            "product_id": product.id,
+            "sku": product.sku,
+            "name": product.name,
+            "mape": None,
+            "accuracy_pct": None,
+            "sample_count": 0,
+            "confidence": 0.0,
+            "message": "Not enough sales history to calculate MAPE.",
+        }
+
+    errors = []
+
+    # Backtest one day at a time.
+    # Start after enough history exists for the forecasting function.
+    min_history = 7
+
+    for i in range(min_history, len(history)):
+        training_history = history[:i]
+        actual = history[i]
+
+        # Avoid division by zero in MAPE
+        if actual <= 0:
+            continue
+
+        forecast = forecast_demand(
+            training_history,
+            horizon_days=1,
+            seasonality_index=1.0,
+        )
+
+        predicted = forecast.daily_rate
+
+        percentage_error = abs(actual - predicted) / actual * 100
+        errors.append(percentage_error)
+
+    # No valid observations
+    if not errors:
+        return {
+            "product_id": product.id,
+            "sku": product.sku,
+            "name": product.name,
+            "mape": None,
+            "accuracy_pct": None,
+            "sample_count": 0,
+            "confidence": 0.0,
+            "message": "No valid non-zero actual sales found.",
+        }
+
+    mape = sum(errors) / len(errors)
+
+    # Convert MAPE into a simple accuracy indicator.
+    # Clamp between 0 and 100 so the result stays meaningful.
+    accuracy_pct = max(0.0, min(100.0, 100.0 - mape))
+
+    # More historical observations = higher confidence.
+    confidence = min(1.0, len(errors) / 90)
+
+    return {
+        "product_id": product.id,
+        "sku": product.sku,
+        "name": product.name,
+        "mape": round(mape, 2),
+        "accuracy_pct": round(accuracy_pct, 2),
+        "sample_count": len(errors),
+        "confidence": round(confidence, 2),
+        "method": "one-step-backtest-v1",
+    }
