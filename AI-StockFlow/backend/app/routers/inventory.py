@@ -68,7 +68,11 @@ class TransferIn(BaseModel):
     to_warehouse_id: int
     quantity: float = Field(gt=0)
 
-
+class ReservationIn(BaseModel):
+    """FR-INV-09 — reserve available stock."""
+    product_id: int
+    warehouse_id: int
+    quantity: float = Field(gt=0)
 # ------------------------------------------------------------------ helpers
 def _stock_row(db: Session, tenant_id: int, product_id: int, warehouse_id: int) -> StockItem:
     row = (
@@ -203,7 +207,63 @@ def stock_positions(
         }
         for s in q.all()
     ]
+@router.post("/reservations", status_code=status.HTTP_201_CREATED)
+def create_reservation(
+    body: ReservationIn,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """Reserve available stock for an order (FR-INV-09)."""
 
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(Product.id == body.product_id)
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "That product does not exist.",
+        )
+
+    row = _stock_row(
+        db,
+        user.tenant_id,
+        body.product_id,
+        body.warehouse_id,
+    )
+
+    if row.available < body.quantity:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Only {row.available} units are available to reserve.",
+        )
+
+    row.reserved_qty = (row.reserved_qty or 0) + body.quantity
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.stock.reserve",
+            entity_type="product",
+            entity_id=body.product_id,
+            details={
+                "warehouse_id": body.warehouse_id,
+                "quantity": body.quantity,
+            },
+        )
+    )
+
+    db.commit()
+
+    return {
+        "product_id": body.product_id,
+        "warehouse_id": body.warehouse_id,
+        "reserved": row.reserved_qty,
+        "available": row.available,
+    }
 
 @router.post("/adjustments", status_code=status.HTTP_201_CREATED)
 def create_adjustment(

@@ -205,9 +205,10 @@ class TestApiIsolation:
         assert r.status_code == 200
 
         body = r.json()
-
         assert "Tenant Beta Secret Product" not in str(body)
         assert body["role_filtered"] is True
+        
+    
 
     def test_unauthenticated_requests_are_rejected(self, client):
         assert (
@@ -738,3 +739,57 @@ class TestInventoryEndpoints:
         )
 
         assert r.status_code == 200
+    
+
+    def test_create_reservation(self, client):
+        r = client.post(
+            "/api/v1/inventory/reservations",
+            json={
+                "product_id": 1,
+                "warehouse_id": 1,
+                "quantity": 1,
+            },
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 201
+
+        body = r.json()
+        assert body["product_id"] == 1
+        assert body["warehouse_id"] == 1
+        assert body["reserved"] >= 1
+
+
+    def test_reservation_requires_authentication(self, client):
+        r = client.post(
+            "/api/v1/inventory/reservations",
+            json={
+                "product_id": 1,
+                "warehouse_id": 1,
+                "quantity": 1,
+            },
+        )
+
+        assert r.status_code == 401
+
+
+    def test_reservation_rejects_excess_quantity(self, client):
+        r = client.post(
+            "/api/v1/inventory/reservations",
+            json={
+                "product_id": 1,
+                "warehouse_id": 1,
+                "quantity": 999999,
+            },
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 400
