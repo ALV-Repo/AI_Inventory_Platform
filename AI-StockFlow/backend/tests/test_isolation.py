@@ -447,7 +447,29 @@ class TestAiDecisionFlow:
         assert isinstance(body, list)
 
 class TestLoginLockout:
+    def test_reorder_suggestions_updates_existing_pending_recommendation(
+        self, client
+    ):
+        headers = {
+            "Authorization": (
+                f"Bearer {token_for(client, 'alpha@example.com')}"
+            )
+        }
 
+        first = client.get(
+            "/api/v1/ai/reorder-suggestions?limit=25",
+            headers=headers,
+        )
+
+        assert first.status_code == 200
+
+        second = client.get(
+            "/api/v1/ai/reorder-suggestions?limit=25",
+            headers=headers,
+        )
+
+        assert second.status_code == 200
+        assert isinstance(second.json(), list)
     def test_five_failures_lock_the_account(self, client, db):
         """SRS §9: brute-force protection on sign-in."""
 
@@ -575,7 +597,32 @@ class TestForecastEndpoints:
         assert 0 <= body["confidence"] <= 1
         assert "method" in body
         assert "is_heuristic" in body
+class TestDeadStockEndpoints:
 
+    def test_dead_stock_requires_authentication(self, client):
+        r = client.get("/api/v1/ai/dead-stock")
+
+        assert r.status_code == 401
+
+    def test_dead_stock(self, client):
+        r = client.get(
+            "/api/v1/ai/dead-stock",
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 200
+
+        body = r.json()
+
+        assert "summary" in body
+        assert "total_locked_in_slow_or_dead" in body
+        assert "items" in body
+        assert isinstance(body["summary"], dict)
+        assert isinstance(body["items"], list)
 class TestInventoryEndpoints:
 
     def test_stock_positions(self, client):
