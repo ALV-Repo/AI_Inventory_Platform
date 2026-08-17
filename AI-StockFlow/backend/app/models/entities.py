@@ -255,6 +255,51 @@ class AIRecommendation(Base, TenantMixin):
     acted_at = Column(DateTime)
     created_at = Column(DateTime, default=utcnow, index=True)
 
+class StockTransfer(Base, TenantMixin):
+    """FR-INV-06 — warehouse transfer workflow."""
+
+    __tablename__ = "stock_transfers"
+
+    id = Column(Integer, primary_key=True)
+
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    from_warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+    )
+
+    to_warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+    )
+
+    quantity = Column(Float, nullable=False)
+
+    status = Column(
+        String(20),
+        default="pending",
+        nullable=False,
+        index=True,
+    )  # pending|approved|in_transit|received
+
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    approved_by = Column(Integer, ForeignKey("users.id"))
+    dispatched_by = Column(Integer, ForeignKey("users.id"))
+    received_by = Column(Integer, ForeignKey("users.id"))
+
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    approved_at = Column(DateTime)
+    dispatched_at = Column(DateTime)
+    received_at = Column(DateTime)
+
 
 class AuditLog(Base, TenantMixin):
     """NFR-08 — immutable."""
