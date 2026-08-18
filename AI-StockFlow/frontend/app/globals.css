@@ -2,14 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body { font-variant-numeric: tabular-nums; }
-  :focus-visible { outline: 2px solid theme('colors.ai'); outline-offset: 2px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    transition-duration: .01ms !important;
-  }
+body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, Helvetica, sans-serif;
 }

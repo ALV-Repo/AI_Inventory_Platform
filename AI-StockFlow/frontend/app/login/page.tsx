@@ -1,57 +1,155 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { login } from "@/services/authService";
 
-export default function SignIn() {
+export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.signIn(email, password);
-      router.push("/");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Email or password is incorrect.");
-    } finally {
-      setBusy(false);
+  const [email, setEmail] = useState("owner@irobox.in");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    setError("");
+
+    if (!email.trim() || !password.trim()) {
+      setError("Please enter email and password.");
+      return;
     }
-  }
+
+    try {
+      setLoading(true);
+
+      const data = await login(email.trim(), password);
+
+      console.log("LOGIN SUCCESS:", data);
+
+      localStorage.setItem("access_token", data.access_token);
+
+      if (data.refresh_token) {
+        localStorage.setItem("refresh_token", data.refresh_token);
+      }
+
+      if (data.user_id !== undefined) {
+        localStorage.setItem("user_id", String(data.user_id));
+      }
+
+      if (data.tenant_id !== undefined) {
+        localStorage.setItem("tenant_id", String(data.tenant_id));
+      }
+
+      if (data.role) {
+        localStorage.setItem("role", data.role);
+      }
+
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("LOGIN ERROR:", err);
+
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Login failed. Please check the backend.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="grid min-h-screen place-items-center bg-paper px-4">
-      <div className="w-full max-w-sm rounded-lg border border-line bg-white p-7 shadow-card">
-        <h1 className="font-display text-xl font-bold tracking-tight">Sign in</h1>
-        <p className="mt-1 text-sm text-ink-soft">Use your work email to continue.</p>
+    <main className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
 
-        <div className="mt-6 space-y-3">
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Email</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                   onKeyDown={(e) => e.key === "Enter" && submit()}
-                   className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm" />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Password</span>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                   onKeyDown={(e) => e.key === "Enter" && submit()}
-                   className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm" />
-          </label>
+        <div className="mb-6 text-center">
+          <h1 className="text-3xl font-bold text-blue-600">
+            AI StockFlow
+          </h1>
+
+          <p className="mt-2 text-sm text-gray-500">
+            AI Inventory Management Platform
+          </p>
         </div>
 
-        {error && <p className="mt-3 text-sm font-medium text-crit">{error}</p>}
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">
+            Sign in
+          </h2>
 
-        <button onClick={submit} disabled={busy}
-                className="mt-5 w-full rounded-lg bg-ink py-2.5 text-sm font-medium text-white
-                           hover:bg-ink-2 disabled:opacity-50">
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
+          <p className="mt-1 text-sm text-gray-500">
+            Use your work email to continue.
+          </p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-5">
+
+          <div>
+            <label
+              htmlFor="email"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
+              Email
+            </label>
+
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              autoComplete="email"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              required
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="password"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
+              Password
+            </label>
+
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              required
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+              <p className="text-sm text-red-600">
+                {error}
+              </p>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Signing In..." : "Sign In"}
+          </button>
+
+        </form>
+
+        <p className="mt-6 text-center text-xs text-gray-400">
+          AI StockFlow • Secure Business Management
+        </p>
+
       </div>
-    </div>
+    </main>
   );
 }
