@@ -7,7 +7,14 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, scoped
 from app.core.security import require
 from app.models.entities import (
-    AuditLog, Product, StockItem, StockMovement, User, Warehouse,
+    AuditLog,
+    Product,
+    StockItem,
+    StockMovement,
+    StockTransfer,
+    User,
+    Warehouse,
+    utcnow,
 )
 from app.services.logic import weighted_average_cost
 
@@ -298,45 +305,300 @@ def create_adjustment(
     ))
     db.commit()
     return {"product_id": body.product_id, "new_quantity": new_qty, "movement_id": movement.id}
-
-
 @router.post("/transfers", status_code=status.HTTP_201_CREATED)
 def create_transfer(
     body: TransferIn,
     user: User = Depends(require("inventory:write")),
     db: Session = Depends(get_db),
 ):
-    """Move stock between warehouses (FR-INV-06)."""
-    if body.from_warehouse_id == body.to_warehouse_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pick two different warehouses.")
+    """Create a warehouse transfer request (FR-INV-06)."""
 
-    source = _stock_row(db, user.tenant_id, body.product_id, body.from_warehouse_id)
-    if source.available < body.quantity:
+    if body.from_warehouse_id == body.to_warehouse_id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"Only {source.available} available at the source warehouse.",
+            "Pick two different warehouses.",
         )
 
-    destination = _stock_row(db, user.tenant_id, body.product_id, body.to_warehouse_id)
+    source = (
+        scoped(db, StockItem, user.tenant_id)
+        .filter(
+            StockItem.product_id == body.product_id,
+            StockItem.warehouse_id == body.from_warehouse_id,
+        )
+        .first()
+    )
+
+    if not source or source.available < body.quantity:
+        available = source.available if source else 0
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Only {available} available at the source warehouse.",
+        )
+
+    transfer = StockTransfer(
+        tenant_id=user.tenant_id,
+        product_id=body.product_id,
+        from_warehouse_id=body.from_warehouse_id,
+        to_warehouse_id=body.to_warehouse_id,
+        quantity=body.quantity,
+        status="pending",
+        created_by=user.id,
+    )
+
+    db.add(transfer)
+    db.flush()
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.transfer.created",
+            entity_type="stock_transfer",
+            entity_id=transfer.id,
+            details={
+                "product_id": body.product_id,
+                "from_warehouse_id": body.from_warehouse_id,
+                "to_warehouse_id": body.to_warehouse_id,
+                "quantity": body.quantity,
+                "status": "pending",
+            },
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": transfer.id,
+        "status": transfer.status,
+        "quantity": transfer.quantity,
+    }
+
+
+@router.post("/transfers/{transfer_id}/approve")
+def approve_transfer(
+    transfer_id: int,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """Approve a pending warehouse transfer."""
+
+    transfer = (
+        scoped(db, StockTransfer, user.tenant_id)
+        .filter(StockTransfer.id == transfer_id)
+        .first()
+    )
+
+    if not transfer:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Transfer not found.",
+        )
+
+    if transfer.status != "pending":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Transfer cannot be approved from status '{transfer.status}'.",
+        )
+
+    transfer.status = "approved"
+    transfer.approved_by = user.id
+    transfer.approved_at = utcnow()
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.transfer.approved",
+            entity_type="stock_transfer",
+            entity_id=transfer.id,
+            details={"status": "approved"},
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": transfer.id,
+        "status": transfer.status,
+    }
+
+
+@router.post("/transfers/{transfer_id}/dispatch")
+def dispatch_transfer(
+    transfer_id: int,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """Dispatch an approved transfer and deduct source stock."""
+
+    transfer = (
+        scoped(db, StockTransfer, user.tenant_id)
+        .filter(StockTransfer.id == transfer_id)
+        .first()
+    )
+
+    if not transfer:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Transfer not found.",
+        )
+
+    if transfer.status != "approved":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Transfer cannot be dispatched from status '{transfer.status}'.",
+        )
+
+    source = (
+        scoped(db, StockItem, user.tenant_id)
+        .filter(
+            StockItem.product_id == transfer.product_id,
+            StockItem.warehouse_id == transfer.from_warehouse_id,
+        )
+        .first()
+    )
+
+    available = source.available if source else 0
+
+    if not source or available < transfer.quantity:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Only {available} available at the source warehouse.",
+        )
+
+    source.quantity -= transfer.quantity
+
+    db.add(
+        StockMovement(
+            tenant_id=user.tenant_id,
+            product_id=transfer.product_id,
+            warehouse_id=transfer.from_warehouse_id,
+            movement_type="transfer",
+            quantity=-transfer.quantity,
+            reason_code="warehouse_transfer_dispatch",
+            user_id=user.id,
+        )
+    )
+
+    transfer.status = "in_transit"
+    transfer.dispatched_by = user.id
+    transfer.dispatched_at = utcnow()
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.transfer.dispatched",
+            entity_type="stock_transfer",
+            entity_id=transfer.id,
+            details={
+                "status": "in_transit",
+                "quantity": transfer.quantity,
+            },
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": transfer.id,
+        "status": transfer.status,
+        "quantity": transfer.quantity,
+    }
+
+
+@router.post("/transfers/{transfer_id}/receive")
+def receive_transfer(
+    transfer_id: int,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """Receive an in-transit transfer and add destination stock."""
+
+    transfer = (
+        scoped(db, StockTransfer, user.tenant_id)
+        .filter(StockTransfer.id == transfer_id)
+        .first()
+    )
+
+    if not transfer:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Transfer not found.",
+        )
+
+    if transfer.status != "in_transit":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Transfer cannot be received from status '{transfer.status}'.",
+        )
+
+    destination = _stock_row(
+        db,
+        user.tenant_id,
+        transfer.product_id,
+        transfer.to_warehouse_id,
+    )
+
+    source = (
+        scoped(db, StockItem, user.tenant_id)
+        .filter(
+            StockItem.product_id == transfer.product_id,
+            StockItem.warehouse_id == transfer.from_warehouse_id,
+        )
+        .first()
+    )
+
+    incoming_cost = source.avg_cost if source and source.avg_cost is not None else 0
+
     destination.avg_cost = weighted_average_cost(
         current_qty=destination.quantity or 0,
         current_cost=destination.avg_cost or 0,
-        incoming_qty=body.quantity,
-        incoming_cost=source.avg_cost or 0,
+        incoming_qty=transfer.quantity,
+        incoming_cost=incoming_cost,
     )
-    source.quantity -= body.quantity
-    destination.quantity = (destination.quantity or 0) + body.quantity
 
-    for wh, qty in ((body.from_warehouse_id, -body.quantity), (body.to_warehouse_id, body.quantity)):
-        db.add(StockMovement(
-            tenant_id=user.tenant_id, product_id=body.product_id, warehouse_id=wh,
-            movement_type="transfer", quantity=qty, reason_code="warehouse_transfer",
+    destination.quantity = (
+        destination.quantity or 0
+    ) + transfer.quantity
+
+    db.add(
+        StockMovement(
+            tenant_id=user.tenant_id,
+            product_id=transfer.product_id,
+            warehouse_id=transfer.to_warehouse_id,
+            movement_type="transfer",
+            quantity=transfer.quantity,
+            reason_code="warehouse_transfer_receive",
             user_id=user.id,
-        ))
+        )
+    )
+
+    transfer.status = "received"
+    transfer.received_by = user.id
+    transfer.received_at = utcnow()
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.transfer.received",
+            entity_type="stock_transfer",
+            entity_id=transfer.id,
+            details={
+                "status": "received",
+                "quantity": transfer.quantity,
+            },
+        )
+    )
+
     db.commit()
-    return {"status": "completed", "quantity": body.quantity}
 
-
+    return {
+        "id": transfer.id,
+        "status": transfer.status,
+        "quantity": transfer.quantity,
+    }
 @router.get("/movements")
 def stock_ledger(
     product_id: int | None = None,
