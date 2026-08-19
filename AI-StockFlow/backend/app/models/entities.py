@@ -312,3 +312,39 @@ class AuditLog(Base, TenantMixin):
     details = Column(JSON)
     ip_address = Column(String(64))
     created_at = Column(DateTime, default=utcnow, index=True)
+class CycleCountSession(Base, TenantMixin):
+    """FR-INV-07 — physical stock cycle-count session."""
+    __tablename__ = "cycle_count_sessions"
+
+    id = Column(Integer, primary_key=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    status = Column(String(20), default="open", nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    closed_at = Column(DateTime)
+
+
+class CycleCountEntry(Base, TenantMixin):
+    """Physical count entry belonging to a cycle-count session."""
+    __tablename__ = "cycle_count_entries"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(
+        Integer,
+        ForeignKey("cycle_count_sessions.id"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    system_quantity = Column(Float, nullable=False)
+    counted_quantity = Column(Float)
+    variance = Column(Float)
+
+    counted_by = Column(Integer, ForeignKey("users.id"))
+    counted_at = Column(DateTime)

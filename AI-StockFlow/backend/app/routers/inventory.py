@@ -8,6 +8,8 @@ from app.core.database import get_db, scoped
 from app.core.security import require
 from app.models.entities import (
     AuditLog,
+    CycleCountEntry,
+    CycleCountSession,
     Product,
     StockItem,
     StockMovement,
@@ -74,6 +76,18 @@ class TransferIn(BaseModel):
     from_warehouse_id: int
     to_warehouse_id: int
     quantity: float = Field(gt=0)
+
+
+class CycleCountSessionIn(BaseModel):
+    """FR-INV-07 — open a physical cycle-count session."""
+    warehouse_id: int
+
+
+class CycleCountEntryIn(BaseModel):
+    """FR-INV-07 — submit a physical count."""
+    product_id: int
+    counted_quantity: float = Field(ge=0)
+
 
 class ReservationIn(BaseModel):
     """FR-INV-09 — reserve available stock."""
@@ -599,6 +613,257 @@ def receive_transfer(
         "status": transfer.status,
         "quantity": transfer.quantity,
     }
+
+# ------------------------------------------------------------------ cycle counts
+@router.post("/cycle-counts", status_code=status.HTTP_201_CREATED)
+def create_cycle_count(
+    body: CycleCountSessionIn,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """Open a physical cycle-count session (FR-INV-07)."""
+
+    warehouse = (
+        scoped(db, Warehouse, user.tenant_id)
+        .filter(
+            Warehouse.id == body.warehouse_id,
+            Warehouse.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not warehouse:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Warehouse not found.",
+        )
+
+    session = CycleCountSession(
+        tenant_id=user.tenant_id,
+        warehouse_id=body.warehouse_id,
+        status="open",
+        created_by=user.id,
+        created_at=utcnow(),
+    )
+    db.add(session)
+    db.flush()
+
+    # Snapshot current stock for this warehouse so later physical counts
+    # are compared against a stable system quantity.
+    stock_rows = (
+        scoped(db, StockItem, user.tenant_id)
+        .filter(StockItem.warehouse_id == body.warehouse_id)
+        .all()
+    )
+
+    for row in stock_rows:
+        db.add(
+            CycleCountEntry(
+                tenant_id=user.tenant_id,
+                session_id=session.id,
+                product_id=row.product_id,
+                system_quantity=row.quantity or 0,
+            )
+        )
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.cycle_count.created",
+            entity_type="cycle_count_session",
+            entity_id=session.id,
+            details={
+                "warehouse_id": body.warehouse_id,
+                "status": "open",
+                "entry_count": len(stock_rows),
+            },
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": session.id,
+        "warehouse_id": session.warehouse_id,
+        "status": session.status,
+        "entry_count": len(stock_rows),
+    }
+
+
+@router.post("/cycle-counts/{session_id}/entries")
+def submit_cycle_count_entry(
+    session_id: int,
+    body: CycleCountEntryIn,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """Record a physical count and calculate its variance (FR-INV-07)."""
+
+    session = (
+        scoped(db, CycleCountSession, user.tenant_id)
+        .filter(CycleCountSession.id == session_id)
+        .first()
+    )
+
+    if not session:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Cycle-count session not found.",
+        )
+
+    if session.status != "open":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Cycle-count session cannot be updated from status '{session.status}'.",
+        )
+
+    entry = (
+        scoped(db, CycleCountEntry, user.tenant_id)
+        .filter(
+            CycleCountEntry.session_id == session_id,
+            CycleCountEntry.product_id == body.product_id,
+        )
+        .first()
+    )
+
+    if not entry:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Product is not part of this cycle-count session.",
+        )
+
+    entry.counted_quantity = body.counted_quantity
+    entry.variance = body.counted_quantity - entry.system_quantity
+    entry.counted_by = user.id
+    entry.counted_at = utcnow()
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.cycle_count.counted",
+            entity_type="cycle_count_entry",
+            entity_id=entry.id,
+            details={
+                "session_id": session_id,
+                "product_id": body.product_id,
+                "system_quantity": entry.system_quantity,
+                "counted_quantity": body.counted_quantity,
+                "variance": entry.variance,
+            },
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": entry.id,
+        "session_id": entry.session_id,
+        "product_id": entry.product_id,
+        "system_quantity": entry.system_quantity,
+        "counted_quantity": entry.counted_quantity,
+        "variance": entry.variance,
+    }
+
+
+@router.post("/cycle-counts/{session_id}/close")
+def close_cycle_count(
+    session_id: int,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """Close a cycle-count session after all entries are counted (FR-INV-07)."""
+
+    session = (
+        scoped(db, CycleCountSession, user.tenant_id)
+        .filter(CycleCountSession.id == session_id)
+        .first()
+    )
+
+    if not session:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Cycle-count session not found.",
+        )
+
+    if session.status != "open":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Cycle-count session cannot be closed from status '{session.status}'.",
+        )
+
+    entries = (
+        scoped(db, CycleCountEntry, user.tenant_id)
+        .filter(CycleCountEntry.session_id == session_id)
+        .all()
+    )
+
+    uncounted = [entry for entry in entries if entry.counted_quantity is None]
+    if uncounted:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"{len(uncounted)} cycle-count entries are still uncounted.",
+        )
+
+    # Apply physical counts as inventory adjustments and preserve the
+    # immutable movement/audit trail.
+    adjusted = 0
+    for entry in entries:
+        if entry.variance:
+            row = _stock_row(
+                db,
+                user.tenant_id,
+                entry.product_id,
+                session.warehouse_id,
+            )
+            row.quantity = entry.counted_quantity
+
+            db.add(
+                StockMovement(
+                    tenant_id=user.tenant_id,
+                    product_id=entry.product_id,
+                    warehouse_id=session.warehouse_id,
+                    movement_type="adjustment",
+                    quantity=entry.variance,
+                    unit_cost=row.avg_cost or 0,
+                    reason_code="cycle_count_variance",
+                    user_id=user.id,
+                    reference_type="cycle_count_session",
+                    reference_id=session.id,
+                )
+            )
+            adjusted += 1
+
+    session.status = "closed"
+    session.closed_at = utcnow()
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.cycle_count.closed",
+            entity_type="cycle_count_session",
+            entity_id=session.id,
+            details={
+                "warehouse_id": session.warehouse_id,
+                "entry_count": len(entries),
+                "adjusted_count": adjusted,
+            },
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": session.id,
+        "status": session.status,
+        "warehouse_id": session.warehouse_id,
+        "entry_count": len(entries),
+        "adjusted_count": adjusted,
+    }
+
+
 @router.get("/movements")
 def stock_ledger(
     product_id: int | None = None,

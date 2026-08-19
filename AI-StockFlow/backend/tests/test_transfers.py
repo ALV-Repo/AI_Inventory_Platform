@@ -114,7 +114,9 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
+# Reuse one login token for all transfer tests.
+# This avoids triggering the application's login rate limiter.
+@pytest.fixture(scope="module")
 def auth_headers(client):
     response = client.post(
         "/api/v1/auth/login",
