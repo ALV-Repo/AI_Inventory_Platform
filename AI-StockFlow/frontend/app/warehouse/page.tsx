@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 type Warehouse = {
   id: string;
@@ -81,7 +82,8 @@ const formatNumber = (value: number) =>
 
 export default function WarehousePage() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [statusFilter, setStatusFilter] =
+    useState("All Status");
 
   const totalCapacity = warehouses.reduce(
     (sum, warehouse) => sum + warehouse.capacity,
@@ -102,7 +104,15 @@ export default function WarehousePage() {
     (warehouse) => warehouse.status === "Operational"
   ).length;
 
-  const utilization = Math.round((totalUsed / totalCapacity) * 100);
+  const maintenanceWarehouses = warehouses.filter(
+    (warehouse) => warehouse.status === "Maintenance"
+  ).length;
+
+  const utilization = Math.round(
+    (totalUsed / totalCapacity) * 100
+  );
+
+  const availableCapacity = totalCapacity - totalUsed;
 
   const filteredWarehouses = useMemo(() => {
     return warehouses.filter((warehouse) => {
@@ -110,8 +120,12 @@ export default function WarehousePage() {
 
       const matchesSearch =
         warehouse.name.toLowerCase().includes(searchText) ||
-        warehouse.location.toLowerCase().includes(searchText) ||
-        warehouse.manager.toLowerCase().includes(searchText) ||
+        warehouse.location
+          .toLowerCase()
+          .includes(searchText) ||
+        warehouse.manager
+          .toLowerCase()
+          .includes(searchText) ||
         warehouse.id.toLowerCase().includes(searchText);
 
       const matchesStatus =
@@ -123,715 +137,494 @@ export default function WarehousePage() {
   }, [search, statusFilter]);
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#f8fafc",
-        padding: "28px 38px",
-        color: "#0f172a",
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          maxWidth: 1100,
-          margin: "0 auto",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          marginBottom: 26,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 28,
-              fontWeight: 700,
-            }}
-          >
-            Warehouse
-          </h1>
+    <PageLayout>
+      <main className="min-h-screen bg-[#f8fafc] px-6 py-7 text-slate-900">
 
-          <p
-            style={{
-              margin: "7px 0 0",
-              color: "#64748b",
-              fontSize: 14,
-            }}
-          >
-            Manage warehouses, storage capacity and inventory locations
-          </p>
-        </div>
+        <div className="mx-auto max-w-6xl">
 
-        <button
-          onClick={() => window.location.reload()}
-          style={{
-            border: "1px solid #cbd5e1",
-            background: "#ffffff",
-            borderRadius: 7,
-            padding: "9px 18px",
-            cursor: "pointer",
-            fontWeight: 600,
-            color: "#334155",
-          }}
-        >
-          Refresh
-        </button>
-      </div>
-
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        {/* KPI Cards */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 14,
-            marginBottom: 22,
-          }}
-        >
-          <div style={cardStyle}>
-            <p style={labelStyle}>Total Warehouses</p>
-
-            <h2 style={valueStyle}>
-              {warehouses.length}
-            </h2>
-
-            <span style={smallGreen}>
-              Registered locations
-            </span>
-          </div>
-
-          <div style={cardStyle}>
-            <p style={labelStyle}>Operational</p>
-
-            <h2 style={valueStyle}>
-              {operationalWarehouses}
-            </h2>
-
-            <span style={smallGreen}>
-              Currently active
-            </span>
-          </div>
-
-          <div style={cardStyle}>
-            <p style={labelStyle}>Total Products</p>
-
-            <h2 style={valueStyle}>
-              {formatNumber(totalProducts)}
-            </h2>
-
-            <span style={smallBlue}>
-              Products across warehouses
-            </span>
-          </div>
-
-          <div style={cardStyle}>
-            <p style={labelStyle}>Capacity Utilization</p>
-
-            <h2 style={valueStyle}>
-              {utilization}%
-            </h2>
-
-            <span style={smallOrange}>
-              Current storage usage
-            </span>
-          </div>
-        </div>
-
-        {/* Capacity Overview */}
-        <section style={sectionStyle}>
-          <div
-            style={{
-              padding: "18px 18px 14px",
-              borderBottom: "1px solid #e2e8f0",
-            }}
-          >
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 16,
-              }}
-            >
-              Storage Capacity Overview
-            </h3>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-                fontSize: 12,
-                color: "#64748b",
-              }}
-            >
-              Warehouse storage utilization
-            </p>
-          </div>
-
-          <div
-            style={{
-              padding: 20,
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 28,
-            }}
-          >
+          {/* HEADER */}
+          <div className="mb-6 flex items-start justify-between">
             <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <p style={labelStyle}>
-                  Used Capacity
-                </p>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Warehouse
+              </h1>
 
-                <strong style={{ fontSize: 14 }}>
-                  {formatNumber(totalUsed)}
-                </strong>
-              </div>
-
-              <div
-                style={{
-                  height: 12,
-                  background: "#e2e8f0",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  marginTop: 12,
-                }}
-              >
-                <div
-                  style={{
-                    width: `${utilization}%`,
-                    height: "100%",
-                    background: "#2563eb",
-                    borderRadius: 10,
-                  }}
-                />
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: "#64748b",
-                }}
-              >
-                <span>
-                  {formatNumber(totalUsed)} units
-                </span>
-
-                <span>
-                  {utilization}%
-                </span>
-              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Manage warehouses, storage capacity and
+                inventory locations
+              </p>
             </div>
 
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <p style={labelStyle}>
-                  Available Capacity
-                </p>
-
-                <strong style={{ fontSize: 14 }}>
-                  {formatNumber(totalCapacity - totalUsed)}
-                </strong>
-              </div>
-
-              <div
-                style={{
-                  height: 12,
-                  background: "#e2e8f0",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  marginTop: 12,
-                }}
-              >
-                <div
-                  style={{
-                    width: `${100 - utilization}%`,
-                    height: "100%",
-                    background: "#16a34a",
-                    borderRadius: 10,
-                  }}
-                />
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: "#64748b",
-                }}
-              >
-                <span>
-                  {formatNumber(totalCapacity - totalUsed)} units
-                </span>
-
-                <span>
-                  {100 - utilization}%
-                </span>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Refresh
+            </button>
           </div>
-        </section>
 
-        {/* Search and Filter */}
-        <section
-          style={{
-            ...sectionStyle,
-            padding: 12,
-            marginTop: 16,
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 160px",
-              gap: 10,
-            }}
-          >
-            <input
-              value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="Search warehouse, location, manager or ID..."
-              style={inputStyle}
+          {/* KPI CARDS */}
+          <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+            <KpiCard
+              title="Total Warehouses"
+              value={warehouses.length.toString()}
+              subtitle="Registered locations"
+              color="green"
             />
 
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value)
-              }
-              style={inputStyle}
-            >
-              <option>All Status</option>
-              <option>Operational</option>
-              <option>Maintenance</option>
-            </select>
-          </div>
-        </section>
+            <KpiCard
+              title="Operational"
+              value={operationalWarehouses.toString()}
+              subtitle="Currently active"
+              color="green"
+            />
 
-        {/* Warehouse Table */}
-        <section
-          style={{
-            ...sectionStyle,
-            marginTop: 16,
-          }}
-        >
-          <div
-            style={{
-              padding: "18px 18px 14px",
-              borderBottom: "1px solid #e2e8f0",
-            }}
-          >
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 16,
-              }}
-            >
-              Warehouse Directory
-            </h3>
+            <KpiCard
+              title="Total Products"
+              value={formatNumber(totalProducts)}
+              subtitle="Products across warehouses"
+              color="blue"
+            />
 
-            <p
-              style={{
-                margin: "5px 0 0",
-                fontSize: 12,
-                color: "#64748b",
-              }}
-            >
-              Overview of warehouse locations and capacity
-            </p>
+            <KpiCard
+              title="Capacity Utilization"
+              value={`${utilization}%`}
+              subtitle="Current storage usage"
+              color="orange"
+            />
+
           </div>
 
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 13,
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    background: "#f8fafc",
-                  }}
-                >
-                  <th style={thStyle}>
-                    Warehouse
-                  </th>
+          {/* CAPACITY OVERVIEW */}
+          <section className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
 
-                  <th style={thStyle}>
-                    Location
-                  </th>
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-sm font-semibold">
+                Storage Capacity Overview
+              </h2>
 
-                  <th style={thStyle}>
-                    Manager
-                  </th>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Warehouse storage utilization
+              </p>
+            </div>
 
-                  <th style={thStyle}>
-                    Products
-                  </th>
+            <div className="grid gap-8 p-5 md:grid-cols-2">
 
-                  <th style={thStyle}>
-                    Capacity
-                  </th>
+              {/* USED */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-slate-500">
+                    Used Capacity
+                  </p>
 
-                  <th style={thStyle}>
-                    Utilization
-                  </th>
+                  <strong className="text-sm">
+                    {formatNumber(totalUsed)}
+                  </strong>
+                </div>
 
-                  <th style={thStyle}>
-                    Status
-                  </th>
+                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-blue-600"
+                    style={{
+                      width: `${utilization}%`,
+                    }}
+                  />
+                </div>
 
-                  <th style={thStyle}>
-                    Action
-                  </th>
-                </tr>
-              </thead>
+                <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+                  <span>
+                    {formatNumber(totalUsed)} units
+                  </span>
 
-              <tbody>
-                {filteredWarehouses.map((warehouse) => {
-                  const warehouseUtilization = Math.round(
-                    (warehouse.used / warehouse.capacity) *
-                      100
-                  );
+                  <span>{utilization}%</span>
+                </div>
+              </div>
 
-                  return (
-                    <tr key={warehouse.id}>
-                      <td style={tdStyle}>
-                        <strong>
-                          {warehouse.name}
-                        </strong>
+              {/* AVAILABLE */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-slate-500">
+                    Available Capacity
+                  </p>
 
-                        <div
-                          style={{
-                            color: "#64748b",
-                            fontSize: 11,
-                            marginTop: 3,
-                          }}
-                        >
-                          {warehouse.id}
-                        </div>
-                      </td>
+                  <strong className="text-sm">
+                    {formatNumber(availableCapacity)}
+                  </strong>
+                </div>
 
-                      <td style={tdStyle}>
-                        {warehouse.location}
-                      </td>
+                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-green-600"
+                    style={{
+                      width: `${100 - utilization}%`,
+                    }}
+                  />
+                </div>
 
-                      <td style={tdStyle}>
-                        {warehouse.manager}
-                      </td>
+                <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+                  <span>
+                    {formatNumber(availableCapacity)} units
+                  </span>
 
-                      <td
-                        style={{
-                          ...tdStyle,
-                          fontWeight: 600,
-                        }}
+                  <span>
+                    {100 - utilization}%
+                  </span>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          {/* SEARCH + FILTER */}
+          <section className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
+            <div className="grid gap-2 md:grid-cols-[1fr_180px]">
+
+              <input
+                type="text"
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Search warehouse, location, manager or ID..."
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+              />
+
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                <option>All Status</option>
+                <option>Operational</option>
+                <option>Maintenance</option>
+              </select>
+
+            </div>
+          </section>
+
+          {/* WAREHOUSE DIRECTORY */}
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-sm font-semibold">
+                Warehouse Directory
+              </h2>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Overview of warehouse locations and capacity
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+
+              <table className="w-full border-collapse text-xs">
+
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Warehouse
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Location
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Manager
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Products
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Capacity
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Utilization
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Status
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Action
+                    </th>
+
+                  </tr>
+                </thead>
+
+                <tbody>
+
+                  {filteredWarehouses.map((warehouse) => {
+
+                    const warehouseUtilization =
+                      Math.round(
+                        (warehouse.used /
+                          warehouse.capacity) *
+                          100
+                      );
+
+                    return (
+                      <tr
+                        key={warehouse.id}
+                        className="border-b border-slate-100 transition hover:bg-slate-50"
                       >
-                        {formatNumber(
-                          warehouse.products
-                        )}
-                      </td>
 
-                      <td style={tdStyle}>
-                        {formatNumber(
-                          warehouse.used
-                        )}{" "}
-                        /{" "}
-                        {formatNumber(
-                          warehouse.capacity
-                        )}
-                      </td>
+                        {/* WAREHOUSE */}
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-slate-800">
+                            {warehouse.name}
+                          </p>
 
-                      <td style={tdStyle}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: 65,
-                              height: 7,
-                              background: "#e2e8f0",
-                              borderRadius: 10,
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: `${warehouseUtilization}%`,
-                                height: "100%",
-                                background:
+                          <p className="mt-0.5 text-[10px] text-slate-400">
+                            {warehouse.id}
+                          </p>
+                        </td>
+
+                        {/* LOCATION */}
+                        <td className="px-4 py-3 text-slate-600">
+                          {warehouse.location}
+                        </td>
+
+                        {/* MANAGER */}
+                        <td className="px-4 py-3 text-slate-600">
+                          {warehouse.manager}
+                        </td>
+
+                        {/* PRODUCTS */}
+                        <td className="px-4 py-3 font-semibold">
+                          {formatNumber(
+                            warehouse.products
+                          )}
+                        </td>
+
+                        {/* CAPACITY */}
+                        <td className="px-4 py-3 text-slate-600">
+                          {formatNumber(
+                            warehouse.used
+                          )}{" "}
+                          /{" "}
+                          {formatNumber(
+                            warehouse.capacity
+                          )}
+                        </td>
+
+                        {/* UTILIZATION */}
+                        <td className="px-4 py-3">
+
+                          <div className="flex items-center gap-2">
+
+                            <div className="h-2 w-16 overflow-hidden rounded-full bg-slate-200">
+
+                              <div
+                                className={`h-full rounded-full ${
                                   warehouseUtilization >=
                                   85
-                                    ? "#f97316"
-                                    : "#2563eb",
-                                borderRadius: 10,
-                              }}
-                            />
+                                    ? "bg-orange-500"
+                                    : "bg-blue-600"
+                                }`}
+                                style={{
+                                  width: `${warehouseUtilization}%`,
+                                }}
+                              />
+
+                            </div>
+
+                            <span className="text-[10px] font-semibold">
+                              {warehouseUtilization}%
+                            </span>
+
                           </div>
 
+                        </td>
+
+                        {/* STATUS */}
+                        <td className="px-4 py-3">
+
                           <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 600,
-                            }}
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                              warehouse.status ===
+                              "Operational"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-orange-100 text-orange-700"
+                            }`}
                           >
-                            {warehouseUtilization}%
+                            {warehouse.status}
                           </span>
-                        </div>
-                      </td>
 
-                      <td style={tdStyle}>
-                        <span
-                          style={{
-                            padding: "5px 9px",
-                            borderRadius: 20,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            background:
-                              warehouse.status ===
-                              "Operational"
-                                ? "#dcfce7"
-                                : "#ffedd5",
-                            color:
-                              warehouse.status ===
-                              "Operational"
-                                ? "#15803d"
-                                : "#c2410c",
-                          }}
-                        >
-                          {warehouse.status}
-                        </span>
-                      </td>
+                        </td>
 
-                      <td style={tdStyle}>
-                        <button
-                          onClick={() =>
-                            alert(
-                              `${warehouse.name} selected`
-                            )
-                          }
-                          style={{
-                            border: "none",
-                            background:
-                              "transparent",
-                            color: "#2563eb",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                          }}
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {/* ACTION */}
+                        <td className="px-4 py-3">
 
-            {filteredWarehouses.length === 0 && (
-              <div
-                style={{
-                  padding: 45,
-                  textAlign: "center",
-                  color: "#64748b",
-                }}
-              >
-                No warehouses found.
-              </div>
-            )}
-          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              alert(
+                                `${warehouse.name} selected`
+                              )
+                            }
+                            className="font-semibold text-blue-600 hover:text-blue-800"
+                          >
+                            View
+                          </button>
 
-          <div
-            style={{
-              padding: "12px 18px",
-              borderTop: "1px solid #e2e8f0",
-              color: "#64748b",
-              fontSize: 12,
-            }}
-          >
-            Showing {filteredWarehouses.length} of{" "}
-            {warehouses.length} warehouses
-          </div>
-        </section>
+                        </td>
 
-        {/* Warehouse Insights */}
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(3, 1fr)",
-            gap: 14,
-            marginTop: 16,
-          }}
-        >
-          <div style={insightStyle}>
-            <p style={labelStyle}>
-              Storage Health
-            </p>
+                      </tr>
+                    );
+                  })}
 
-            <h3
-              style={{
-                margin: "7px 0",
-                fontSize: 22,
-              }}
-            >
-              {utilization}%
-            </h3>
+                </tbody>
 
-            <p style={smallText}>
-              Overall warehouse capacity utilization
-            </p>
-          </div>
+              </table>
 
-          <div style={insightStyle}>
-            <p style={labelStyle}>
-              Available Space
-            </p>
+              {filteredWarehouses.length === 0 && (
+                <div className="px-6 py-12 text-center">
+                  <p className="text-sm font-medium text-slate-700">
+                    No warehouses found.
+                  </p>
 
-            <h3
-              style={{
-                margin: "7px 0",
-                fontSize: 22,
-              }}
-            >
-              {formatNumber(
-                totalCapacity - totalUsed
+                  <p className="mt-1 text-xs text-slate-400">
+                    Try changing your search or status filter.
+                  </p>
+                </div>
               )}
-            </h3>
 
-            <p style={smallText}>
-              Units of remaining storage capacity
-            </p>
+            </div>
+
+            <div className="border-t border-slate-200 px-5 py-3">
+              <p className="text-[10px] text-slate-500">
+                Showing {filteredWarehouses.length} of{" "}
+                {warehouses.length} warehouses
+              </p>
+            </div>
+
+          </section>
+
+          {/* INSIGHTS */}
+          <section className="mt-5 grid gap-3 md:grid-cols-3">
+
+            <InsightCard
+              title="Storage Health"
+              value={`${utilization}%`}
+              description="Overall warehouse capacity utilization"
+            />
+
+            <InsightCard
+              title="Available Space"
+              value={formatNumber(
+                availableCapacity
+              )}
+              description="Units of remaining storage capacity"
+            />
+
+            <InsightCard
+              title="Maintenance"
+              value={maintenanceWarehouses.toString()}
+              description="Warehouse requiring attention"
+              warning
+            />
+
+          </section>
+
+          {/* FOOTER */}
+          <div className="py-8 text-center text-[10px] text-slate-400">
+            AI StockFlow • Warehouse Management
           </div>
 
-          <div style={insightStyle}>
-            <p style={labelStyle}>
-              Maintenance
-            </p>
-
-            <h3
-              style={{
-                margin: "7px 0",
-                fontSize: 22,
-              }}
-            >
-              {
-                warehouses.filter(
-                  (warehouse) =>
-                    warehouse.status ===
-                    "Maintenance"
-                ).length
-              }
-            </h3>
-
-            <p style={smallText}>
-              Warehouse requiring attention
-            </p>
-          </div>
-        </section>
-      </div>
-    </main>
+        </div>
+      </main>
+    </PageLayout>
   );
 }
 
-const cardStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 9,
-  padding: "18px 16px",
-};
+/* ============================================================
+   KPI CARD
+============================================================ */
 
-const sectionStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 9,
-  overflow: "hidden" as const,
-};
+function KpiCard({
+  title,
+  value,
+  subtitle,
+  color,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  color: "green" | "blue" | "orange";
+}) {
+  const colorClass = {
+    green: "text-green-600",
+    blue: "text-blue-600",
+    orange: "text-orange-500",
+  }[color];
 
-const insightStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 9,
-  padding: 18,
-};
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
 
-const labelStyle = {
-  margin: 0,
-  color: "#64748b",
-  fontSize: 12,
-};
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
 
-const valueStyle = {
-  margin: "8px 0",
-  fontSize: 22,
-  fontWeight: 700,
-};
+      <h2 className="mt-2 text-2xl font-bold text-slate-900">
+        {value}
+      </h2>
 
-const smallGreen = {
-  color: "#16a34a",
-  fontSize: 12,
-};
+      <p
+        className={`mt-1 text-[10px] ${colorClass}`}
+      >
+        {subtitle}
+      </p>
 
-const smallBlue = {
-  color: "#2563eb",
-  fontSize: 12,
-};
+    </div>
+  );
+}
 
-const smallOrange = {
-  color: "#f97316",
-  fontSize: 12,
-};
+/* ============================================================
+   INSIGHT CARD
+============================================================ */
 
-const smallText = {
-  margin: 0,
-  color: "#64748b",
-  fontSize: 12,
-};
+function InsightCard({
+  title,
+  value,
+  description,
+  warning = false,
+}: {
+  title: string;
+  value: string;
+  description: string;
+  warning?: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
 
-const inputStyle = {
-  width: "100%",
-  boxSizing: "border-box" as const,
-  padding: "10px 12px",
-  border: "1px solid #cbd5e1",
-  borderRadius: 7,
-  background: "#ffffff",
-  fontSize: 13,
-  outline: "none",
-};
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
 
-const thStyle = {
-  textAlign: "left" as const,
-  padding: "12px 16px",
-  borderBottom: "1px solid #e2e8f0",
-  color: "#64748b",
-  fontSize: 11,
-  fontWeight: 600,
-};
+      <h3
+        className={`mt-2 text-2xl font-bold ${
+          warning
+            ? "text-orange-500"
+            : "text-slate-900"
+        }`}
+      >
+        {value}
+      </h3>
 
-const tdStyle = {
-  padding: "13px 16px",
-  borderBottom: "1px solid #e2e8f0",
-  verticalAlign: "middle" as const,
-};
+      <p className="mt-1 text-[10px] text-slate-500">
+        {description}
+      </p>
+
+    </div>
+  );
+}

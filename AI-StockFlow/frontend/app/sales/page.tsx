@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 type Product = {
   id: number;
@@ -182,6 +183,7 @@ export default function SalesPage() {
   }
 
   return (
+    <PageLayout>
     <main className="min-h-screen bg-[#f8fafc] p-6">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
@@ -541,5 +543,6 @@ export default function SalesPage() {
         </div>
       </div>
     </main>
+    </PageLayout>
   );
 }

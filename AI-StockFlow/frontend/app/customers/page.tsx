@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 interface Customer {
   id: number;
@@ -107,6 +108,7 @@ export default function CustomersPage() {
   );
 
   return (
+    <PageLayout>
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl">
 
@@ -351,5 +353,6 @@ export default function CustomersPage() {
 
       </div>
     </div>
+    </PageLayout>
   );
 }

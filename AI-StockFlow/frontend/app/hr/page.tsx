@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 type Employee = {
   id: string;
@@ -78,26 +79,39 @@ const employees: Employee[] = [
 
 export default function HRPage() {
   const [search, setSearch] = useState("");
-  const [department, setDepartment] = useState("All Departments");
-  const [status, setStatus] = useState("All Status");
+  const [department, setDepartment] =
+    useState("All Departments");
+  const [status, setStatus] =
+    useState("All Status");
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((employee) => {
       const searchText = search.toLowerCase();
 
       const matchesSearch =
-        employee.name.toLowerCase().includes(searchText) ||
-        employee.id.toLowerCase().includes(searchText) ||
-        employee.role.toLowerCase().includes(searchText);
+        employee.name
+          .toLowerCase()
+          .includes(searchText) ||
+        employee.id
+          .toLowerCase()
+          .includes(searchText) ||
+        employee.role
+          .toLowerCase()
+          .includes(searchText);
 
       const matchesDepartment =
         department === "All Departments" ||
         employee.department === department;
 
       const matchesStatus =
-        status === "All Status" || employee.status === status;
+        status === "All Status" ||
+        employee.status === status;
 
-      return matchesSearch && matchesDepartment && matchesStatus;
+      return (
+        matchesSearch &&
+        matchesDepartment &&
+        matchesStatus
+      );
     });
   }, [search, department, status]);
 
@@ -110,408 +124,369 @@ export default function HRPage() {
   ).length;
 
   const averageAttendance =
-    employees.reduce((sum, employee) => sum + employee.attendance, 0) /
-    employees.length;
+    employees.reduce(
+      (sum, employee) => sum + employee.attendance,
+      0
+    ) / employees.length;
 
   const averagePerformance =
-    employees.reduce((sum, employee) => sum + employee.performance, 0) /
-    employees.length;
+    employees.reduce(
+      (sum, employee) => sum + employee.performance,
+      0
+    ) / employees.length;
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#f8fafc",
-        padding: "32px",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "28px",
-          }}
-        >
-          <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "28px",
-                fontWeight: 700,
-                color: "#111827",
-              }}
-            >
-              Human Resources
-            </h1>
+    <PageLayout>
+      <main className="min-h-screen bg-[#f8fafc] px-6 py-7 text-slate-900">
 
-            <p
-              style={{
-                marginTop: "7px",
-                color: "#64748b",
-                fontSize: "14px",
-              }}
+        <div className="mx-auto max-w-6xl">
+
+          {/* HEADER */}
+          <div className="mb-6 flex items-start justify-between">
+
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Human Resources
+              </h1>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Manage employees, attendance and workforce
+                performance
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
             >
-              Manage employees, attendance and workforce performance
-            </p>
+              Refresh
+            </button>
+
           </div>
 
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              borderRadius: "7px",
-              padding: "10px 18px",
-              cursor: "pointer",
-              fontWeight: 600,
-              color: "#334155",
-            }}
-          >
-            Refresh
-          </button>
-        </div>
+          {/* KPI CARDS */}
+          <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
-        {/* KPI Cards */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "14px",
-            marginBottom: "22px",
-          }}
-        >
-          <KpiCard
-            title="Total Employees"
-            value={employees.length}
-            subtitle="Registered employees"
-            valueColor="#2563eb"
-          />
+            <KpiCard
+              title="Total Employees"
+              value={employees.length}
+              subtitle="Registered employees"
+              valueColor="text-blue-600"
+            />
 
-          <KpiCard
-            title="Active Employees"
-            value={activeEmployees}
-            subtitle="Currently working"
-            valueColor="#16a34a"
-          />
+            <KpiCard
+              title="Active Employees"
+              value={activeEmployees}
+              subtitle="Currently working"
+              valueColor="text-green-600"
+            />
 
-          <KpiCard
-            title="On Leave"
-            value={employeesOnLeave}
-            subtitle="Employees on leave"
-            valueColor="#f97316"
-          />
+            <KpiCard
+              title="On Leave"
+              value={employeesOnLeave}
+              subtitle="Employees on leave"
+              valueColor="text-orange-500"
+            />
 
-          <KpiCard
-            title="Avg. Attendance"
-            value={`${averageAttendance.toFixed(1)}%`}
-            subtitle="Current workforce"
-            valueColor="#7c3aed"
-          />
-        </div>
+            <KpiCard
+              title="Avg. Attendance"
+              value={`${averageAttendance.toFixed(1)}%`}
+              subtitle="Current workforce"
+              valueColor="text-purple-600"
+            />
 
-        {/* Search and Filters */}
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "10px",
-            padding: "14px",
-            display: "flex",
-            gap: "12px",
-            marginBottom: "18px",
-          }}
-        >
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search employee, ID or role..."
-            style={{
-              flex: 1,
-              height: "40px",
-              border: "1px solid #cbd5e1",
-              borderRadius: "7px",
-              padding: "0 12px",
-              outline: "none",
-              fontSize: "14px",
-            }}
-          />
-
-          <select
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-            style={{
-              width: "180px",
-              height: "40px",
-              border: "1px solid #cbd5e1",
-              borderRadius: "7px",
-              padding: "0 10px",
-              background: "#ffffff",
-            }}
-          >
-            <option>All Departments</option>
-            <option>Sales</option>
-            <option>Human Resources</option>
-            <option>Operations</option>
-            <option>Finance</option>
-            <option>Support</option>
-          </select>
-
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            style={{
-              width: "150px",
-              height: "40px",
-              border: "1px solid #cbd5e1",
-              borderRadius: "7px",
-              padding: "0 10px",
-              background: "#ffffff",
-            }}
-          >
-            <option>All Status</option>
-            <option>Active</option>
-            <option>On Leave</option>
-            <option>Inactive</option>
-          </select>
-        </div>
-
-        {/* Employee Table */}
-        <section
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "10px",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "18px",
-              borderBottom: "1px solid #e2e8f0",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "17px",
-                color: "#111827",
-              }}
-            >
-              Employee Directory
-            </h2>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-                fontSize: "13px",
-                color: "#64748b",
-              }}
-            >
-              Workforce overview and employee performance
-            </p>
           </div>
 
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "13px",
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    background: "#f8fafc",
-                    textAlign: "left",
-                  }}
-                >
-                  <th style={thStyle}>Employee</th>
-                  <th style={thStyle}>Role</th>
-                  <th style={thStyle}>Department</th>
-                  <th style={thStyle}>Location</th>
-                  <th style={thStyle}>Attendance</th>
-                  <th style={thStyle}>Performance</th>
-                  <th style={thStyle}>Status</th>
-                  <th style={thStyle}>Action</th>
-                </tr>
-              </thead>
+          {/* SEARCH AND FILTERS */}
+          <section className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
 
-              <tbody>
-                {filteredEmployees.map((employee) => (
-                  <tr key={employee.id}>
-                    <td style={tdStyle}>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          color: "#111827",
-                        }}
-                      >
-                        {employee.name}
-                      </div>
+            <div className="grid gap-2 md:grid-cols-[1fr_190px_160px]">
 
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#64748b",
-                          marginTop: "3px",
-                        }}
-                      >
-                        {employee.id}
-                      </div>
-                    </td>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) =>
+                  setSearch(e.target.value)
+                }
+                placeholder="Search employee, ID or role..."
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+              />
 
-                    <td style={tdStyle}>{employee.role}</td>
+              <select
+                value={department}
+                onChange={(e) =>
+                  setDepartment(e.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                <option>All Departments</option>
+                <option>Sales</option>
+                <option>Human Resources</option>
+                <option>Operations</option>
+                <option>Finance</option>
+                <option>Support</option>
+              </select>
 
-                    <td style={tdStyle}>{employee.department}</td>
+              <select
+                value={status}
+                onChange={(e) =>
+                  setStatus(e.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                <option>All Status</option>
+                <option>Active</option>
+                <option>On Leave</option>
+                <option>Inactive</option>
+              </select>
 
-                    <td style={tdStyle}>{employee.location}</td>
+            </div>
 
-                    <td style={tdStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "70px",
-                            height: "6px",
-                            background: "#e2e8f0",
-                            borderRadius: "10px",
-                            overflow: "hidden",
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${employee.attendance}%`,
-                              height: "100%",
-                              background: "#2563eb",
-                              borderRadius: "10px",
-                            }}
-                          />
+          </section>
+
+          {/* EMPLOYEE DIRECTORY */}
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+
+            <div className="border-b border-slate-200 px-5 py-4">
+
+              <h2 className="text-sm font-semibold">
+                Employee Directory
+              </h2>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Workforce overview and employee performance
+              </p>
+
+            </div>
+
+            <div className="overflow-x-auto">
+
+              <table className="w-full border-collapse text-xs">
+
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Employee
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Role
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Department
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Location
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Attendance
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Performance
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Status
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Action
+                    </th>
+
+                  </tr>
+                </thead>
+
+                <tbody>
+
+                  {filteredEmployees.map((employee) => (
+
+                    <tr
+                      key={employee.id}
+                      className="border-b border-slate-100 transition hover:bg-slate-50"
+                    >
+
+                      {/* EMPLOYEE */}
+                      <td className="px-4 py-3">
+
+                        <p className="font-semibold text-slate-800">
+                          {employee.name}
+                        </p>
+
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          {employee.id}
+                        </p>
+
+                      </td>
+
+                      {/* ROLE */}
+                      <td className="px-4 py-3 text-slate-600">
+                        {employee.role}
+                      </td>
+
+                      {/* DEPARTMENT */}
+                      <td className="px-4 py-3 text-slate-600">
+                        {employee.department}
+                      </td>
+
+                      {/* LOCATION */}
+                      <td className="px-4 py-3 text-slate-600">
+                        {employee.location}
+                      </td>
+
+                      {/* ATTENDANCE */}
+                      <td className="px-4 py-3">
+
+                        <div className="flex items-center gap-2">
+
+                          <div className="h-2 w-16 overflow-hidden rounded-full bg-slate-200">
+
+                            <div
+                              className="h-full rounded-full bg-blue-600"
+                              style={{
+                                width: `${employee.attendance}%`,
+                              }}
+                            />
+
+                          </div>
+
+                          <span className="text-[10px] font-semibold">
+                            {employee.attendance}%
+                          </span>
+
                         </div>
 
-                        <span>{employee.attendance}%</span>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td style={tdStyle}>
-                      <span
-                        style={{
-                          fontWeight: 600,
-                          color:
+                      {/* PERFORMANCE */}
+                      <td className="px-4 py-3">
+
+                        <span
+                          className={`font-semibold ${
                             employee.performance >= 90
-                              ? "#16a34a"
+                              ? "text-green-600"
                               : employee.performance >= 80
-                                ? "#ca8a04"
-                                : "#dc2626",
-                        }}
-                      >
-                        {employee.performance}%
-                      </span>
-                    </td>
+                                ? "text-yellow-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {employee.performance}%
+                        </span>
 
-                    <td style={tdStyle}>
-                      <StatusBadge status={employee.status} />
-                    </td>
+                      </td>
 
-                    <td style={tdStyle}>
-                      <button
-                        onClick={() =>
-                          alert(
-                            `${employee.name}\n\nRole: ${employee.role}\nDepartment: ${employee.department}\nAttendance: ${employee.attendance}%\nPerformance: ${employee.performance}%`
-                          )
-                        }
-                        style={{
-                          border: "none",
-                          background: "transparent",
-                          color: "#2563eb",
-                          cursor: "pointer",
-                          fontWeight: 600,
-                        }}
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      {/* STATUS */}
+                      <td className="px-4 py-3">
+
+                        <StatusBadge
+                          status={employee.status}
+                        />
+
+                      </td>
+
+                      {/* ACTION */}
+                      <td className="px-4 py-3">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            alert(
+                              `${employee.name}\n\nRole: ${employee.role}\nDepartment: ${employee.department}\nLocation: ${employee.location}\nAttendance: ${employee.attendance}%\nPerformance: ${employee.performance}%`
+                            )
+                          }
+                          className="font-semibold text-blue-600 hover:text-blue-800"
+                        >
+                          View
+                        </button>
+
+                      </td>
+
+                    </tr>
+
+                  ))}
+
+                </tbody>
+
+              </table>
+
+              {filteredEmployees.length === 0 && (
+                <div className="px-6 py-12 text-center">
+
+                  <p className="text-sm font-medium text-slate-700">
+                    No employees found.
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Try changing your search or filters.
+                  </p>
+
+                </div>
+              )}
+
+            </div>
+
+            <div className="border-t border-slate-200 px-5 py-3">
+
+              <p className="text-[10px] text-slate-500">
+                Showing {filteredEmployees.length} of{" "}
+                {employees.length} employees
+              </p>
+
+            </div>
+
+          </section>
+
+          {/* HR INSIGHTS */}
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5">
+
+            <h2 className="mb-4 text-sm font-semibold">
+              HR Insights
+            </h2>
+
+            <div className="grid gap-3 md:grid-cols-3">
+
+              <InsightCard
+                title="Workforce Performance"
+                value={`${averagePerformance.toFixed(1)}%`}
+                description="Average performance score across the current workforce."
+              />
+
+              <InsightCard
+                title="Attendance Health"
+                value={`${averageAttendance.toFixed(1)}%`}
+                description="Average employee attendance is currently healthy."
+              />
+
+              <InsightCard
+                title="Leave Monitoring"
+                value={`${employeesOnLeave} employees`}
+                description="Employees are currently marked as being on leave."
+              />
+
+            </div>
+
+          </section>
+
+          {/* FOOTER */}
+          <div className="py-8 text-center text-[10px] text-slate-400">
+            AI StockFlow • Human Resources
           </div>
 
-          <div
-            style={{
-              padding: "12px 18px",
-              borderTop: "1px solid #e2e8f0",
-              color: "#64748b",
-              fontSize: "12px",
-            }}
-          >
-            Showing {filteredEmployees.length} of {employees.length} employees
-          </div>
-        </section>
+        </div>
 
-        {/* HR Insights */}
-        <section
-          style={{
-            marginTop: "18px",
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "10px",
-            padding: "20px",
-          }}
-        >
-          <h2
-            style={{
-              margin: "0 0 16px",
-              fontSize: "17px",
-              color: "#111827",
-            }}
-          >
-            HR Insights
-          </h2>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: "14px",
-            }}
-          >
-            <InsightCard
-              title="Workforce Performance"
-              value={`${averagePerformance.toFixed(1)}%`}
-              description="Average performance score across the current workforce."
-            />
-
-            <InsightCard
-              title="Attendance Health"
-              value={`${averageAttendance.toFixed(1)}%`}
-              description="Average employee attendance is currently healthy."
-            />
-
-            <InsightCard
-              title="Leave Monitoring"
-              value={`${employeesOnLeave} employees`}
-              description="Employees are currently marked as being on leave."
-            />
-          </div>
-        </section>
-      </div>
-    </main>
+      </main>
+    </PageLayout>
   );
 }
+
+/* ============================================================
+   KPI CARD
+============================================================ */
 
 function KpiCard({
   title,
@@ -525,46 +500,29 @@ function KpiCard({
   valueColor: string;
 }) {
   return (
-    <div
-      style={{
-        background: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderRadius: "10px",
-        padding: "18px",
-      }}
-    >
-      <div
-        style={{
-          color: "#64748b",
-          fontSize: "12px",
-          marginBottom: "8px",
-        }}
-      >
-        {title}
-      </div>
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
 
-      <div
-        style={{
-          fontSize: "22px",
-          fontWeight: 700,
-          color: valueColor,
-        }}
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
+
+      <p
+        className={`mt-2 text-2xl font-bold ${valueColor}`}
       >
         {value}
-      </div>
+      </p>
 
-      <div
-        style={{
-          marginTop: "5px",
-          fontSize: "11px",
-          color: "#94a3b8",
-        }}
-      >
+      <p className="mt-1 text-[10px] text-slate-500">
         {subtitle}
-      </div>
+      </p>
+
     </div>
   );
 }
+
+/* ============================================================
+   STATUS BADGE
+============================================================ */
 
 function StatusBadge({
   status,
@@ -572,38 +530,23 @@ function StatusBadge({
   status: Employee["status"];
 }) {
   const styles = {
-    Active: {
-      background: "#dcfce7",
-      color: "#16a34a",
-    },
-    "On Leave": {
-      background: "#ffedd5",
-      color: "#ea580c",
-    },
-    Inactive: {
-      background: "#e2e8f0",
-      color: "#64748b",
-    },
+    Active: "bg-green-100 text-green-700",
+    "On Leave": "bg-orange-100 text-orange-700",
+    Inactive: "bg-slate-100 text-slate-600",
   };
-
-  const current = styles[status];
 
   return (
     <span
-      style={{
-        display: "inline-block",
-        padding: "5px 9px",
-        borderRadius: "999px",
-        fontSize: "11px",
-        fontWeight: 600,
-        background: current.background,
-        color: current.color,
-      }}
+      className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${styles[status]}`}
     >
       {status}
     </span>
   );
 }
+
+/* ============================================================
+   INSIGHT CARD
+============================================================ */
 
 function InsightCard({
   title,
@@ -615,58 +558,20 @@ function InsightCard({
   description: string;
 }) {
   return (
-    <div
-      style={{
-        border: "1px solid #e2e8f0",
-        borderRadius: "8px",
-        padding: "16px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "12px",
-          color: "#64748b",
-          marginBottom: "7px",
-        }}
-      >
+    <div className="rounded-lg border border-slate-200 p-4">
+
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">
         {title}
-      </div>
+      </p>
 
-      <div
-        style={{
-          fontSize: "19px",
-          fontWeight: 700,
-          color: "#111827",
-          marginBottom: "7px",
-        }}
-      >
+      <p className="mt-2 text-xl font-bold text-slate-900">
         {value}
-      </div>
+      </p>
 
-      <div
-        style={{
-          fontSize: "12px",
-          color: "#64748b",
-          lineHeight: 1.5,
-        }}
-      >
+      <p className="mt-1 text-[10px] leading-5 text-slate-500">
         {description}
-      </div>
+      </p>
+
     </div>
   );
 }
-
-const thStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderBottom: "1px solid #e2e8f0",
-  color: "#475569",
-  fontWeight: 600,
-  whiteSpace: "nowrap",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "14px",
-  borderBottom: "1px solid #f1f5f9",
-  color: "#475569",
-  whiteSpace: "nowrap",
-};

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 type Transaction = {
   id: string;
@@ -78,7 +79,8 @@ const formatCurrency = (value: number) =>
 
 export default function FinancePage() {
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All Types");
+  const [typeFilter, setTypeFilter] =
+    useState("All Types");
 
   const totalIncome = transactions
     .filter((item) => item.type === "Income")
@@ -96,494 +98,473 @@ export default function FinancePage() {
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((item) => {
+      const searchText = search.toLowerCase();
+
       const matchesSearch =
-        item.description.toLowerCase().includes(search.toLowerCase()) ||
-        item.category.toLowerCase().includes(search.toLowerCase()) ||
-        item.id.toLowerCase().includes(search.toLowerCase());
+        item.description
+          .toLowerCase()
+          .includes(searchText) ||
+        item.category
+          .toLowerCase()
+          .includes(searchText) ||
+        item.id
+          .toLowerCase()
+          .includes(searchText);
 
       const matchesType =
-        typeFilter === "All Types" || item.type === typeFilter;
+        typeFilter === "All Types" ||
+        item.type === typeFilter;
 
       return matchesSearch && matchesType;
     });
   }, [search, typeFilter]);
 
+  const profitMargin =
+    totalIncome > 0
+      ? ((netProfit / totalIncome) * 100).toFixed(1)
+      : "0.0";
+
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#f8fafc",
-        padding: "28px 38px",
-        color: "#0f172a",
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          maxWidth: 1100,
-          margin: "0 auto",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          marginBottom: 26,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 28,
-              fontWeight: 700,
-            }}
-          >
-            Finance
-          </h1>
+    <PageLayout>
+      <main className="min-h-screen bg-[#f8fafc] px-6 py-7 text-slate-900">
 
-          <p
-            style={{
-              margin: "7px 0 0",
-              color: "#64748b",
-              fontSize: 14,
-            }}
-          >
-            Monitor revenue, expenses, cash flow and financial performance
-          </p>
-        </div>
+        <div className="mx-auto max-w-6xl">
 
-        <button
-          onClick={() => window.location.reload()}
-          style={{
-            border: "1px solid #cbd5e1",
-            background: "#fff",
-            borderRadius: 7,
-            padding: "9px 18px",
-            cursor: "pointer",
-            fontWeight: 600,
-            color: "#334155",
-          }}
-        >
-          Refresh
-        </button>
-      </div>
+          {/* HEADER */}
+          <div className="mb-6 flex items-start justify-between">
 
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        {/* KPI Cards */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 14,
-            marginBottom: 22,
-          }}
-        >
-          <div style={cardStyle}>
-            <p style={labelStyle}>Total Revenue</p>
-            <h2 style={valueStyle}>{formatCurrency(totalIncome)}</h2>
-            <span style={{ color: "#16a34a", fontSize: 12 }}>
-              ↑ 12.4% this month
-            </span>
-          </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Finance
+              </h1>
 
-          <div style={cardStyle}>
-            <p style={labelStyle}>Total Expenses</p>
-            <h2 style={valueStyle}>{formatCurrency(totalExpense)}</h2>
-            <span style={{ color: "#f97316", fontSize: 12 }}>
-              Operating expenses
-            </span>
-          </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Monitor revenue, expenses, cash flow and
+                financial performance
+              </p>
+            </div>
 
-          <div style={cardStyle}>
-            <p style={labelStyle}>Net Profit</p>
-            <h2 style={valueStyle}>{formatCurrency(netProfit)}</h2>
-            <span style={{ color: "#16a34a", fontSize: 12 }}>
-              Healthy margin
-            </span>
-          </div>
-
-          <div style={cardStyle}>
-            <p style={labelStyle}>Pending Payments</p>
-            <h2 style={valueStyle}>{formatCurrency(pendingAmount)}</h2>
-            <span style={{ color: "#f97316", fontSize: 12 }}>
-              Awaiting settlement
-            </span>
-          </div>
-        </div>
-
-        {/* Financial Overview */}
-        <section style={sectionStyle}>
-          <div
-            style={{
-              padding: "18px 18px 14px",
-              borderBottom: "1px solid #e2e8f0",
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: 16 }}>
-              Financial Overview
-            </h3>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-                fontSize: 12,
-                color: "#64748b",
-              }}
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
             >
-              Revenue and expense performance
-            </p>
+              Refresh
+            </button>
+
           </div>
 
-          <div
-            style={{
-              padding: 20,
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 28,
-            }}
-          >
-            <div>
-              <p style={labelStyle}>Revenue</p>
+          {/* KPI CARDS */}
+          <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
-              <div
-                style={{
-                  height: 12,
-                  background: "#e2e8f0",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  marginTop: 12,
-                }}
-              >
-                <div
-                  style={{
-                    width: "82%",
-                    height: "100%",
-                    background: "#2563eb",
-                    borderRadius: 10,
-                  }}
-                />
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: "#64748b",
-                }}
-              >
-                <span>{formatCurrency(totalIncome)}</span>
-                <span>82%</span>
-              </div>
-            </div>
-
-            <div>
-              <p style={labelStyle}>Expenses</p>
-
-              <div
-                style={{
-                  height: 12,
-                  background: "#e2e8f0",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  marginTop: 12,
-                }}
-              >
-                <div
-                  style={{
-                    width: "46%",
-                    height: "100%",
-                    background: "#f97316",
-                    borderRadius: 10,
-                  }}
-                />
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: "#64748b",
-                }}
-              >
-                <span>{formatCurrency(totalExpense)}</span>
-                <span>46%</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Search */}
-        <section
-          style={{
-            ...sectionStyle,
-            padding: 12,
-            marginTop: 16,
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 160px",
-              gap: 10,
-            }}
-          >
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search transaction, category or ID..."
-              style={inputStyle}
+            <KpiCard
+              title="Total Revenue"
+              value={formatCurrency(totalIncome)}
+              subtitle="↑ 12.4% this month"
+              color="green"
             />
 
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              style={inputStyle}
-            >
-              <option>All Types</option>
-              <option>Income</option>
-              <option>Expense</option>
-            </select>
-          </div>
-        </section>
+            <KpiCard
+              title="Total Expenses"
+              value={formatCurrency(totalExpense)}
+              subtitle="Operating expenses"
+              color="orange"
+            />
 
-        {/* Transactions */}
-        <section style={{ ...sectionStyle, marginTop: 16 }}>
-          <div
-            style={{
-              padding: "18px 18px 14px",
-              borderBottom: "1px solid #e2e8f0",
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: 16 }}>
-              Recent Transactions
-            </h3>
+            <KpiCard
+              title="Net Profit"
+              value={formatCurrency(netProfit)}
+              subtitle="Healthy margin"
+              color="green"
+            />
 
-            <p
-              style={{
-                margin: "5px 0 0",
-                fontSize: 12,
-                color: "#64748b",
-              }}
-            >
-              Latest financial activity
-            </p>
+            <KpiCard
+              title="Pending Payments"
+              value={formatCurrency(pendingAmount)}
+              subtitle="Awaiting settlement"
+              color="orange"
+            />
+
           </div>
 
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 13,
-              }}
-            >
-              <thead>
-                <tr style={{ background: "#f8fafc" }}>
-                  <th style={thStyle}>Transaction</th>
-                  <th style={thStyle}>Date</th>
-                  <th style={thStyle}>Category</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Amount</th>
-                  <th style={thStyle}>Status</th>
-                </tr>
-              </thead>
+          {/* FINANCIAL OVERVIEW */}
+          <section className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
 
-              <tbody>
-                {filteredTransactions.map((item) => (
-                  <tr key={item.id}>
-                    <td style={tdStyle}>
-                      <strong>{item.description}</strong>
-                      <div
-                        style={{
-                          color: "#64748b",
-                          fontSize: 11,
-                          marginTop: 3,
-                        }}
-                      >
-                        {item.id}
-                      </div>
-                    </td>
+            <div className="border-b border-slate-200 px-5 py-4">
 
-                    <td style={tdStyle}>{item.date}</td>
+              <h2 className="text-sm font-semibold">
+                Financial Overview
+              </h2>
 
-                    <td style={tdStyle}>{item.category}</td>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Revenue and expense performance
+              </p>
 
-                    <td style={tdStyle}>
-                      <span
-                        style={{
-                          color:
-                            item.type === "Income"
-                              ? "#16a34a"
-                              : "#dc2626",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {item.type}
-                      </span>
-                    </td>
+            </div>
 
-                    <td style={{ ...tdStyle, fontWeight: 700 }}>
-                      {formatCurrency(item.amount)}
-                    </td>
+            <div className="grid gap-8 p-5 md:grid-cols-2">
 
-                    <td style={tdStyle}>
-                      <span
-                        style={{
-                          padding: "5px 9px",
-                          borderRadius: 20,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          background:
-                            item.status === "Completed"
-                              ? "#dcfce7"
-                              : "#ffedd5",
-                          color:
-                            item.status === "Completed"
-                              ? "#15803d"
-                              : "#c2410c",
-                        }}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              {/* REVENUE */}
+              <div>
 
-            {filteredTransactions.length === 0 && (
-              <div
-                style={{
-                  padding: 45,
-                  textAlign: "center",
-                  color: "#64748b",
-                }}
-              >
-                No transactions found.
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-slate-500">
+                    Revenue
+                  </p>
+
+                  <strong className="text-sm">
+                    {formatCurrency(totalIncome)}
+                  </strong>
+                </div>
+
+                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+
+                  <div
+                    className="h-full rounded-full bg-blue-600"
+                    style={{ width: "82%" }}
+                  />
+
+                </div>
+
+                <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+                  <span>
+                    {formatCurrency(totalIncome)}
+                  </span>
+
+                  <span>82%</span>
+                </div>
+
               </div>
-            )}
+
+              {/* EXPENSE */}
+              <div>
+
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-slate-500">
+                    Expenses
+                  </p>
+
+                  <strong className="text-sm">
+                    {formatCurrency(totalExpense)}
+                  </strong>
+                </div>
+
+                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+
+                  <div
+                    className="h-full rounded-full bg-orange-500"
+                    style={{ width: "46%" }}
+                  />
+
+                </div>
+
+                <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+                  <span>
+                    {formatCurrency(totalExpense)}
+                  </span>
+
+                  <span>46%</span>
+                </div>
+
+              </div>
+
+            </div>
+
+          </section>
+
+          {/* SEARCH + FILTER */}
+          <section className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
+
+            <div className="grid gap-2 md:grid-cols-[1fr_180px]">
+
+              <input
+                type="text"
+                value={search}
+                onChange={(e) =>
+                  setSearch(e.target.value)
+                }
+                placeholder="Search transaction, category or ID..."
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+              />
+
+              <select
+                value={typeFilter}
+                onChange={(e) =>
+                  setTypeFilter(e.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                <option>All Types</option>
+                <option>Income</option>
+                <option>Expense</option>
+              </select>
+
+            </div>
+
+          </section>
+
+          {/* TRANSACTIONS */}
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+
+            <div className="border-b border-slate-200 px-5 py-4">
+
+              <h2 className="text-sm font-semibold">
+                Recent Transactions
+              </h2>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Latest financial activity
+              </p>
+
+            </div>
+
+            <div className="overflow-x-auto">
+
+              <table className="w-full border-collapse text-xs">
+
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Transaction
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Date
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Category
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Type
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Amount
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Status
+                    </th>
+
+                  </tr>
+                </thead>
+
+                <tbody>
+
+                  {filteredTransactions.map((item) => (
+
+                    <tr
+                      key={item.id}
+                      className="border-b border-slate-100 transition hover:bg-slate-50"
+                    >
+
+                      {/* TRANSACTION */}
+                      <td className="px-4 py-3">
+
+                        <p className="font-semibold text-slate-800">
+                          {item.description}
+                        </p>
+
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          {item.id}
+                        </p>
+
+                      </td>
+
+                      {/* DATE */}
+                      <td className="px-4 py-3 text-slate-600">
+                        {item.date}
+                      </td>
+
+                      {/* CATEGORY */}
+                      <td className="px-4 py-3 text-slate-600">
+                        {item.category}
+                      </td>
+
+                      {/* TYPE */}
+                      <td className="px-4 py-3">
+
+                        <span
+                          className={`font-semibold ${
+                            item.type === "Income"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {item.type}
+                        </span>
+
+                      </td>
+
+                      {/* AMOUNT */}
+                      <td className="px-4 py-3 font-bold text-slate-800">
+                        {formatCurrency(item.amount)}
+                      </td>
+
+                      {/* STATUS */}
+                      <td className="px-4 py-3">
+
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                            item.status === "Completed"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-orange-100 text-orange-700"
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+
+                      </td>
+
+                    </tr>
+
+                  ))}
+
+                </tbody>
+
+              </table>
+
+              {filteredTransactions.length === 0 && (
+                <div className="px-6 py-12 text-center">
+
+                  <p className="text-sm font-medium text-slate-700">
+                    No transactions found.
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Try changing your search or filter.
+                  </p>
+
+                </div>
+              )}
+
+            </div>
+
+            <div className="border-t border-slate-200 px-5 py-3">
+
+              <p className="text-[10px] text-slate-500">
+                Showing {filteredTransactions.length} of{" "}
+                {transactions.length} transactions
+              </p>
+
+            </div>
+
+          </section>
+
+          {/* FINANCE INSIGHTS */}
+          <section className="mt-5 grid gap-3 md:grid-cols-3">
+
+            <InsightCard
+              title="Profitability"
+              value={`${profitMargin}%`}
+              description="Current net profit margin"
+            />
+
+            <InsightCard
+              title="Cash Flow"
+              value={formatCurrency(netProfit)}
+              description="Positive operating cash flow"
+            />
+
+            <InsightCard
+              title="Pending Collection"
+              value={formatCurrency(pendingAmount)}
+              description="Payments requiring attention"
+              warning
+            />
+
+          </section>
+
+          {/* FOOTER */}
+          <div className="py-8 text-center text-[10px] text-slate-400">
+            AI StockFlow • Finance Management
           </div>
 
-          <div
-            style={{
-              padding: "12px 18px",
-              borderTop: "1px solid #e2e8f0",
-              color: "#64748b",
-              fontSize: 12,
-            }}
-          >
-            Showing {filteredTransactions.length} of{" "}
-            {transactions.length} transactions
-          </div>
-        </section>
-
-        {/* Finance Insights */}
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 14,
-            marginTop: 16,
-          }}
-        >
-          <div style={insightStyle}>
-            <p style={labelStyle}>Profitability</p>
-            <h3 style={{ margin: "7px 0", fontSize: 22 }}>
-              {((netProfit / totalIncome) * 100).toFixed(1)}%
-            </h3>
-            <p style={smallText}>
-              Current net profit margin
-            </p>
-          </div>
-
-          <div style={insightStyle}>
-            <p style={labelStyle}>Cash Flow</p>
-            <h3 style={{ margin: "7px 0", fontSize: 22 }}>
-              {formatCurrency(netProfit)}
-            </h3>
-            <p style={smallText}>
-              Positive operating cash flow
-            </p>
-          </div>
-
-          <div style={insightStyle}>
-            <p style={labelStyle}>Pending Collection</p>
-            <h3 style={{ margin: "7px 0", fontSize: 22 }}>
-              {formatCurrency(pendingAmount)}
-            </h3>
-            <p style={smallText}>
-              Payments requiring attention
-            </p>
-          </div>
-        </section>
-      </div>
-    </main>
+        </div>
+      </main>
+    </PageLayout>
   );
 }
 
-const cardStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 9,
-  padding: "18px 16px",
-};
+/* ============================================================
+   KPI CARD
+============================================================ */
 
-const sectionStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 9,
-  overflow: "hidden" as const,
-};
+function KpiCard({
+  title,
+  value,
+  subtitle,
+  color,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  color: "green" | "orange";
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
 
-const insightStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 9,
-  padding: 18,
-};
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
 
-const labelStyle = {
-  margin: 0,
-  color: "#64748b",
-  fontSize: 12,
-};
+      <h2 className="mt-2 text-2xl font-bold text-slate-900">
+        {value}
+      </h2>
 
-const valueStyle = {
-  margin: "8px 0",
-  fontSize: 22,
-  fontWeight: 700,
-};
+      <p
+        className={`mt-1 text-[10px] ${
+          color === "green"
+            ? "text-green-600"
+            : "text-orange-500"
+        }`}
+      >
+        {subtitle}
+      </p>
 
-const smallText = {
-  margin: 0,
-  color: "#64748b",
-  fontSize: 12,
-};
+    </div>
+  );
+}
 
-const inputStyle = {
-  width: "100%",
-  boxSizing: "border-box" as const,
-  padding: "10px 12px",
-  border: "1px solid #cbd5e1",
-  borderRadius: 7,
-  background: "#ffffff",
-  fontSize: 13,
-  outline: "none",
-};
+/* ============================================================
+   INSIGHT CARD
+============================================================ */
 
-const thStyle = {
-  textAlign: "left" as const,
-  padding: "12px 16px",
-  borderBottom: "1px solid #e2e8f0",
-  color: "#64748b",
-  fontSize: 11,
-  fontWeight: 600,
-};
+function InsightCard({
+  title,
+  value,
+  description,
+  warning = false,
+}: {
+  title: string;
+  value: string;
+  description: string;
+  warning?: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
 
-const tdStyle = {
-  padding: "13px 16px",
-  borderBottom: "1px solid #e2e8f0",
-  verticalAlign: "middle" as const,
-};
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
+
+      <h3
+        className={`mt-2 text-2xl font-bold ${
+          warning
+            ? "text-orange-500"
+            : "text-slate-900"
+        }`}
+      >
+        {value}
+      </h3>
+
+      <p className="mt-1 text-[10px] text-slate-500">
+        {description}
+      </p>
+
+    </div>
+  );
+}

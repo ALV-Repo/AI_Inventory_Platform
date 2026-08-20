@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 type Product = {
   sku: string;
@@ -83,12 +84,19 @@ export default function DeadStockPage() {
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesSearch =
-        product.name.toLowerCase().includes(search.toLowerCase()) ||
-        product.sku.toLowerCase().includes(search.toLowerCase()) ||
-        product.category.toLowerCase().includes(search.toLowerCase());
+        product.name
+          .toLowerCase()
+          .includes(search.toLowerCase()) ||
+        product.sku
+          .toLowerCase()
+          .includes(search.toLowerCase()) ||
+        product.category
+          .toLowerCase()
+          .includes(search.toLowerCase());
 
       const matchesStatus =
-        status === "All Status" || product.status === status;
+        status === "All Status" ||
+        product.status === status;
 
       return matchesSearch && matchesStatus;
     });
@@ -115,343 +123,374 @@ export default function DeadStockPage() {
     `₹${value.toLocaleString("en-IN")}`;
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#f8fafc",
-        padding: "32px",
-      }}
-    >
-      <div
+    <PageLayout>
+      <main
         style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
+          minHeight: "100vh",
+          background: "#f8fafc",
+          padding: "32px",
         }}
       >
-        {/* Header */}
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "28px",
+            maxWidth: "1100px",
+            margin: "0 auto",
           }}
         >
-          <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "28px",
-                fontWeight: 700,
-                color: "#111827",
-              }}
-            >
-              Dead Stock
-            </h1>
-
-            <p
-              style={{
-                marginTop: "7px",
-                color: "#64748b",
-                fontSize: "14px",
-              }}
-            >
-              Identify slow-moving and non-moving inventory
-            </p>
-          </div>
-
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              borderRadius: "7px",
-              padding: "10px 18px",
-              cursor: "pointer",
-              fontWeight: 600,
-              color: "#334155",
-            }}
-          >
-            Refresh
-          </button>
-        </div>
-
-        {/* KPI Cards */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "14px",
-            marginBottom: "22px",
-          }}
-        >
-          <KpiCard
-            title="Dead Stock Value"
-            value={formatCurrency(totalValue)}
-            subtitle="Inventory tied up"
-            valueColor="#dc2626"
-          />
-
-          <KpiCard
-            title="Dead Stock Products"
-            value={deadProducts}
-            subtitle="No recent movement"
-            valueColor="#f97316"
-          />
-
-          <KpiCard
-            title="Critical Products"
-            value={criticalProducts}
-            subtitle="Immediate action"
-            valueColor="#dc2626"
-          />
-
-          <KpiCard
-            title="At Risk"
-            value={atRiskProducts}
-            subtitle="Needs attention"
-            valueColor="#ca8a04"
-          />
-        </div>
-
-        {/* Search / Filter */}
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "10px",
-            padding: "14px",
-            display: "flex",
-            gap: "12px",
-            marginBottom: "18px",
-          }}
-        >
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search product or SKU..."
-            style={{
-              flex: 1,
-              height: "40px",
-              border: "1px solid #cbd5e1",
-              borderRadius: "7px",
-              padding: "0 12px",
-              outline: "none",
-              fontSize: "14px",
-            }}
-          />
-
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            style={{
-              width: "160px",
-              height: "40px",
-              border: "1px solid #cbd5e1",
-              borderRadius: "7px",
-              padding: "0 10px",
-              background: "#ffffff",
-            }}
-          >
-            <option>All Status</option>
-            <option>Critical</option>
-            <option>Dead Stock</option>
-            <option>At Risk</option>
-          </select>
-        </div>
-
-        {/* Main Table */}
-        <section
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "10px",
-            overflow: "hidden",
-          }}
-        >
+          {/* Header */}
           <div
             style={{
-              padding: "18px",
-              borderBottom: "1px solid #e2e8f0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: "28px",
+            }}
+          >
+            <div>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: "28px",
+                  fontWeight: 700,
+                  color: "#111827",
+                }}
+              >
+                Dead Stock
+              </h1>
+
+              <p
+                style={{
+                  marginTop: "7px",
+                  color: "#64748b",
+                  fontSize: "14px",
+                }}
+              >
+                Identify slow-moving and non-moving inventory
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                borderRadius: "7px",
+                padding: "10px 18px",
+                cursor: "pointer",
+                fontWeight: 600,
+                color: "#334155",
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+
+          {/* KPI Cards */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: "14px",
+              marginBottom: "22px",
+            }}
+          >
+            <KpiCard
+              title="Dead Stock Value"
+              value={formatCurrency(totalValue)}
+              subtitle="Inventory tied up"
+              valueColor="#dc2626"
+            />
+
+            <KpiCard
+              title="Dead Stock Products"
+              value={deadProducts}
+              subtitle="No recent movement"
+              valueColor="#f97316"
+            />
+
+            <KpiCard
+              title="Critical Products"
+              value={criticalProducts}
+              subtitle="Immediate action"
+              valueColor="#dc2626"
+            />
+
+            <KpiCard
+              title="At Risk"
+              value={atRiskProducts}
+              subtitle="Needs attention"
+              valueColor="#ca8a04"
+            />
+          </div>
+
+          {/* Search / Filter */}
+          <div
+            style={{
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
+              padding: "14px",
+              display: "flex",
+              gap: "12px",
+              marginBottom: "18px",
+            }}
+          >
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search product or SKU..."
+              style={{
+                flex: 1,
+                height: "40px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "7px",
+                padding: "0 12px",
+                outline: "none",
+                fontSize: "14px",
+              }}
+            />
+
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              style={{
+                width: "160px",
+                height: "40px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "7px",
+                padding: "0 10px",
+                background: "#ffffff",
+              }}
+            >
+              <option>All Status</option>
+              <option>Critical</option>
+              <option>Dead Stock</option>
+              <option>At Risk</option>
+            </select>
+          </div>
+
+          {/* Main Table */}
+          <section
+            style={{
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "18px",
+                borderBottom: "1px solid #e2e8f0",
+              }}
+            >
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: "17px",
+                  color: "#111827",
+                }}
+              >
+                Dead Stock Analysis
+              </h2>
+
+              <p
+                style={{
+                  margin: "5px 0 0",
+                  fontSize: "13px",
+                  color: "#64748b",
+                }}
+              >
+                Products with little or no sales activity
+              </p>
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: "13px",
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      background: "#f8fafc",
+                      textAlign: "left",
+                    }}
+                  >
+                    <th style={thStyle}>Product</th>
+                    <th style={thStyle}>Category</th>
+                    <th style={thStyle}>Stock</th>
+                    <th style={thStyle}>Last Sale</th>
+                    <th style={thStyle}>Stock Value</th>
+                    <th style={thStyle}>Status</th>
+                    <th style={thStyle}>Action</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredProducts.map((product) => (
+                    <tr key={product.sku}>
+                      <td style={tdStyle}>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            color: "#111827",
+                          }}
+                        >
+                          {product.name}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#64748b",
+                            marginTop: "3px",
+                          }}
+                        >
+                          SKU: {product.sku}
+                        </div>
+                      </td>
+
+                      <td style={tdStyle}>
+                        {product.category}
+                      </td>
+
+                      <td style={tdStyle}>
+                        <strong>{product.stock}</strong> units
+                      </td>
+
+                      <td style={tdStyle}>
+                        <span
+                          style={{
+                            color:
+                              product.daysSinceSale > 75
+                                ? "#dc2626"
+                                : "#475569",
+                          }}
+                        >
+                          {product.daysSinceSale} days ago
+                        </span>
+                      </td>
+
+                      <td style={tdStyle}>
+                        {formatCurrency(product.value)}
+                      </td>
+
+                      <td style={tdStyle}>
+                        <StatusBadge
+                          status={product.status}
+                        />
+                      </td>
+
+                      <td style={tdStyle}>
+                        <button
+                          type="button"
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            color: "#2563eb",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                          onClick={() =>
+                            alert(
+                              `${product.name}\nStock: ${product.stock} units\nValue: ${formatCurrency(
+                                product.value
+                              )}`
+                            )
+                          }
+                        >
+                          Review
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {filteredProducts.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          textAlign: "center",
+                          padding: "50px",
+                          color: "#64748b",
+                        }}
+                      >
+                        No products found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div
+              style={{
+                padding: "12px 18px",
+                borderTop: "1px solid #e2e8f0",
+                color: "#64748b",
+                fontSize: "12px",
+              }}
+            >
+              Showing {filteredProducts.length} of{" "}
+              {products.length} products
+            </div>
+          </section>
+
+          {/* Insights */}
+          <section
+            style={{
+              marginTop: "18px",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
+              padding: "20px",
             }}
           >
             <h2
               style={{
-                margin: 0,
+                margin: "0 0 16px",
                 fontSize: "17px",
                 color: "#111827",
               }}
             >
-              Dead Stock Analysis
+              Inventory Insights
             </h2>
 
-            <p
+            <div
               style={{
-                margin: "5px 0 0",
-                fontSize: "13px",
-                color: "#64748b",
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: "14px",
               }}
             >
-              Products with little or no sales activity
-            </p>
-          </div>
+              <InsightCard
+                title="Clearance Opportunity"
+                value={`${deadProducts} products`}
+                description="Consider promotional pricing to move old inventory."
+              />
 
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "13px",
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    background: "#f8fafc",
-                    textAlign: "left",
-                  }}
-                >
-                  <th style={thStyle}>Product</th>
-                  <th style={thStyle}>Category</th>
-                  <th style={thStyle}>Stock</th>
-                  <th style={thStyle}>Last Sale</th>
-                  <th style={thStyle}>Stock Value</th>
-                  <th style={thStyle}>Status</th>
-                  <th style={thStyle}>Action</th>
-                </tr>
-              </thead>
+              <InsightCard
+                title="Capital Locked"
+                value={formatCurrency(totalValue)}
+                description="Inventory value currently tied up in slow-moving stock."
+              />
 
-              <tbody>
-                {filteredProducts.map((product) => (
-                  <tr key={product.sku}>
-                    <td style={tdStyle}>
-                      <div style={{ fontWeight: 600, color: "#111827" }}>
-                        {product.name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#64748b",
-                          marginTop: "3px",
-                        }}
-                      >
-                        SKU: {product.sku}
-                      </div>
-                    </td>
-
-                    <td style={tdStyle}>{product.category}</td>
-
-                    <td style={tdStyle}>
-                      <strong>{product.stock}</strong> units
-                    </td>
-
-                    <td style={tdStyle}>
-                      <span
-                        style={{
-                          color:
-                            product.daysSinceSale > 75
-                              ? "#dc2626"
-                              : "#475569",
-                        }}
-                      >
-                        {product.daysSinceSale} days ago
-                      </span>
-                    </td>
-
-                    <td style={tdStyle}>
-                      {formatCurrency(product.value)}
-                    </td>
-
-                    <td style={tdStyle}>
-                      <StatusBadge status={product.status} />
-                    </td>
-
-                    <td style={tdStyle}>
-                      <button
-                        style={{
-                          border: "none",
-                          background: "transparent",
-                          color: "#2563eb",
-                          cursor: "pointer",
-                          fontWeight: 600,
-                        }}
-                        onClick={() =>
-                          alert(
-                            `${product.name}\nStock: ${product.stock} units\nValue: ${formatCurrency(
-                              product.value
-                            )}`
-                          )
-                        }
-                      >
-                        Review
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div
-            style={{
-              padding: "12px 18px",
-              borderTop: "1px solid #e2e8f0",
-              color: "#64748b",
-              fontSize: "12px",
-            }}
-          >
-            Showing {filteredProducts.length} of {products.length} products
-          </div>
-        </section>
-
-        {/* Insights */}
-        <section
-          style={{
-            marginTop: "18px",
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "10px",
-            padding: "20px",
-          }}
-        >
-          <h2
-            style={{
-              margin: "0 0 16px",
-              fontSize: "17px",
-              color: "#111827",
-            }}
-          >
-            Inventory Insights
-          </h2>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: "14px",
-            }}
-          >
-            <InsightCard
-              title="Clearance Opportunity"
-              value={`${deadProducts} products`}
-              description="Consider promotional pricing to move old inventory."
-            />
-
-            <InsightCard
-              title="Capital Locked"
-              value={formatCurrency(totalValue)}
-              description="Inventory value currently tied up in slow-moving stock."
-            />
-
-            <InsightCard
-              title="Immediate Attention"
-              value={`${criticalProducts} product`}
-              description="These products have remained unsold for an extended period."
-            />
-          </div>
-        </section>
-      </div>
-    </main>
+              <InsightCard
+                title="Immediate Attention"
+                value={`${criticalProducts} product`}
+                description="These products have remained unsold for an extended period."
+              />
+            </div>
+          </section>
+        </div>
+      </main>
+    </PageLayout>
   );
 }
 
@@ -508,7 +547,11 @@ function KpiCard({
   );
 }
 
-function StatusBadge({ status }: { status: Product["status"] }) {
+function StatusBadge({
+  status,
+}: {
+  status: Product["status"];
+}) {
   const styles = {
     Critical: {
       background: "#fee2e2",

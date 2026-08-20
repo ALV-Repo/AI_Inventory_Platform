@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 type Message = {
   id: number;
@@ -44,18 +45,14 @@ export default function CopilotPage() {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  /*
-   * ============================================================
-   * LOAD PREVIOUS CHATS
-   * ============================================================
-   */
+  // ============================================================
+  // LOAD PREVIOUS CHATS
+  // ============================================================
 
   useEffect(() => {
     try {
       const savedChats = localStorage.getItem(STORAGE_KEY);
-      const savedActiveChat = localStorage.getItem(
-        ACTIVE_CHAT_KEY
-      );
+      const savedActiveChat = localStorage.getItem(ACTIVE_CHAT_KEY);
 
       if (savedChats) {
         const parsedChats: Chat[] = JSON.parse(savedChats);
@@ -91,10 +88,7 @@ export default function CopilotPage() {
         setActiveChatId(newChat.id);
       }
     } catch (error) {
-      console.error(
-        "Failed to load Copilot chat history:",
-        error
-      );
+      console.error("Failed to load Copilot chat history:", error);
 
       const newChat = createNewChat();
 
@@ -105,11 +99,9 @@ export default function CopilotPage() {
     setLoaded(true);
   }, []);
 
-  /*
-   * ============================================================
-   * SAVE CHATS TO LOCAL STORAGE
-   * ============================================================
-   */
+  // ============================================================
+  // SAVE CHATS
+  // ============================================================
 
   useEffect(() => {
     if (!loaded) {
@@ -117,23 +109,15 @@ export default function CopilotPage() {
     }
 
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(chats)
-      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
     } catch (error) {
-      console.error(
-        "Failed to save Copilot chat history:",
-        error
-      );
+      console.error("Failed to save Copilot chat history:", error);
     }
   }, [chats, loaded]);
 
-  /*
-   * ============================================================
-   * SAVE ACTIVE CHAT
-   * ============================================================
-   */
+  // ============================================================
+  // SAVE ACTIVE CHAT
+  // ============================================================
 
   useEffect(() => {
     if (!loaded || activeChatId === null) {
@@ -146,18 +130,13 @@ export default function CopilotPage() {
         String(activeChatId)
       );
     } catch (error) {
-      console.error(
-        "Failed to save active chat:",
-        error
-      );
+      console.error("Failed to save active chat:", error);
     }
   }, [activeChatId, loaded]);
 
-  /*
-   * ============================================================
-   * CURRENT CHAT
-   * ============================================================
-   */
+  // ============================================================
+  // CURRENT CHAT
+  // ============================================================
 
   const activeChat = chats.find(
     (chat) => chat.id === activeChatId
@@ -165,11 +144,9 @@ export default function CopilotPage() {
 
   const messages = activeChat?.messages ?? [];
 
-  /*
-   * ============================================================
-   * NEW CHAT
-   * ============================================================
-   */
+  // ============================================================
+  // CREATE NEW CHAT
+  // ============================================================
 
   const createChat = () => {
     const newChat = createNewChat();
@@ -184,11 +161,9 @@ export default function CopilotPage() {
     setLoading(false);
   };
 
-  /*
-   * ============================================================
-   * SELECT CHAT
-   * ============================================================
-   */
+  // ============================================================
+  // SELECT CHAT
+  // ============================================================
 
   const selectChat = (chatId: number) => {
     setActiveChatId(chatId);
@@ -196,11 +171,9 @@ export default function CopilotPage() {
     setLoading(false);
   };
 
-  /*
-   * ============================================================
-   * DELETE CHAT
-   * ============================================================
-   */
+  // ============================================================
+  // DELETE CHAT
+  // ============================================================
 
   const deleteChat = () => {
     if (!activeChat) {
@@ -233,11 +206,9 @@ export default function CopilotPage() {
     setLoading(false);
   };
 
-  /*
-   * ============================================================
-   * UPDATE CHAT
-   * ============================================================
-   */
+  // ============================================================
+  // UPDATE CHAT
+  // ============================================================
 
   const updateChat = (
     chatId: number,
@@ -263,11 +234,9 @@ export default function CopilotPage() {
     );
   };
 
-  /*
-   * ============================================================
-   * DEMO AI RESPONSE
-   * ============================================================
-   */
+  // ============================================================
+  // DEMO AI RESPONSE
+  // ============================================================
 
   const generateAnswer = (query: string): string => {
     const lowerQuery = query.toLowerCase();
@@ -319,11 +288,9 @@ export default function CopilotPage() {
     return "Based on the available StockFlow records, I recommend reviewing inventory levels, sales performance, supplier information, and reorder requirements before making a business decision.";
   };
 
-  /*
-   * ============================================================
-   * ASK COPILOT
-   * ============================================================
-   */
+  // ============================================================
+  // ASK COPILOT
+  // ============================================================
 
   const askCopilot = (selectedQuestion?: string) => {
     const query = (
@@ -347,10 +314,6 @@ export default function CopilotPage() {
       userMessage,
     ];
 
-    /*
-     * Generate title from first question.
-     */
-
     let newTitle = activeChat.title;
 
     if (
@@ -371,12 +334,6 @@ export default function CopilotPage() {
 
     setQuestion("");
     setLoading(true);
-
-    /*
-     * Demo AI response.
-     *
-     * Later this can be replaced with your backend API.
-     */
 
     setTimeout(() => {
       const answer = generateAnswer(query);
@@ -402,385 +359,326 @@ export default function CopilotPage() {
     }, 700);
   };
 
-  /*
-   * ============================================================
-   * WAIT UNTIL LOCAL STORAGE IS LOADED
-   * ============================================================
-   */
+  // ============================================================
+  // LOADING
+  // ============================================================
 
   if (!loaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="text-sm text-gray-500">
-          Loading Copilot...
+      <PageLayout>
+        <div className="flex min-h-screen items-center justify-center bg-gray-50">
+          <div className="text-sm text-gray-500">
+            Loading Copilot...
+          </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
-  /*
-   * ============================================================
-   * UI
-   * ============================================================
-   */
+  // ============================================================
+  // MAIN UI
+  // ============================================================
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-7xl">
+    <PageLayout>
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="mx-auto max-w-7xl">
 
-        {/* ================================================== */}
-        {/* PAGE HEADER */}
-        {/* ================================================== */}
+          {/* PAGE HEADER */}
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                ✦ AI Copilot
+              </h1>
 
-        <div className="mb-6 flex items-center justify-between">
-
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              ✦ AI Copilot
-            </h1>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Ask questions about your inventory, sales,
-              suppliers, and business performance.
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-
-            <button
-              onClick={deleteChat}
-              disabled={!activeChat}
-              className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              🗑 Delete Chat
-            </button>
-
-            <button
-              onClick={createChat}
-              className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              + New Chat
-            </button>
-
-          </div>
-        </div>
-
-        {/* ================================================== */}
-        {/* MAIN CONTENT */}
-        {/* ================================================== */}
-
-        <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-
-          {/* ================================================= */}
-          {/* CHAT HISTORY */}
-          {/* ================================================= */}
-
-          <div className="flex min-h-[650px] flex-col rounded-xl border bg-white shadow-sm">
-
-            <div className="border-b px-5 py-4">
-
-              <h2 className="font-semibold text-gray-900">
-                Chat History
-              </h2>
-
-              <p className="mt-1 text-xs text-gray-500">
-                Your conversations
+              <p className="mt-1 text-sm text-gray-500">
+                Ask questions about your inventory, sales,
+                suppliers, and business performance.
               </p>
-
             </div>
 
-            {/* Chat List */}
-
-            <div className="flex-1 overflow-y-auto p-3">
-
-              {chats.map((chat) => {
-
-                const isActive =
-                  chat.id === activeChatId;
-
-                return (
-                  <button
-                    key={chat.id}
-                    onClick={() =>
-                      selectChat(chat.id)
-                    }
-                    className={`mb-2 w-full rounded-lg border p-3 text-left transition ${
-                      isActive
-                        ? "border-blue-200 bg-blue-50"
-                        : "border-transparent hover:bg-gray-50"
-                    }`}
-                  >
-
-                    <div className="flex items-start gap-3">
-
-                      <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-                          isActive
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-100 text-gray-500"
-                        }`}
-                      >
-                        💬
-                      </div>
-
-                      <div className="min-w-0">
-
-                        <p className="truncate text-sm font-semibold text-gray-800">
-                          {chat.title}
-                        </p>
-
-                        <p className="mt-1 text-xs text-gray-400">
-                          {chat.time}
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                  </button>
-                );
-              })}
-
-            </div>
-
-            {/* New Chat Button */}
-
-            <div className="border-t p-4">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={deleteChat}
+                disabled={!activeChat}
+                className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                🗑 Delete Chat
+              </button>
 
               <button
+                type="button"
                 onClick={createChat}
-                className="w-full rounded-lg border border-blue-500 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 transition hover:bg-blue-50"
+                className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
               >
                 + New Chat
               </button>
+            </div>
+          </div>
+
+          {/* MAIN CONTENT */}
+          <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+
+            {/* CHAT HISTORY */}
+            <div className="flex min-h-[650px] flex-col rounded-xl border bg-white shadow-sm">
+
+              <div className="border-b px-5 py-4">
+                <h2 className="font-semibold text-gray-900">
+                  Chat History
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Your conversations
+                </p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3">
+                {chats.map((chat) => {
+                  const isActive =
+                    chat.id === activeChatId;
+
+                  return (
+                    <button
+                      type="button"
+                      key={chat.id}
+                      onClick={() =>
+                        selectChat(chat.id)
+                      }
+                      className={`mb-2 w-full rounded-lg border p-3 text-left transition ${
+                        isActive
+                          ? "border-blue-200 bg-blue-50"
+                          : "border-transparent hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                            isActive
+                              ? "bg-blue-600 text-white"
+                              : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          💬
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-gray-800">
+                            {chat.title}
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-400">
+                            {chat.time}
+                          </p>
+                        </div>
+
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="border-t p-4">
+                <button
+                  type="button"
+                  onClick={createChat}
+                  className="w-full rounded-lg border border-blue-500 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 transition hover:bg-blue-50"
+                >
+                  + New Chat
+                </button>
+              </div>
 
             </div>
 
-          </div>
+            {/* COPILOT CHAT */}
+            <div className="rounded-xl border bg-white shadow-sm">
 
-          {/* ================================================= */}
-          {/* COPILOT CHAT */}
-          {/* ================================================= */}
+              {/* HEADER */}
+              <div className="border-b px-6 py-5">
+                <div className="flex items-center justify-between">
 
-          <div className="rounded-xl border bg-white shadow-sm">
+                  <div className="flex items-center gap-3">
 
-            {/* Copilot Header */}
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                      AI
+                    </div>
 
-            <div className="border-b px-6 py-5">
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        AI Copilot
+                      </h2>
 
-              <div className="flex items-center justify-between">
+                      <p className="text-xs text-gray-500">
+                        StockFlow Business Assistant
+                      </p>
+                    </div>
 
-                <div className="flex items-center gap-3">
-
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                    AI
                   </div>
 
-                  <div>
+                  <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-600">
+                    ● Active
+                  </span>
 
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      AI Copilot
-                    </h2>
+                </div>
+              </div>
 
-                    <p className="text-xs text-gray-500">
-                      StockFlow Business Assistant
+              {/* MESSAGES */}
+              <div className="max-h-[450px] min-h-[390px] overflow-y-auto p-6">
+
+                {messages.length === 0 && !loading && (
+                  <div className="flex min-h-[330px] flex-col items-center justify-center text-center">
+
+                    <div className="mb-5 text-5xl">
+                      💬
+                    </div>
+
+                    <h3 className="text-xl font-semibold text-gray-900">
+                      Start a conversation
+                    </h3>
+
+                    <p className="mt-2 max-w-md text-sm text-gray-500">
+                      Ask a question or choose one of
+                      the suggested questions below.
                     </p>
 
                   </div>
+                )}
+
+                <div className="space-y-5">
+
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${
+                        message.role === "user"
+                          ? "justify-end"
+                          : "justify-start"
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[75%] rounded-xl px-4 py-3 text-sm leading-6 ${
+                          message.role === "user"
+                            ? "bg-blue-600 text-white"
+                            : "border border-blue-100 bg-blue-50 text-gray-700"
+                        }`}
+                      >
+                        {message.role === "assistant" && (
+                          <p className="mb-1 text-xs font-semibold text-blue-600">
+                            AI Copilot
+                          </p>
+                        )}
+
+                        {message.text}
+                      </div>
+                    </div>
+                  ))}
+
+                  {loading && (
+                    <div className="flex justify-start">
+                      <div className="rounded-xl border bg-gray-50 px-5 py-4">
+                        <div className="flex items-center gap-2">
+
+                          <div className="h-2 w-2 animate-bounce rounded-full bg-blue-600" />
+
+                          <div className="h-2 w-2 animate-bounce rounded-full bg-blue-600 [animation-delay:150ms]" />
+
+                          <div className="h-2 w-2 animate-bounce rounded-full bg-blue-600 [animation-delay:300ms]" />
+
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+
+              {/* SUGGESTED QUESTIONS */}
+              <div className="border-t px-6 py-5">
+
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Suggested Questions
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+
+                  {suggestedQuestions.map(
+                    (suggestion) => (
+                      <button
+                        type="button"
+                        key={suggestion}
+                        onClick={() =>
+                          askCopilot(suggestion)
+                        }
+                        disabled={loading}
+                        className="rounded-full border border-gray-300 bg-white px-3 py-2 text-xs text-gray-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+                      >
+                        {suggestion}
+                      </button>
+                    )
+                  )}
+
+                </div>
+              </div>
+
+              {/* INPUT */}
+              <div className="border-t bg-gray-50 p-6">
+
+                <div className="flex gap-3">
+
+                  <input
+                    type="text"
+                    value={question}
+                    onChange={(event) =>
+                      setQuestion(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        askCopilot();
+                      }
+                    }}
+                    placeholder="Type a question about your business..."
+                    maxLength={500}
+                    className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => askCopilot()}
+                    disabled={
+                      loading ||
+                      !question.trim()
+                    }
+                    className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading
+                      ? "Sending..."
+                      : "➤ Send"}
+                  </button>
 
                 </div>
 
-                <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-600">
-                  ● Active
-                </span>
+                <div className="mt-2 flex justify-between">
 
-              </div>
+                  <p className="text-xs text-gray-400">
+                    Frontend demo mode — chat history is
+                    saved in this browser.
+                  </p>
 
-            </div>
-
-            {/* ================================================= */}
-            {/* CHAT MESSAGES */}
-            {/* ================================================= */}
-
-            <div className="min-h-[390px] max-h-[450px] overflow-y-auto p-6">
-
-              {messages.length === 0 && !loading && (
-
-                <div className="flex min-h-[330px] flex-col items-center justify-center text-center">
-
-                  <div className="mb-5 text-5xl">
-                    💬
-                  </div>
-
-                  <h3 className="text-xl font-semibold text-gray-900">
-                    Start a conversation
-                  </h3>
-
-                  <p className="mt-2 max-w-md text-sm text-gray-500">
-                    Ask a question or choose one of
-                    the suggested questions below.
+                  <p className="text-xs text-gray-400">
+                    {question.length}/500
                   </p>
 
                 </div>
-              )}
-
-              <div className="space-y-5">
-
-                {messages.map((message) => (
-
-                  <div
-                    key={message.id}
-                    className={`flex ${
-                      message.role === "user"
-                        ? "justify-end"
-                        : "justify-start"
-                    }`}
-                  >
-
-                    <div
-                      className={`max-w-[75%] rounded-xl px-4 py-3 text-sm leading-6 ${
-                        message.role === "user"
-                          ? "bg-blue-600 text-white"
-                          : "border border-blue-100 bg-blue-50 text-gray-700"
-                      }`}
-                    >
-
-                      {message.role === "assistant" && (
-                        <p className="mb-1 text-xs font-semibold text-blue-600">
-                          AI Copilot
-                        </p>
-                      )}
-
-                      {message.text}
-
-                    </div>
-
-                  </div>
-
-                ))}
-
-                {/* Loading */}
-
-                {loading && (
-
-                  <div className="flex justify-start">
-
-                    <div className="rounded-xl border bg-gray-50 px-5 py-4">
-
-                      <div className="flex items-center gap-2">
-
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-blue-600" />
-
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-blue-600 [animation-delay:150ms]" />
-
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-blue-600 [animation-delay:300ms]" />
-
-                      </div>
-
-                    </div>
-
-                  </div>
-                )}
 
               </div>
 
             </div>
-
-            {/* ================================================= */}
-            {/* SUGGESTED QUESTIONS */}
-            {/* ================================================= */}
-
-            <div className="border-t px-6 py-5">
-
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Suggested Questions
-              </p>
-
-              <div className="flex flex-wrap gap-2">
-
-                {suggestedQuestions.map(
-                  (suggestion) => (
-
-                    <button
-                      key={suggestion}
-                      onClick={() =>
-                        askCopilot(suggestion)
-                      }
-                      disabled={loading}
-                      className="rounded-full border border-gray-300 bg-white px-3 py-2 text-xs text-gray-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
-                    >
-                      {suggestion}
-                    </button>
-
-                  )
-                )}
-
-              </div>
-
-            </div>
-
-            {/* ================================================= */}
-            {/* INPUT AREA */}
-            {/* ================================================= */}
-
-            <div className="border-t bg-gray-50 p-6">
-
-              <div className="flex gap-3">
-
-                <input
-                  type="text"
-                  value={question}
-                  onChange={(event) =>
-                    setQuestion(event.target.value)
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      askCopilot();
-                    }
-                  }}
-                  placeholder="Type a question about your business..."
-                  maxLength={500}
-                  className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
-
-                <button
-                  onClick={() =>
-                    askCopilot()
-                  }
-                  disabled={
-                    loading ||
-                    !question.trim()
-                  }
-                  className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loading
-                    ? "Sending..."
-                    : "➤ Send"}
-                </button>
-
-              </div>
-
-              <div className="mt-2 flex justify-between">
-
-                <p className="text-xs text-gray-400">
-                  Frontend demo mode — chat history is
-                  saved in this browser.
-                </p>
-
-                <p className="text-xs text-gray-400">
-                  {question.length}/500
-                </p>
-
-              </div>
-
-            </div>
-
           </div>
 
         </div>
-
       </div>
-    </div>
+    </PageLayout>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 type AuditLog = {
   id: string;
@@ -22,7 +23,8 @@ const auditLogs: AuditLog[] = [
     role: "Admin",
     action: "Updated",
     module: "Inventory",
-    description: "Updated stock quantity for Hot Wheels Track Set",
+    description:
+      "Updated stock quantity for Hot Wheels Track Set",
     status: "Success",
     ip: "192.168.1.101",
   },
@@ -33,7 +35,8 @@ const auditLogs: AuditLog[] = [
     role: "Manager",
     action: "Created",
     module: "Sales",
-    description: "Created new point of sale transaction",
+    description:
+      "Created new point of sale transaction",
     status: "Success",
     ip: "192.168.1.102",
   },
@@ -44,7 +47,8 @@ const auditLogs: AuditLog[] = [
     role: "Manager",
     action: "Updated",
     module: "Purchase Orders",
-    description: "Updated purchase order PO-2026-018",
+    description:
+      "Updated purchase order PO-2026-018",
     status: "Success",
     ip: "192.168.1.103",
   },
@@ -55,7 +59,8 @@ const auditLogs: AuditLog[] = [
     role: "Staff",
     action: "Viewed",
     module: "Customers",
-    description: "Viewed customer purchase history",
+    description:
+      "Viewed customer purchase history",
     status: "Success",
     ip: "192.168.1.104",
   },
@@ -66,7 +71,8 @@ const auditLogs: AuditLog[] = [
     role: "Admin",
     action: "Updated",
     module: "Finance",
-    description: "Updated financial transaction TXN-1005",
+    description:
+      "Updated financial transaction TXN-1005",
     status: "Success",
     ip: "192.168.1.105",
   },
@@ -77,7 +83,8 @@ const auditLogs: AuditLog[] = [
     role: "Staff",
     action: "Created",
     module: "Customers",
-    description: "Created new customer record",
+    description:
+      "Created new customer record",
     status: "Success",
     ip: "192.168.1.106",
   },
@@ -88,7 +95,8 @@ const auditLogs: AuditLog[] = [
     role: "Admin",
     action: "Deleted",
     module: "Inventory",
-    description: "Removed discontinued product from inventory",
+    description:
+      "Removed discontinued product from inventory",
     status: "Warning",
     ip: "192.168.1.101",
   },
@@ -99,7 +107,8 @@ const auditLogs: AuditLog[] = [
     role: "Manager",
     action: "Approved",
     module: "Purchase Orders",
-    description: "Approved purchase order PO-2026-017",
+    description:
+      "Approved purchase order PO-2026-017",
     status: "Success",
     ip: "192.168.1.102",
   },
@@ -110,7 +119,8 @@ const auditLogs: AuditLog[] = [
     role: "Manager",
     action: "Exported",
     module: "Reports",
-    description: "Exported monthly sales report",
+    description:
+      "Exported monthly sales report",
     status: "Success",
     ip: "192.168.1.103",
   },
@@ -121,7 +131,8 @@ const auditLogs: AuditLog[] = [
     role: "Unknown",
     action: "Login",
     module: "Authentication",
-    description: "Failed login attempt",
+    description:
+      "Failed login attempt",
     status: "Failed",
     ip: "192.168.1.120",
   },
@@ -129,9 +140,12 @@ const auditLogs: AuditLog[] = [
 
 export default function AuditTrailPage() {
   const [search, setSearch] = useState("");
-  const [moduleFilter, setModuleFilter] = useState("All Modules");
-  const [actionFilter, setActionFilter] = useState("All Actions");
-  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [moduleFilter, setModuleFilter] =
+    useState("All Modules");
+  const [actionFilter, setActionFilter] =
+    useState("All Actions");
+  const [statusFilter, setStatusFilter] =
+    useState("All Status");
 
   const modules = [
     "All Modules",
@@ -155,7 +169,12 @@ export default function AuditTrailPage() {
     "Login",
   ];
 
-  const statuses = ["All Status", "Success", "Warning", "Failed"];
+  const statuses = [
+    "All Status",
+    "Success",
+    "Warning",
+    "Failed",
+  ];
 
   const filteredLogs = useMemo(() => {
     return auditLogs.filter((log) => {
@@ -165,17 +184,22 @@ export default function AuditTrailPage() {
         log.id.toLowerCase().includes(searchText) ||
         log.user.toLowerCase().includes(searchText) ||
         log.module.toLowerCase().includes(searchText) ||
-        log.description.toLowerCase().includes(searchText) ||
+        log.description
+          .toLowerCase()
+          .includes(searchText) ||
         log.ip.toLowerCase().includes(searchText);
 
       const matchesModule =
-        moduleFilter === "All Modules" || log.module === moduleFilter;
+        moduleFilter === "All Modules" ||
+        log.module === moduleFilter;
 
       const matchesAction =
-        actionFilter === "All Actions" || log.action === actionFilter;
+        actionFilter === "All Actions" ||
+        log.action === actionFilter;
 
       const matchesStatus =
-        statusFilter === "All Status" || log.status === statusFilter;
+        statusFilter === "All Status" ||
+        log.status === statusFilter;
 
       return (
         matchesSearch &&
@@ -184,15 +208,23 @@ export default function AuditTrailPage() {
         matchesStatus
       );
     });
-  }, [search, moduleFilter, actionFilter, statusFilter]);
+  }, [
+    search,
+    moduleFilter,
+    actionFilter,
+    statusFilter,
+  ]);
 
   const totalEvents = auditLogs.length;
+
   const successfulEvents = auditLogs.filter(
     (log) => log.status === "Success"
   ).length;
+
   const warningEvents = auditLogs.filter(
     (log) => log.status === "Warning"
   ).length;
+
   const failedEvents = auditLogs.filter(
     (log) => log.status === "Failed"
   ).length;
@@ -204,7 +236,9 @@ export default function AuditTrailPage() {
     setStatusFilter("All Status");
   };
 
-  const getStatusClass = (status: AuditLog["status"]) => {
+  const getStatusClass = (
+    status: AuditLog["status"]
+  ) => {
     if (status === "Success") {
       return "bg-green-100 text-green-700";
     }
@@ -221,7 +255,10 @@ export default function AuditTrailPage() {
       return "text-red-600";
     }
 
-    if (action === "Created" || action === "Approved") {
+    if (
+      action === "Created" ||
+      action === "Approved"
+    ) {
       return "text-green-600";
     }
 
@@ -233,347 +270,408 @@ export default function AuditTrailPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f6f8fb] px-6 py-7 text-slate-900">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="mb-5 flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Audit Trail
-            </h1>
+    <PageLayout>
+      <main className="min-h-screen bg-[#f6f8fb] px-6 py-7 text-slate-900">
+        <div className="mx-auto max-w-6xl">
 
-            <p className="mt-1 text-xs text-slate-500">
-              Track system activity, user actions and important business events.
-            </p>
+          {/* Header */}
+          <div className="mb-5 flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Audit Trail
+              </h1>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Track system activity, user actions and important business events.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                window.location.reload()
+              }
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Refresh
+            </button>
           </div>
 
-          <button
-            onClick={() => window.location.reload()}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            Refresh
-          </button>
-        </div>
+          {/* Status Banner */}
+          <section className="mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-green-500" />
 
-        {/* Status Banner */}
-        <section className="mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
+                  <p className="text-sm font-semibold text-slate-800">
+                    Audit logging is active
+                  </p>
+                </div>
 
-                <p className="text-sm font-semibold text-slate-800">
-                  Audit logging is active
+                <p className="mt-1 text-[11px] text-slate-500">
+                  All important system activities are being recorded.
                 </p>
               </div>
 
-              <p className="mt-1 text-[11px] text-slate-500">
-                All important system activities are being recorded.
+              <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-green-600 shadow-sm">
+                System protected
+              </span>
+            </div>
+          </section>
+
+          {/* Summary Cards */}
+          <div className="mb-5 grid grid-cols-4 gap-3">
+            <SummaryCard
+              title="Total Events"
+              value={totalEvents}
+              subtitle="Recorded activities"
+            />
+
+            <SummaryCard
+              title="Successful"
+              value={successfulEvents}
+              subtitle="Normal activities"
+              color="green"
+            />
+
+            <SummaryCard
+              title="Warnings"
+              value={warningEvents}
+              subtitle="Needs review"
+              color="orange"
+            />
+
+            <SummaryCard
+              title="Failed Events"
+              value={failedEvents}
+              subtitle="Security attention"
+              color="red"
+            />
+          </div>
+
+          {/* Filters */}
+          <section className="mb-5 rounded-lg border border-slate-200 bg-white p-3">
+            <div className="grid grid-cols-[1fr_170px_170px_170px_auto] gap-2">
+
+              <input
+                type="text"
+                value={search}
+                onChange={(e) =>
+                  setSearch(e.target.value)
+                }
+                placeholder="Search user, action, module, event ID or IP..."
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+              />
+
+              <select
+                value={moduleFilter}
+                onChange={(e) =>
+                  setModuleFilter(e.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                {modules.map((module) => (
+                  <option key={module}>
+                    {module}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={actionFilter}
+                onChange={(e) =>
+                  setActionFilter(e.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                {actions.map((action) => (
+                  <option key={action}>
+                    {action}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                {statuses.map((status) => (
+                  <option key={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Clear
+              </button>
+            </div>
+          </section>
+
+          {/* Audit Log Table */}
+          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-4 py-4">
+              <h2 className="text-sm font-semibold">
+                Activity Log
+              </h2>
+
+              <p className="mt-1 text-[10px] text-slate-400">
+                Complete record of recent system activities
               </p>
             </div>
 
-            <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-green-600 shadow-sm">
-              System protected
-            </span>
-          </div>
-        </section>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Event
+                    </th>
 
-        {/* Summary Cards */}
-        <div className="mb-5 grid grid-cols-4 gap-3">
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">
-              Total Events
-            </p>
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Date & Time
+                    </th>
 
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {totalEvents}
-            </p>
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      User
+                    </th>
 
-            <p className="mt-1 text-[10px] text-slate-400">
-              Recorded activities
-            </p>
-          </div>
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Action
+                    </th>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">
-              Successful
-            </p>
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Module
+                    </th>
 
-            <p className="mt-2 text-2xl font-bold text-green-600">
-              {successfulEvents}
-            </p>
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Description
+                    </th>
 
-            <p className="mt-1 text-[10px] text-green-600">
-              Normal activities
-            </p>
-          </div>
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      Status
+                    </th>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">
-              Warnings
-            </p>
+                    <th className="px-4 py-3 font-semibold text-slate-600">
+                      IP Address
+                    </th>
+                  </tr>
+                </thead>
 
-            <p className="mt-2 text-2xl font-bold text-orange-500">
-              {warningEvents}
-            </p>
+                <tbody>
+                  {filteredLogs.map((log) => (
+                    <tr
+                      key={log.id}
+                      className="border-b border-slate-100 transition hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-slate-800">
+                          {log.id}
+                        </p>
+                      </td>
 
-            <p className="mt-1 text-[10px] text-orange-500">
-              Needs review
-            </p>
-          </div>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                        {log.timestamp}
+                      </td>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">
-              Failed Events
-            </p>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-800">
+                          {log.user}
+                        </p>
 
-            <p className="mt-2 text-2xl font-bold text-red-600">
-              {failedEvents}
-            </p>
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          {log.role}
+                        </p>
+                      </td>
 
-            <p className="mt-1 text-[10px] text-red-500">
-              Security attention
-            </p>
-          </div>
-        </div>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`font-semibold ${getActionClass(
+                            log.action
+                          )}`}
+                        >
+                          {log.action}
+                        </span>
+                      </td>
 
-        {/* Filters */}
-        <section className="mb-5 rounded-lg border border-slate-200 bg-white p-3">
-          <div className="grid grid-cols-[1fr_170px_170px_170px_auto] gap-2">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search user, action, module, event ID or IP..."
-              className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
-            />
+                      <td className="px-4 py-3 text-slate-600">
+                        {log.module}
+                      </td>
 
-            <select
-              value={moduleFilter}
-              onChange={(e) => setModuleFilter(e.target.value)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-            >
-              {modules.map((module) => (
-                <option key={module}>{module}</option>
-              ))}
-            </select>
+                      <td className="min-w-[260px] px-4 py-3 text-slate-600">
+                        {log.description}
+                      </td>
 
-            <select
-              value={actionFilter}
-              onChange={(e) => setActionFilter(e.target.value)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-            >
-              {actions.map((action) => (
-                <option key={action}>{action}</option>
-              ))}
-            </select>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${getStatusClass(
+                            log.status
+                          )}`}
+                        >
+                          {log.status}
+                        </span>
+                      </td>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-            >
-              {statuses.map((status) => (
-                <option key={status}>{status}</option>
-              ))}
-            </select>
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-[10px] text-slate-500">
+                        {log.ip}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-            <button
-              onClick={clearFilters}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Clear
-            </button>
-          </div>
-        </section>
+            {filteredLogs.length === 0 && (
+              <div className="px-6 py-12 text-center">
+                <p className="text-sm font-medium text-slate-700">
+                  No audit events found
+                </p>
 
-        {/* Audit Log Table */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-4 py-4">
+                <p className="mt-1 text-xs text-slate-400">
+                  Try changing your search or filters.
+                </p>
+              </div>
+            )}
+
+            <div className="border-t border-slate-200 px-4 py-3">
+              <p className="text-[10px] text-slate-500">
+                Showing {filteredLogs.length} of{" "}
+                {auditLogs.length} audit events
+              </p>
+            </div>
+          </section>
+
+          {/* Security Insights */}
+          <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="text-sm font-semibold">
-              Activity Log
+              Security Insights
             </h2>
 
             <p className="mt-1 text-[10px] text-slate-400">
-              Complete record of recent system activities
+              Summary of recent audit activity
             </p>
-          </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left">
-                  <th className="px-4 py-3 font-semibold text-slate-600">
-                    Event
-                  </th>
+            <div className="mt-4 grid grid-cols-3 gap-3">
 
-                  <th className="px-4 py-3 font-semibold text-slate-600">
-                    Date & Time
-                  </th>
+              <InsightCard
+                title="Most Active Module"
+                value="Inventory"
+                description="Highest number of recorded activities"
+              />
 
-                  <th className="px-4 py-3 font-semibold text-slate-600">
-                    User
-                  </th>
+              <InsightCard
+                title="Latest Activity"
+                value="15:12"
+                description="Inventory stock updated"
+              />
 
-                  <th className="px-4 py-3 font-semibold text-slate-600">
-                    Action
-                  </th>
+              <InsightCard
+                title="Security Alerts"
+                value="1 failed event"
+                description="Review authentication activity"
+                danger
+              />
 
-                  <th className="px-4 py-3 font-semibold text-slate-600">
-                    Module
-                  </th>
-
-                  <th className="px-4 py-3 font-semibold text-slate-600">
-                    Description
-                  </th>
-
-                  <th className="px-4 py-3 font-semibold text-slate-600">
-                    Status
-                  </th>
-
-                  <th className="px-4 py-3 font-semibold text-slate-600">
-                    IP Address
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredLogs.map((log) => (
-                  <tr
-                    key={log.id}
-                    className="border-b border-slate-100 transition hover:bg-slate-50"
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-800">
-                        {log.id}
-                      </p>
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                      {log.timestamp}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-slate-800">
-                        {log.user}
-                      </p>
-
-                      <p className="mt-0.5 text-[10px] text-slate-400">
-                        {log.role}
-                      </p>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span
-                        className={`font-semibold ${getActionClass(
-                          log.action
-                        )}`}
-                      >
-                        {log.action}
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-600">
-                      {log.module}
-                    </td>
-
-                    <td className="min-w-[260px] px-4 py-3 text-slate-600">
-                      {log.description}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${getStatusClass(
-                          log.status
-                        )}`}
-                      >
-                        {log.status}
-                      </span>
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-[10px] text-slate-500">
-                      {log.ip}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredLogs.length === 0 && (
-            <div className="px-6 py-12 text-center">
-              <p className="text-sm font-medium text-slate-700">
-                No audit events found
-              </p>
-
-              <p className="mt-1 text-xs text-slate-400">
-                Try changing your search or filters.
-              </p>
             </div>
-          )}
+          </section>
+        </div>
+      </main>
+    </PageLayout>
+  );
+}
 
-          <div className="border-t border-slate-200 px-4 py-3">
-            <p className="text-[10px] text-slate-500">
-              Showing {filteredLogs.length} of {auditLogs.length} audit events
-            </p>
-          </div>
-        </section>
+/* ============================================================
+   SUMMARY CARD
+============================================================ */
 
-        {/* Security Insights */}
-        <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold">
-            Security Insights
-          </h2>
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+  color = "default",
+}: {
+  title: string;
+  value: number;
+  subtitle: string;
+  color?: "default" | "green" | "orange" | "red";
+}) {
+  const valueClass = {
+    default: "text-slate-900",
+    green: "text-green-600",
+    orange: "text-orange-500",
+    red: "text-red-600",
+  }[color];
 
-          <p className="mt-1 text-[10px] text-slate-400">
-            Summary of recent audit activity
-          </p>
+  const subtitleClass = {
+    default: "text-slate-400",
+    green: "text-green-600",
+    orange: "text-orange-500",
+    red: "text-red-500",
+  }[color];
 
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            <div className="rounded-md border border-slate-200 p-4">
-              <p className="text-[10px] text-slate-400">
-                Most Active Module
-              </p>
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
 
-              <p className="mt-2 text-base font-semibold">
-                Inventory
-              </p>
+      <p
+        className={`mt-2 text-2xl font-bold ${valueClass}`}
+      >
+        {value}
+      </p>
 
-              <p className="mt-1 text-[10px] text-slate-500">
-                Highest number of recorded activities
-              </p>
-            </div>
+      <p
+        className={`mt-1 text-[10px] ${subtitleClass}`}
+      >
+        {subtitle}
+      </p>
+    </div>
+  );
+}
 
-            <div className="rounded-md border border-slate-200 p-4">
-              <p className="text-[10px] text-slate-400">
-                Latest Activity
-              </p>
+/* ============================================================
+   SECURITY INSIGHT
+============================================================ */
 
-              <p className="mt-2 text-base font-semibold">
-                15:12
-              </p>
+function InsightCard({
+  title,
+  value,
+  description,
+  danger = false,
+}: {
+  title: string;
+  value: string;
+  description: string;
+  danger?: boolean;
+}) {
+  return (
+    <div className="rounded-md border border-slate-200 p-4">
+      <p className="text-[10px] text-slate-400">
+        {title}
+      </p>
 
-              <p className="mt-1 text-[10px] text-slate-500">
-                Inventory stock updated
-              </p>
-            </div>
+      <p
+        className={`mt-2 text-base font-semibold ${
+          danger
+            ? "text-red-600"
+            : "text-slate-900"
+        }`}
+      >
+        {value}
+      </p>
 
-            <div className="rounded-md border border-slate-200 p-4">
-              <p className="text-[10px] text-slate-400">
-                Security Alerts
-              </p>
-
-              <p className="mt-2 text-base font-semibold text-red-600">
-                1 failed event
-              </p>
-
-              <p className="mt-1 text-[10px] text-slate-500">
-                Review authentication activity
-              </p>
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
+      <p className="mt-1 text-[10px] text-slate-500">
+        {description}
+      </p>
+    </div>
   );
 }

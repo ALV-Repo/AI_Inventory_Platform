@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getDashboardSummary } from "../../services/dashboard.service";
 import { getStockMovements } from "../../services/inventory.service";
 import { getSales } from "../../services/sales.service";
+import PageLayout from "../../components/layout/PageLayout";
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState("Inventory Report");
@@ -944,6 +945,7 @@ export default function ReportsPage() {
   // ============================================================
 
   return (
+    <PageLayout>
     <main className="min-h-screen bg-gray-50 p-6">
 
       <div className="mx-auto max-w-7xl">
@@ -1616,5 +1618,6 @@ export default function ReportsPage() {
       </div>
 
     </main>
+    </PageLayout>
   );
 }
