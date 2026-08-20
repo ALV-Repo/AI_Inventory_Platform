@@ -348,3 +348,38 @@ class CycleCountEntry(Base, TenantMixin):
 
     counted_by = Column(Integer, ForeignKey("users.id"))
     counted_at = Column(DateTime)
+class StockSerial(Base, TenantMixin):
+    """Individual serial-number tracking for serialized inventory."""
+    __tablename__ = "stock_serials"
+
+    id = Column(Integer, primary_key=True)
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+    warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+        index=True,
+    )
+    serial_number = Column(String(128), nullable=False, index=True)
+    batch_no = Column(String(64))
+    status = Column(
+        String(24),
+        default="available",
+        nullable=False,
+    )  # available|reserved|sold|transferred
+
+    created_at = Column(DateTime, default=utcnow)
+
+    __table_args__ = (
+        Index(
+            "uq_stock_serial_tenant_serial",
+            "tenant_id",
+            "serial_number",
+            unique=True,
+        ),
+    )
