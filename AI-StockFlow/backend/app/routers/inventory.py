@@ -203,6 +203,123 @@ def create_product(
     db.commit()
     db.refresh(product)
     return ProductOut.model_validate(product)
+# ------------------------------------------------------------------ product variants
+
+@router.get(
+    "/products/{product_id}/variants",
+    response_model=list[ProductOut],
+)
+def list_product_variants(
+    product_id: int,
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    """FR-INV-02 — list active variants belonging to a parent product."""
+
+    parent = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not parent:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Parent product does not exist.",
+        )
+
+    variants = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.parent_id == product_id,
+            Product.is_active.is_(True),
+        )
+        .order_by(Product.sku)
+        .all()
+    )
+
+    return [ProductOut.model_validate(variant) for variant in variants]
+
+
+@router.post(
+    "/products/{product_id}/variants",
+    response_model=ProductOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_product_variant(
+    product_id: int,
+    body: ProductIn,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """FR-INV-02 — create a size/colour variant under a parent SKU."""
+
+    parent = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not parent:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Parent product does not exist.",
+        )
+
+    if body.parent_id is not None and body.parent_id != product_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Variant parent does not match the URL parent.",
+        )
+
+    exists = (
+        scoped(db, Product, user.tenant_id)
+        .filter(Product.sku == body.sku)
+        .first()
+    )
+
+    if exists:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"SKU {body.sku} is already in use.",
+        )
+
+    data = body.model_dump()
+    data["parent_id"] = product_id
+
+    variant = Product(
+        tenant_id=user.tenant_id,
+        **data,
+    )
+
+    db.add(variant)
+    db.flush()
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.product.variant.create",
+            entity_type="product",
+            entity_id=variant.id,
+            details={
+                "sku": variant.sku,
+                "parent_id": product_id,
+                "attributes": variant.attributes,
+            },
+        )
+    )
+
+    db.commit()
+    db.refresh(variant)
+
+    return ProductOut.model_validate(variant)
 # ------------------------------------------------------------------ stock
 @router.get("/stock")
 def stock_positions(
