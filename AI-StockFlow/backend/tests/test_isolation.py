@@ -13,7 +13,15 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db, scoped
 from app.core.security import hash_password
 from app.main import app
-from app.models.entities import Product, StockItem, Tenant, User, Warehouse
+from app.models.entities import (
+    AuditLog,
+    Product,
+    StockItem,
+    StockMovement,
+    Tenant,
+    User,
+    Warehouse,
+)
 
 
 # Shared in-memory SQLite database for all test connections.
@@ -600,6 +608,154 @@ class TestForecastEndpoints:
         assert "is_heuristic" in body
 class TestDeadStockEndpoints:
 
+    def test_positive_manual_adjustment(self, client, db):
+        stock = (
+            db.query(StockItem)
+            .filter(
+                StockItem.product_id == 1,
+                StockItem.warehouse_id == 1,
+            )
+            .one()
+        )
+
+        before = stock.quantity
+
+        r = client.post(
+            "/api/v1/inventory/adjustments",
+            json={
+                "product_id": 1,
+                "warehouse_id": 1,
+                "quantity": 2,
+                "reason_code": "stock_found",
+                "note": "Manual stock increase",
+            },
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 201, r.text
+
+        body = r.json()
+
+        assert body["product_id"] == 1
+        assert body["new_quantity"] == before + 2
+        assert body["movement_id"] is not None
+
+    def test_negative_manual_adjustment(self, client, db):
+        stock = (
+            db.query(StockItem)
+            .filter(
+                StockItem.product_id == 1,
+                StockItem.warehouse_id == 1,
+            )
+            .one()
+        )
+
+        before = stock.quantity
+
+        r = client.post(
+            "/api/v1/inventory/adjustments",
+            json={
+                "product_id": 1,
+                "warehouse_id": 1,
+                "quantity": -1,
+                "reason_code": "damaged_stock",
+                "note": "Damaged item removed",
+            },
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 201, r.text
+        assert r.json()["new_quantity"] == before - 1
+
+    def test_adjustment_requires_reason_code(self, client):
+        r = client.post(
+            "/api/v1/inventory/adjustments",
+            json={
+                "product_id": 1,
+                "warehouse_id": 1,
+                "quantity": 2,
+            },
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 422
+
+    def test_adjustment_cannot_make_stock_negative(self, client):
+        r = client.post(
+            "/api/v1/inventory/adjustments",
+            json={
+                "product_id": 1,
+                "warehouse_id": 1,
+                "quantity": -999999,
+                "reason_code": "stock_correction",
+            },
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 400
+
+    def test_adjustment_creates_movement_and_audit_log(self, client, db):
+        r = client.post(
+            "/api/v1/inventory/adjustments",
+            json={
+                "product_id": 1,
+                "warehouse_id": 1,
+                "quantity": 3,
+                "reason_code": "audit_correction",
+                "note": "Cycle verification correction",
+            },
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 201, r.text
+
+        movement_id = r.json()["movement_id"]
+
+        movement = (
+            db.query(StockMovement)
+            .filter(StockMovement.id == movement_id)
+            .one()
+        )
+
+        assert movement.movement_type == "adjustment"
+        assert movement.quantity == 3
+        assert movement.reason_code == "audit_correction"
+
+        audit = (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.action == "inventory.adjustment",
+                AuditLog.entity_type == "product",
+                AuditLog.entity_id == 1,
+            )
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+
+        assert audit is not None
+        assert audit.details["quantity"] == 3
+        assert audit.details["reason"] == "audit_correction"
+        assert audit.details["note"] == "Cycle verification correction"
     def test_dead_stock_requires_authentication(self, client):
         r = client.get("/api/v1/ai/dead-stock")
 
