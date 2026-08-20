@@ -1,5 +1,5 @@
 """Inventory endpoints (SRS §3.1)."""
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -320,6 +320,108 @@ def create_product_variant(
     db.refresh(variant)
 
     return ProductOut.model_validate(variant)
+# ------------------------------------------------------------------ barcode / QR
+
+@router.get("/products/{product_id}/barcode")
+def generate_product_barcode(
+    product_id: int,
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    """FR-INV-03 — generate a Code128 barcode for a product SKU."""
+
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Product does not exist.",
+        )
+
+    buffer = io.BytesIO()
+
+    code128 = barcode.get("code128", product.sku, writer=ImageWriter())
+    code128.write(
+        buffer,
+        options={
+            "write_text": True,
+            "module_width": 0.25,
+            "module_height": 12,
+            "quiet_zone": 4,
+        },
+    )
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{product.sku}-barcode.png"'
+            )
+        },
+    )
+
+
+@router.get("/products/{product_id}/qr")
+def generate_product_qr(
+    product_id: int,
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    """FR-INV-03 — generate a QR code containing product information."""
+
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Product does not exist.",
+        )
+
+    qr_data = (
+        f"sku={product.sku}"
+        f"|product_id={product.id}"
+        f"|name={product.name}"
+    )
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=4,
+    )
+
+    qr.add_data(qr_data)
+    qr.make(fit=True)
+
+    image = qr.make_image()
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{product.sku}-qr.png"'
+            )
+        },
+    )
 # ------------------------------------------------------------------ stock
 @router.get("/stock")
 def stock_positions(
@@ -1012,3 +1114,8 @@ def list_warehouses(
         {"id": w.id, "code": w.code, "name": w.name}
         for w in scoped(db, Warehouse, user.tenant_id).filter(Warehouse.is_active.is_(True)).all()
     ]
+import io
+import barcode
+import qrcode
+
+from barcode.writer import ImageWriter
