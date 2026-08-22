@@ -11,8 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.models import entities  # noqa: F401 — registers tables on Base
-from app.routers import ai, auth, dashboard, inventory, sales
+from app.models import entities 
 
 logging.basicConfig(
     level=logging.INFO,
@@ -120,10 +119,16 @@ async def unhandled_exception(request: Request, exc: Exception):
         content={"detail": "Something went wrong on our side. Try again in a moment."},
     )
 
-
-for router in (auth.router, inventory.router, sales.router, dashboard.router, ai.router):
+from app.routers import ai, auth, dashboard, inventory, purchases, sales
+for router in (
+    auth.router,
+    inventory.router,
+    purchases.router,
+    sales.router,
+    dashboard.router,
+    ai.router,
+):
     app.include_router(router, prefix=settings.API_V1)
-
 
 @app.get("/health", tags=["Ops"])
 def health():
