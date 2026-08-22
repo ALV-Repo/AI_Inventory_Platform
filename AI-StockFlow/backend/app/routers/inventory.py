@@ -22,8 +22,24 @@ from app.services.logic import weighted_average_cost
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 class ProductIn(BaseModel):
-    sku: str = Field(min_length=1, max_length=64)
-    name: str = Field(min_length=1, max_length=220)
+    sku: str
+    name: str
+    category: str | None = None
+    brand: str | None = None
+    uom: str = "pcs"
+    hsn_code: str | None = None
+    gst_rate: float = 0
+    cost_price: float = 0
+    selling_price: float = 0
+    reorder_level: int = 10
+    safety_stock: int = 5
+    barcode: str | None = None
+    attributes: dict = Field(default_factory=dict)
+    track_batch: bool = False
+    track_serial: bool = False
+    parent_id: int | None = None
+class ProductUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=220)
     category: str | None = None
     brand: str | None = None
     uom: str = "pcs"
@@ -60,6 +76,21 @@ class ProductOut(BaseModel):
     available: float = 0
 
     model_config = ConfigDict(from_attributes=True)
+class ProductUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=220)
+    category: str | None = None
+    brand: str | None = None
+    uom: str | None = None
+    hsn_code: str | None = None
+    gst_rate: float | None = Field(default=None, ge=0, le=100)
+    cost_price: float | None = Field(default=None, ge=0)
+    selling_price: float | None = Field(default=None, ge=0)
+    reorder_level: int | None = Field(default=None, ge=0)
+    safety_stock: int | None = Field(default=None, ge=0)
+    barcode: str | None = None
+    attributes: dict | None = None
+    track_batch: bool | None = None
+    track_serial: bool | None = None
 
 class AdjustmentIn(BaseModel):
     """FR-INV-08 — a reason code is mandatory."""
@@ -203,8 +234,168 @@ def create_product(
     db.commit()
     db.refresh(product)
     return ProductOut.model_validate(product)
-# ------------------------------------------------------------------ product variants
+# ------------------------------------------------------------------ update product
+@router.patch("/products/{product_id}", response_model=ProductOut)
+def update_product(
+    product_id: int,
+    body: ProductUpdate,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
 
+    if not product:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Product not found.",
+        )
+
+    if body.name is not None:
+        product.name = body.name
+
+    if body.category is not None:
+        product.category = body.category
+
+    db.commit()
+    db.refresh(product)
+
+    return ProductOut.model_validate(product)
+# ------------------------------------------------------------------ product variants
+# ------------------------------------------------------------------ single product
+@router.get("/products/{product_id}", response_model=ProductOut)
+def get_product(
+    product_id: int,
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Product not found.",
+        )
+
+    totals = (
+        scoped(db, StockItem, user.tenant_id)
+        .with_entities(func.sum(StockItem.quantity))
+        .filter(StockItem.product_id == product.id)
+        .scalar()
+    ) or 0
+
+    reserved = (
+        scoped(db, StockItem, user.tenant_id)
+        .with_entities(func.sum(StockItem.reserved_qty))
+        .filter(StockItem.product_id == product.id)
+        .scalar()
+    ) or 0
+
+    item = ProductOut.model_validate(product)
+
+    item.on_hand = float(totals)
+    item.reserved = float(reserved)
+    item.available = float(totals) - float(reserved)
+
+    return item
+
+
+# ------------------------------------------------------------------ update product
+@router.patch("/products/{product_id}", response_model=ProductOut)
+def update_product(
+    product_id: int,
+    body: ProductUpdate,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Product not found.",
+        )
+
+    updates = body.model_dump(exclude_unset=True)
+
+    for field, value in updates.items():
+        setattr(product, field, value)
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.product.update",
+            entity_type="product",
+            entity_id=product.id,
+            details={"fields": list(updates.keys())},
+        )
+    )
+
+    db.commit()
+    db.refresh(product)
+
+    return ProductOut.model_validate(product)
+
+
+# ------------------------------------------------------------------ deactivate product
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product(
+    product_id: int,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Product not found.",
+        )
+
+    product.is_active = False
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="inventory.product.deactivate",
+            entity_type="product",
+            entity_id=product.id,
+            details={"sku": product.sku},
+        )
+    )
+
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 @router.get(
     "/products/{product_id}/variants",
     response_model=list[ProductOut],
