@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, scoped
 from app.core.security import require
 from app.models.entities import (
-    AuditLog, Customer, Product, SalesOrder, SalesOrderLine, StockItem, StockMovement, User,
+    AuditLog, Customer, Product, SalesOrder, SalesOrderLine, StockItem, StockMovement, StockSerial, User,
 )
 from app.services.logic import compute_gst
 
@@ -22,7 +22,8 @@ class SaleLineIn(BaseModel):
     quantity: float = Field(gt=0)
     unit_price: float | None = None   # defaults to the product's selling price
     discount: float = Field(default=0, ge=0)
-
+    serial_numbers: list[str] = Field(default_factory=list)
+    batch_no: str | None = None
 
 class SaleIn(BaseModel):
     warehouse_id: int
@@ -134,6 +135,33 @@ def _create_sale_once(body: SaleIn, user: User, db: Session, attempt: int):
                 status.HTTP_400_BAD_REQUEST,
                 f"{product.name}: {available} available, {line.quantity} requested.",
             )
+
+        if product.track_serial:
+            if len(line.serial_numbers) != int(line.quantity):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{product.name}: provide exactly {int(line.quantity)} serial number(s).",
+                )
+
+            serials = (
+                scoped(db, StockSerial, user.tenant_id)
+                .filter(
+                    StockSerial.product_id == product.id,
+                    StockSerial.warehouse_id == body.warehouse_id,
+                    StockSerial.serial_number.in_(line.serial_numbers),
+                    StockSerial.status == "available",
+                )
+                .all()
+            )
+
+            if len(serials) != len(line.serial_numbers):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{product.name}: one or more serial numbers are unavailable.",
+                )
+
+            for serial in serials:
+                serial.status = "sold"
 
         price = line.unit_price if line.unit_price is not None else product.selling_price
         tax = compute_gst(
