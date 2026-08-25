@@ -13,6 +13,7 @@ from app.models.entities import (
     PurchaseOrderLine,
     StockItem,
     StockMovement,
+    StockSerial,
     Supplier,
     User,
     Warehouse,
@@ -42,18 +43,7 @@ class ReceiveLineIn(BaseModel):
     quantity: float = Field(gt=0)
     batch_no: str | None = None
     serial_numbers: list[str] = Field(default_factory=list)
-from app.models.entities import (
-    Product,
-    PurchaseOrder,
-    PurchaseOrderLine,
-    StockItem,
-    StockMovement,
-    StockSerial,
-    Supplier,
-    User,
-    Warehouse,
-    utcnow,
-)
+
 
 class ReceiveIn(BaseModel):
     lines: list[ReceiveLineIn] = Field(min_length=1)
@@ -250,6 +240,8 @@ def approve_purchase_order(
         "id": order.id,
         "status": order.status,
     }
+
+
 @router.post("/orders/{order_id}/receive")
 def receive_purchase_order(
     order_id: int,
@@ -313,9 +305,7 @@ def receive_purchase_order(
                 f"Product {received.product_id} not found.",
             )
 
-        # ---------------------------------------------------------
         # Serial-number enforcement
-        # ---------------------------------------------------------
         if product.track_serial:
             if len(received.serial_numbers) != int(received.quantity):
                 raise HTTPException(
@@ -356,9 +346,7 @@ def receive_purchase_order(
                 "for serial-number tracking.",
             )
 
-        # ---------------------------------------------------------
         # Batch tracking enforcement
-        # ---------------------------------------------------------
         if product.track_batch and not received.batch_no:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -372,9 +360,7 @@ def receive_purchase_order(
                 "for batch tracking.",
             )
 
-        # ---------------------------------------------------------
         # Find/create stock row
-        # ---------------------------------------------------------
         stock = (
             scoped(db, StockItem, user.tenant_id)
             .filter(
@@ -414,9 +400,7 @@ def receive_purchase_order(
 
         stock.quantity = new_qty
 
-        # ---------------------------------------------------------
         # Create serial records
-        # ---------------------------------------------------------
         if product.track_serial:
             for serial_number in received.serial_numbers:
                 db.add(
@@ -483,6 +467,7 @@ def receive_purchase_order(
         "status": order.status,
         "received_lines": len(body.lines),
     }
+
 
 @router.get("/orders")
 def list_purchase_orders(
