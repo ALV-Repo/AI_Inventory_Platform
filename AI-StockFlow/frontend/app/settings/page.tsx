@@ -10,8 +10,8 @@ export default function SettingsPage() {
   const [mfa, setMfa] = useState(false);
 
   const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+  localStorage.removeItem("access_token");
+localStorage.removeItem("refresh_token");
 
     window.location.href = "/login";
   };

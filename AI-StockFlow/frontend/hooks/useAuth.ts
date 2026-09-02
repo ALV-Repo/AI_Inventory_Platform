@@ -1,90 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { login as loginUser } from "@/services/authService";
 
-const BASE_URL = "http://127.0.0.1:8000/api/v1";
-
-export interface AuthUser {
-  id: number;
-  email: string;
-  full_name: string;
-  role: string;
-  permissions: string[];
-  tenant?: {
-    id: number;
-    name: string;
-    plan: string;
-    feature_flags?: {
-      ai_copilot?: boolean;
-      ai_forecast?: boolean;
-      ai_dead_stock?: boolean;
-    };
-  };
-}
+type AuthUser = {
+  id?: number | string;
+  email?: string;
+  username?: string;
+  name?: string;
+  role?: string;
+  tenant_id?: number | string;
+  [key: string]: unknown;
+};
 
 export function useAuth() {
+  const router = useRouter();
+
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const token = localStorage.getItem("access_token");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-        if (!token) {
-          setUser(null);
-          return;
-        }
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const data = await loginUser(email, password);
 
-        const response = await fetch(`${BASE_URL}/auth/me`, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
+      setIsAuthenticated(true);
 
-        if (!response.ok) {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-          localStorage.removeItem("user_id");
-          localStorage.removeItem("tenant_id");
-          localStorage.removeItem("role");
+      return data;
+    },
+    []
+  );
 
-          setUser(null);
-          return;
-        }
-
-        const data: AuthUser = await response.json();
-
-        setUser(data);
-      } catch (error) {
-        console.error("AUTH CHECK ERROR:", error);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUser();
-  }, []);
-
-  const logout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("tenant_id");
-    localStorage.removeItem("role");
+  const logout = useCallback(() => {
+    sessionStorage.removeItem("sf_access");
+    sessionStorage.removeItem("sf_refresh");
 
     setUser(null);
+    setIsAuthenticated(false);
 
-    window.location.href = "/login";
-  };
+    router.push("/auth");
+  }, [router]);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem("sf_access");
+
+    if (token) {
+      setIsAuthenticated(true);
+    } else {
+      setIsAuthenticated(false);
+    }
+
+    setLoading(false);
+  }, []);
 
   return {
     user,
     loading,
-    isAuthenticated: !!user,
+    isAuthenticated,
+    login,
     logout,
   };
 }

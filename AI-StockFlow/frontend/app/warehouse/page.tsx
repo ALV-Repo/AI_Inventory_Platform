@@ -3,6 +3,36 @@
 import { useMemo, useState } from "react";
 import PageLayout from "../../components/layout/PageLayout";
 
+type WarehouseStatus = "Operational" | "Maintenance";
+
+type BinStatus = "Available" | "Partially Occupied" | "Full" | "Blocked";
+
+type Bin = {
+  id: string;
+  name: string;
+  capacity: number;
+  used: number;
+  status: BinStatus;
+};
+
+type Rack = {
+  id: string;
+  name: string;
+  bins: Bin[];
+};
+
+type Aisle = {
+  id: string;
+  name: string;
+  racks: Rack[];
+};
+
+type Zone = {
+  id: string;
+  name: string;
+  aisles: Aisle[];
+};
+
 type Warehouse = {
   id: string;
   name: string;
@@ -11,7 +41,8 @@ type Warehouse = {
   capacity: number;
   used: number;
   products: number;
-  status: "Operational" | "Maintenance";
+  status: WarehouseStatus;
+  zones: Zone[];
 };
 
 const warehouses: Warehouse[] = [
@@ -24,7 +55,134 @@ const warehouses: Warehouse[] = [
     used: 7200,
     products: 185,
     status: "Operational",
+    zones: [
+      {
+        id: "Z-A",
+        name: "Zone A - Electronics",
+        aisles: [
+          {
+            id: "A-01",
+            name: "Aisle A01",
+            racks: [
+              {
+                id: "R-A01-01",
+                name: "Rack A01-01",
+                bins: [
+                  {
+                    id: "BIN-A01-01-01",
+                    name: "Bin A01-01-01",
+                    capacity: 500,
+                    used: 420,
+                    status: "Partially Occupied",
+                  },
+                  {
+                    id: "BIN-A01-01-02",
+                    name: "Bin A01-01-02",
+                    capacity: 500,
+                    used: 500,
+                    status: "Full",
+                  },
+                  {
+                    id: "BIN-A01-01-03",
+                    name: "Bin A01-01-03",
+                    capacity: 500,
+                    used: 120,
+                    status: "Partially Occupied",
+                  },
+                ],
+              },
+              {
+                id: "R-A01-02",
+                name: "Rack A01-02",
+                bins: [
+                  {
+                    id: "BIN-A01-02-01",
+                    name: "Bin A01-02-01",
+                    capacity: 400,
+                    used: 0,
+                    status: "Available",
+                  },
+                  {
+                    id: "BIN-A01-02-02",
+                    name: "Bin A01-02-02",
+                    capacity: 400,
+                    used: 280,
+                    status: "Partially Occupied",
+                  },
+                  {
+                    id: "BIN-A01-02-03",
+                    name: "Bin A01-02-03",
+                    capacity: 400,
+                    used: 400,
+                    status: "Full",
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            id: "A-02",
+            name: "Aisle A02",
+            racks: [
+              {
+                id: "R-A02-01",
+                name: "Rack A02-01",
+                bins: [
+                  {
+                    id: "BIN-A02-01-01",
+                    name: "Bin A02-01-01",
+                    capacity: 600,
+                    used: 350,
+                    status: "Partially Occupied",
+                  },
+                  {
+                    id: "BIN-A02-01-02",
+                    name: "Bin A02-01-02",
+                    capacity: 600,
+                    used: 0,
+                    status: "Available",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "Z-B",
+        name: "Zone B - General Stock",
+        aisles: [
+          {
+            id: "B-01",
+            name: "Aisle B01",
+            racks: [
+              {
+                id: "R-B01-01",
+                name: "Rack B01-01",
+                bins: [
+                  {
+                    id: "BIN-B01-01-01",
+                    name: "Bin B01-01-01",
+                    capacity: 700,
+                    used: 610,
+                    status: "Partially Occupied",
+                  },
+                  {
+                    id: "BIN-B01-01-02",
+                    name: "Bin B01-01-02",
+                    capacity: 700,
+                    used: 700,
+                    status: "Full",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
+
   {
     id: "WH-002",
     name: "Bengaluru Warehouse",
@@ -34,7 +192,42 @@ const warehouses: Warehouse[] = [
     used: 6100,
     products: 142,
     status: "Operational",
+    zones: [
+      {
+        id: "Z-C",
+        name: "Zone C - Main Stock",
+        aisles: [
+          {
+            id: "C-01",
+            name: "Aisle C01",
+            racks: [
+              {
+                id: "R-C01-01",
+                name: "Rack C01-01",
+                bins: [
+                  {
+                    id: "BIN-C01-01-01",
+                    name: "Bin C01-01-01",
+                    capacity: 500,
+                    used: 250,
+                    status: "Partially Occupied",
+                  },
+                  {
+                    id: "BIN-C01-01-02",
+                    name: "Bin C01-01-02",
+                    capacity: 500,
+                    used: 0,
+                    status: "Available",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
+
   {
     id: "WH-003",
     name: "Mumbai Distribution Hub",
@@ -44,7 +237,42 @@ const warehouses: Warehouse[] = [
     used: 9800,
     products: 216,
     status: "Operational",
+    zones: [
+      {
+        id: "Z-D",
+        name: "Zone D - Distribution",
+        aisles: [
+          {
+            id: "D-01",
+            name: "Aisle D01",
+            racks: [
+              {
+                id: "R-D01-01",
+                name: "Rack D01-01",
+                bins: [
+                  {
+                    id: "BIN-D01-01-01",
+                    name: "Bin D01-01-01",
+                    capacity: 800,
+                    used: 800,
+                    status: "Full",
+                  },
+                  {
+                    id: "BIN-D01-01-02",
+                    name: "Bin D01-01-02",
+                    capacity: 800,
+                    used: 650,
+                    status: "Partially Occupied",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
+
   {
     id: "WH-004",
     name: "Delhi Storage Center",
@@ -54,7 +282,42 @@ const warehouses: Warehouse[] = [
     used: 4200,
     products: 98,
     status: "Operational",
+    zones: [
+      {
+        id: "Z-E",
+        name: "Zone E - Storage",
+        aisles: [
+          {
+            id: "E-01",
+            name: "Aisle E01",
+            racks: [
+              {
+                id: "R-E01-01",
+                name: "Rack E01-01",
+                bins: [
+                  {
+                    id: "BIN-E01-01-01",
+                    name: "Bin E01-01-01",
+                    capacity: 500,
+                    used: 200,
+                    status: "Partially Occupied",
+                  },
+                  {
+                    id: "BIN-E01-01-02",
+                    name: "Bin E01-01-02",
+                    capacity: 500,
+                    used: 0,
+                    status: "Available",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
+
   {
     id: "WH-005",
     name: "Chennai Warehouse",
@@ -64,7 +327,35 @@ const warehouses: Warehouse[] = [
     used: 3000,
     products: 76,
     status: "Maintenance",
+    zones: [
+      {
+        id: "Z-F",
+        name: "Zone F - Maintenance",
+        aisles: [
+          {
+            id: "F-01",
+            name: "Aisle F01",
+            racks: [
+              {
+                id: "R-F01-01",
+                name: "Rack F01-01",
+                bins: [
+                  {
+                    id: "BIN-F01-01-01",
+                    name: "Bin F01-01-01",
+                    capacity: 400,
+                    used: 100,
+                    status: "Blocked",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
+
   {
     id: "WH-006",
     name: "Pune Distribution Center",
@@ -74,16 +365,76 @@ const warehouses: Warehouse[] = [
     used: 5400,
     products: 124,
     status: "Operational",
+    zones: [
+      {
+        id: "Z-G",
+        name: "Zone G - Distribution",
+        aisles: [
+          {
+            id: "G-01",
+            name: "Aisle G01",
+            racks: [
+              {
+                id: "R-G01-01",
+                name: "Rack G01-01",
+                bins: [
+                  {
+                    id: "BIN-G01-01-01",
+                    name: "Bin G01-01-01",
+                    capacity: 600,
+                    used: 450,
+                    status: "Partially Occupied",
+                  },
+                  {
+                    id: "BIN-G01-01-02",
+                    name: "Bin G01-01-02",
+                    capacity: 600,
+                    used: 0,
+                    status: "Available",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ];
 
 const formatNumber = (value: number) =>
   new Intl.NumberFormat("en-IN").format(value);
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+
+function getBinUtilization(bin: Bin) {
+  if (!bin.capacity) return 0;
+  return Math.round((bin.used / bin.capacity) * 100);
+}
+
 export default function WarehousePage() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] =
-    useState("All Status");
+  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [selectedWarehouseId, setSelectedWarehouseId] =
+    useState("WH-001");
+
+  const [expandedZones, setExpandedZones] = useState<string[]>([
+    "Z-A",
+    "Z-B",
+  ]);
+
+  const [expandedAisles, setExpandedAisles] = useState<string[]>([
+    "A-01",
+    "A-02",
+    "B-01",
+  ]);
+
+  const [selectedBin, setSelectedBin] = useState<Bin | null>(null);
 
   const totalCapacity = warehouses.reduce(
     (sum, warehouse) => sum + warehouse.capacity,
@@ -116,17 +467,14 @@ export default function WarehousePage() {
 
   const filteredWarehouses = useMemo(() => {
     return warehouses.filter((warehouse) => {
-      const searchText = search.toLowerCase();
+      const text = search.toLowerCase().trim();
 
       const matchesSearch =
-        warehouse.name.toLowerCase().includes(searchText) ||
-        warehouse.location
-          .toLowerCase()
-          .includes(searchText) ||
-        warehouse.manager
-          .toLowerCase()
-          .includes(searchText) ||
-        warehouse.id.toLowerCase().includes(searchText);
+        !text ||
+        warehouse.name.toLowerCase().includes(text) ||
+        warehouse.location.toLowerCase().includes(text) ||
+        warehouse.manager.toLowerCase().includes(text) ||
+        warehouse.id.toLowerCase().includes(text);
 
       const matchesStatus =
         statusFilter === "All Status" ||
@@ -136,35 +484,88 @@ export default function WarehousePage() {
     });
   }, [search, statusFilter]);
 
+  const selectedWarehouse =
+    warehouses.find(
+      (warehouse) => warehouse.id === selectedWarehouseId
+    ) ?? warehouses[0];
+
+  const allBins = selectedWarehouse.zones.flatMap((zone) =>
+    zone.aisles.flatMap((aisle) =>
+      aisle.racks.flatMap((rack) => rack.bins)
+    )
+  );
+
+  const totalBins = allBins.length;
+
+  const availableBins = allBins.filter(
+    (bin) => bin.status === "Available"
+  ).length;
+
+  const fullBins = allBins.filter(
+    (bin) => bin.status === "Full"
+  ).length;
+
+  const blockedBins = allBins.filter(
+    (bin) => bin.status === "Blocked"
+  ).length;
+
+  function toggleZone(zoneId: string) {
+    setExpandedZones((current) =>
+      current.includes(zoneId)
+        ? current.filter((id) => id !== zoneId)
+        : [...current, zoneId]
+    );
+  }
+
+  function toggleAisle(aisleId: string) {
+    setExpandedAisles((current) =>
+      current.includes(aisleId)
+        ? current.filter((id) => id !== aisleId)
+        : [...current, aisleId]
+    );
+  }
+
   return (
     <PageLayout>
       <main className="min-h-screen bg-[#f8fafc] px-6 py-7 text-slate-900">
-
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-7xl">
 
           {/* HEADER */}
+
           <div className="mb-6 flex items-start justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">
-                Warehouse
+                Warehouse Management
               </h1>
 
               <p className="mt-1 text-xs text-slate-500">
-                Manage warehouses, storage capacity and
-                inventory locations
+                Manage warehouse locations, storage capacity and bins
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              Refresh
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Refresh
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  alert("Add Warehouse feature is ready for integration.")
+                }
+                className="rounded-md bg-[#10233f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#183557]"
+              >
+                + Add Warehouse
+              </button>
+            </div>
           </div>
 
           {/* KPI CARDS */}
+
           <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
             <KpiCard
@@ -191,94 +592,572 @@ export default function WarehousePage() {
             <KpiCard
               title="Capacity Utilization"
               value={`${utilization}%`}
-              subtitle="Current storage usage"
+              subtitle={`${formatNumber(availableCapacity)} units available`}
               color="orange"
             />
 
           </div>
 
-          {/* CAPACITY OVERVIEW */}
-          <section className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {/* WAREHOUSE SELECTOR */}
 
-            <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-sm font-semibold">
-                Storage Capacity Overview
-              </h2>
+          <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
 
-              <p className="mt-1 text-[11px] text-slate-500">
-                Warehouse storage utilization
-              </p>
-            </div>
-
-            <div className="grid gap-8 p-5 md:grid-cols-2">
-
-              {/* USED */}
+            <div className="mb-3 flex items-center justify-between">
               <div>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-slate-500">
-                    Used Capacity
-                  </p>
+                <h2 className="text-sm font-semibold">
+                  Select Warehouse
+                </h2>
 
-                  <strong className="text-sm">
-                    {formatNumber(totalUsed)}
-                  </strong>
-                </div>
-
-                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
-                  <div
-                    className="h-full rounded-full bg-blue-600"
-                    style={{
-                      width: `${utilization}%`,
-                    }}
-                  />
-                </div>
-
-                <div className="mt-2 flex justify-between text-[11px] text-slate-500">
-                  <span>
-                    {formatNumber(totalUsed)} units
-                  </span>
-
-                  <span>{utilization}%</span>
-                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Select a warehouse to view its location hierarchy and bins.
+                </p>
               </div>
 
-              {/* AVAILABLE */}
-              <div>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-slate-500">
-                    Available Capacity
-                  </p>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold text-blue-700">
+                {selectedWarehouse.id}
+              </span>
+            </div>
 
-                  <strong className="text-sm">
-                    {formatNumber(availableCapacity)}
-                  </strong>
-                </div>
+            <div className="grid gap-3 md:grid-cols-[1fr_180px]">
 
-                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
-                  <div
-                    className="h-full rounded-full bg-green-600"
-                    style={{
-                      width: `${100 - utilization}%`,
-                    }}
-                  />
-                </div>
+              <select
+                value={selectedWarehouseId}
+                onChange={(event) => {
+                  setSelectedWarehouseId(event.target.value);
+                  setSelectedBin(null);
+                }}
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500"
+              >
+                {warehouses.map((warehouse) => (
+                  <option
+                    key={warehouse.id}
+                    value={warehouse.id}
+                  >
+                    {warehouse.name} — {warehouse.location}
+                  </option>
+                ))}
+              </select>
 
-                <div className="mt-2 flex justify-between text-[11px] text-slate-500">
-                  <span>
-                    {formatNumber(availableCapacity)} units
-                  </span>
+              <div className="rounded-md bg-slate-50 px-3 py-2 text-xs">
+                <span className="text-slate-400">
+                  Manager
+                </span>
 
-                  <span>
-                    {100 - utilization}%
-                  </span>
-                </div>
+                <p className="font-semibold text-slate-700">
+                  {selectedWarehouse.manager}
+                </p>
               </div>
 
             </div>
           </section>
 
+          {/* SELECTED WAREHOUSE SUMMARY */}
+
+          <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+            <MiniStat
+              title="Total Bins"
+              value={totalBins.toString()}
+              subtitle="Configured storage bins"
+            />
+
+            <MiniStat
+              title="Available Bins"
+              value={availableBins.toString()}
+              subtitle="Ready for stock"
+              valueClass="text-green-600"
+            />
+
+            <MiniStat
+              title="Full Bins"
+              value={fullBins.toString()}
+              subtitle="At maximum capacity"
+              valueClass="text-orange-600"
+            />
+
+            <MiniStat
+              title="Blocked Bins"
+              value={blockedBins.toString()}
+              subtitle="Unavailable for use"
+              valueClass="text-red-600"
+            />
+
+          </section>
+
+          {/* LOCATION TREE */}
+
+          <section className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
+
+            <div className="border-b border-slate-200 px-5 py-4">
+
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <h2 className="text-sm font-semibold">
+                    Warehouse Location Tree
+                  </h2>
+
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Warehouse → Zone → Aisle → Rack → Bin
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpandedZones(
+                      selectedWarehouse.zones.map(
+                        (zone) => zone.id
+                      )
+                    );
+
+                    setExpandedAisles(
+                      selectedWarehouse.zones.flatMap(
+                        (zone) =>
+                          zone.aisles.map(
+                            (aisle) => aisle.id
+                          )
+                      )
+                    );
+                  }}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Expand All
+                </button>
+
+              </div>
+            </div>
+
+            <div className="p-5">
+
+              {/* ROOT WAREHOUSE */}
+
+              <div className="mb-3 flex items-center gap-2 rounded-lg bg-[#10233f] px-4 py-3 text-white">
+
+                <span className="text-sm">▣</span>
+
+                <div>
+                  <p className="text-xs font-semibold">
+                    {selectedWarehouse.name}
+                  </p>
+
+                  <p className="text-[10px] text-slate-300">
+                    {selectedWarehouse.location} •{" "}
+                    {selectedWarehouse.id}
+                  </p>
+                </div>
+
+              </div>
+
+              {/* ZONES */}
+
+              <div className="ml-4 border-l border-slate-200 pl-4">
+
+                {selectedWarehouse.zones.map((zone) => {
+
+                  const zoneOpen = expandedZones.includes(
+                    zone.id
+                  );
+
+                  return (
+                    <div
+                      key={zone.id}
+                      className="mb-3"
+                    >
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleZone(zone.id)
+                        }
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-slate-50"
+                      >
+
+                        <span className="w-4 text-xs text-slate-500">
+                          {zoneOpen ? "▼" : "▶"}
+                        </span>
+
+                        <span className="text-sm">
+                          ▰
+                        </span>
+
+                        <span className="text-xs font-semibold text-slate-700">
+                          {zone.name}
+                        </span>
+
+                        <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[9px] text-slate-500">
+                          {zone.aisles.length} aisles
+                        </span>
+
+                      </button>
+
+                      {zoneOpen && (
+                        <div className="ml-6 border-l border-slate-200 pl-4">
+
+                          {zone.aisles.map((aisle) => {
+
+                            const aisleOpen =
+                              expandedAisles.includes(
+                                aisle.id
+                              );
+
+                            return (
+                              <div
+                                key={aisle.id}
+                                className="mb-2"
+                              >
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    toggleAisle(
+                                      aisle.id
+                                    )
+                                  }
+                                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-slate-50"
+                                >
+
+                                  <span className="w-4 text-xs text-slate-500">
+                                    {aisleOpen
+                                      ? "▼"
+                                      : "▶"}
+                                  </span>
+
+                                  <span className="text-sm">
+                                    ║
+                                  </span>
+
+                                  <span className="text-xs font-medium text-slate-700">
+                                    {aisle.name}
+                                  </span>
+
+                                  <span className="ml-auto text-[9px] text-slate-400">
+                                    {aisle.racks.length} racks
+                                  </span>
+
+                                </button>
+
+                                {aisleOpen && (
+                                  <div className="ml-6 border-l border-slate-200 pl-4">
+
+                                    {aisle.racks.map(
+                                      (rack) => (
+                                        <div
+                                          key={rack.id}
+                                          className="mb-2"
+                                        >
+
+                                          <div className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2">
+
+                                            <span className="text-xs">
+                                              ▤
+                                            </span>
+
+                                            <span className="text-xs font-medium text-slate-700">
+                                              {rack.name}
+                                            </span>
+
+                                            <span className="ml-auto text-[9px] text-slate-400">
+                                              {rack.bins.length} bins
+                                            </span>
+
+                                          </div>
+
+                                          {/* BIN LIST */}
+
+                                          <div className="mt-1 ml-5 grid gap-1">
+
+                                            {rack.bins.map(
+                                              (bin) => {
+
+                                                const percent =
+                                                  getBinUtilization(
+                                                    bin
+                                                  );
+
+                                                return (
+                                                  <button
+                                                    key={
+                                                      bin.id
+                                                    }
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setSelectedBin(
+                                                        bin
+                                                      )
+                                                    }
+                                                    className={`flex items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                                                      selectedBin?.id ===
+                                                      bin.id
+                                                        ? "border-blue-300 bg-blue-50"
+                                                        : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50"
+                                                    }`}
+                                                  >
+
+                                                    <span className="text-xs">
+                                                      ▫
+                                                    </span>
+
+                                                    <div className="min-w-0 flex-1">
+
+                                                      <p className="truncate text-[11px] font-medium text-slate-700">
+                                                        {bin.name}
+                                                      </p>
+
+                                                      <div className="mt-1 flex items-center gap-2">
+
+                                                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200">
+
+                                                          <div
+                                                            className={`h-full ${
+                                                              percent >=
+                                                              90
+                                                                ? "bg-orange-500"
+                                                                : percent ===
+                                                                    0
+                                                                  ? "bg-slate-300"
+                                                                  : "bg-blue-500"
+                                                            }`}
+                                                            style={{
+                                                              width: `${percent}%`,
+                                                            }}
+                                                          />
+
+                                                        </div>
+
+                                                        <span className="text-[9px] text-slate-400">
+                                                          {percent}%
+                                                        </span>
+
+                                                      </div>
+
+                                                    </div>
+
+                                                    <BinStatusBadge
+                                                      status={
+                                                        bin.status
+                                                      }
+                                                    />
+
+                                                  </button>
+                                                );
+                                              }
+                                            )}
+
+                                          </div>
+
+                                        </div>
+                                      )
+                                    )}
+
+                                  </div>
+                                )}
+
+                              </div>
+                            );
+                          })}
+
+                        </div>
+                      )}
+
+                    </div>
+                  );
+                })}
+
+              </div>
+
+            </div>
+
+          </section>
+
+                    {/* SELECTED BIN DETAILS */}
+
+          {selectedBin && (
+            <section className="mb-5 rounded-xl border border-slate-200 bg-white">
+
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+
+                <div>
+                  <h2 className="text-sm font-semibold">
+                    Bin Details
+                  </h2>
+
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Detailed storage information for the selected bin.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedBin(null)}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Close
+                </button>
+
+              </div>
+
+              <div className="grid gap-4 p-5 md:grid-cols-4">
+
+                <div className="rounded-lg bg-slate-50 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Bin
+                  </p>
+
+                  <p className="mt-2 text-sm font-bold text-slate-800">
+                    {selectedBin.name}
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {selectedBin.id}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-slate-50 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Capacity
+                  </p>
+
+                  <p className="mt-2 text-xl font-bold text-blue-600">
+                    {formatNumber(selectedBin.capacity)}
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Maximum units
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-slate-50 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Used
+                  </p>
+
+                  <p className="mt-2 text-xl font-bold text-orange-600">
+                    {formatNumber(selectedBin.used)}
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {getBinUtilization(selectedBin)}% occupied
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-slate-50 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Status
+                  </p>
+
+                  <div className="mt-3">
+                    <BinStatusBadge
+                      status={selectedBin.status}
+                    />
+                  </div>
+                </div>
+
+              </div>
+
+              {/* BIN CAPACITY */}
+
+              <div className="border-t border-slate-200 px-5 py-4">
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">
+                      Bin Capacity
+                    </p>
+
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      Current storage utilization
+                    </p>
+                  </div>
+
+                  <strong className="text-sm text-slate-800">
+                    {getBinUtilization(selectedBin)}%
+                  </strong>
+                </div>
+
+                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+
+                  <div
+                    className={`h-full rounded-full ${
+                      getBinUtilization(selectedBin) >= 90
+                        ? "bg-orange-500"
+                        : getBinUtilization(selectedBin) === 0
+                          ? "bg-slate-300"
+                          : "bg-blue-600"
+                    }`}
+                    style={{
+                      width: `${getBinUtilization(selectedBin)}%`,
+                    }}
+                  />
+
+                </div>
+
+                <div className="mt-2 flex justify-between text-[10px] text-slate-400">
+
+                  <span>
+                    {formatNumber(selectedBin.used)} units used
+                  </span>
+
+                  <span>
+                    {formatNumber(
+                      selectedBin.capacity - selectedBin.used
+                    )}{" "}
+                    units available
+                  </span>
+
+                </div>
+
+              </div>
+
+              {/* BIN ACTIONS */}
+
+              <div className="flex flex-wrap gap-2 border-t border-slate-200 px-5 py-4">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    alert(
+                      `Stock transfer started for ${selectedBin.name}`
+                    )
+                  }
+                  className="rounded-md bg-[#10233f] px-4 py-2 text-[10px] font-semibold text-white hover:bg-[#183557]"
+                >
+                  Transfer Stock
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    alert(
+                      `Bin adjustment opened for ${selectedBin.name}`
+                    )
+                  }
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Adjust Stock
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    alert(
+                      `Bin ${selectedBin.name} selected for management`
+                    )
+                  }
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Manage Bin
+                </button>
+
+              </div>
+
+            </section>
+          )}
+
           {/* SEARCH + FILTER */}
+
           <section className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
+
             <div className="grid gap-2 md:grid-cols-[1fr_180px]">
 
               <input
@@ -304,19 +1183,23 @@ export default function WarehousePage() {
               </select>
 
             </div>
+
           </section>
 
           {/* WAREHOUSE DIRECTORY */}
+
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
 
             <div className="border-b border-slate-200 px-5 py-4">
+
               <h2 className="text-sm font-semibold">
                 Warehouse Directory
               </h2>
 
               <p className="mt-1 text-[11px] text-slate-500">
-                Overview of warehouse locations and capacity
+                Overview of warehouse locations and capacity.
               </p>
+
             </div>
 
             <div className="overflow-x-auto">
@@ -379,7 +1262,9 @@ export default function WarehousePage() {
                       >
 
                         {/* WAREHOUSE */}
+
                         <td className="px-4 py-3">
+
                           <p className="font-semibold text-slate-800">
                             {warehouse.name}
                           </p>
@@ -387,19 +1272,23 @@ export default function WarehousePage() {
                           <p className="mt-0.5 text-[10px] text-slate-400">
                             {warehouse.id}
                           </p>
+
                         </td>
 
                         {/* LOCATION */}
+
                         <td className="px-4 py-3 text-slate-600">
                           {warehouse.location}
                         </td>
 
                         {/* MANAGER */}
+
                         <td className="px-4 py-3 text-slate-600">
                           {warehouse.manager}
                         </td>
 
                         {/* PRODUCTS */}
+
                         <td className="px-4 py-3 font-semibold">
                           {formatNumber(
                             warehouse.products
@@ -407,17 +1296,23 @@ export default function WarehousePage() {
                         </td>
 
                         {/* CAPACITY */}
+
                         <td className="px-4 py-3 text-slate-600">
+
                           {formatNumber(
                             warehouse.used
-                          )}{" "}
-                          /{" "}
+                          )}
+
+                          {" / "}
+
                           {formatNumber(
                             warehouse.capacity
                           )}
+
                         </td>
 
                         {/* UTILIZATION */}
+
                         <td className="px-4 py-3">
 
                           <div className="flex items-center gap-2">
@@ -426,8 +1321,7 @@ export default function WarehousePage() {
 
                               <div
                                 className={`h-full rounded-full ${
-                                  warehouseUtilization >=
-                                  85
+                                  warehouseUtilization >= 85
                                     ? "bg-orange-500"
                                     : "bg-blue-600"
                                 }`}
@@ -447,6 +1341,7 @@ export default function WarehousePage() {
                         </td>
 
                         {/* STATUS */}
+
                         <td className="px-4 py-3">
 
                           <span
@@ -463,15 +1358,21 @@ export default function WarehousePage() {
                         </td>
 
                         {/* ACTION */}
+
                         <td className="px-4 py-3">
 
                           <button
                             type="button"
-                            onClick={() =>
-                              alert(
-                                `${warehouse.name} selected`
-                              )
-                            }
+                            onClick={() => {
+                              setSelectedWarehouseId(
+                                warehouse.id
+                              );
+
+                              window.scrollTo({
+                                top: 0,
+                                behavior: "smooth",
+                              });
+                            }}
                             className="font-semibold text-blue-600 hover:text-blue-800"
                           >
                             View
@@ -489,6 +1390,7 @@ export default function WarehousePage() {
 
               {filteredWarehouses.length === 0 && (
                 <div className="px-6 py-12 text-center">
+
                   <p className="text-sm font-medium text-slate-700">
                     No warehouses found.
                   </p>
@@ -496,49 +1398,93 @@ export default function WarehousePage() {
                   <p className="mt-1 text-xs text-slate-400">
                     Try changing your search or status filter.
                   </p>
+
                 </div>
               )}
 
             </div>
 
             <div className="border-t border-slate-200 px-5 py-3">
+
               <p className="text-[10px] text-slate-500">
                 Showing {filteredWarehouses.length} of{" "}
                 {warehouses.length} warehouses
               </p>
+
             </div>
 
           </section>
 
           {/* INSIGHTS */}
-          <section className="mt-5 grid gap-3 md:grid-cols-3">
+
+          <section className="mt-5 grid gap-4 md:grid-cols-3">
 
             <InsightCard
-              title="Storage Health"
-              value={`${utilization}%`}
-              description="Overall warehouse capacity utilization"
+              title="Warehouse Health"
+              value={`${operationalWarehouses} of ${warehouses.length}`}
+              description="Warehouses are currently operational."
+              tone="green"
             />
 
             <InsightCard
-              title="Available Space"
-              value={formatNumber(
+              title="Available Capacity"
+              value={`${formatNumber(
                 availableCapacity
-              )}
-              description="Units of remaining storage capacity"
+              )} units`}
+              description="Remaining storage capacity across all warehouses."
+              tone="blue"
             />
 
             <InsightCard
-              title="Maintenance"
-              value={maintenanceWarehouses.toString()}
-              description="Warehouse requiring attention"
-              warning
+              title="Attention Required"
+              value={`${maintenanceWarehouses} warehouse${
+                maintenanceWarehouses === 1
+                  ? ""
+                  : "s"
+              }`}
+              description="Currently marked for maintenance."
+              tone="orange"
             />
 
           </section>
 
+          {/* WAREHOUSE MANAGEMENT NOTE */}
+
+          <section className="mt-5 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+
+            <div className="flex gap-3">
+
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs text-blue-700">
+                i
+              </div>
+
+              <div>
+
+                <p className="text-xs font-semibold text-blue-800">
+                  Warehouse location management
+                </p>
+
+                <p className="mt-1 text-[10px] leading-5 text-blue-600">
+                  Select a warehouse and expand its zones,
+                  aisles, racks and bins to review storage
+                  availability. Select any bin to inspect its
+                  capacity and management actions.
+                </p>
+
+              </div>
+
+            </div>
+
+          </section>
+
           {/* FOOTER */}
-          <div className="py-8 text-center text-[10px] text-slate-400">
-            AI StockFlow • Warehouse Management
+
+          <div className="mt-5 pb-8 text-center">
+
+            <p className="text-[10px] text-slate-400">
+              AI StockFlow • Warehouse & Bin Management
+            </p>
+
           </div>
 
         </div>
@@ -547,22 +1493,26 @@ export default function WarehousePage() {
   );
 }
 
-/* ============================================================
+
+/* =========================================================
    KPI CARD
-============================================================ */
+   ========================================================= */
+
+type KpiCardProps = {
+  title: string;
+  value: string;
+  subtitle: string;
+  color: "green" | "blue" | "orange";
+};
 
 function KpiCard({
   title,
   value,
   subtitle,
   color,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  color: "green" | "blue" | "orange";
-}) {
-  const colorClass = {
+}: KpiCardProps) {
+
+  const valueColor = {
     green: "text-green-600",
     blue: "text-blue-600",
     orange: "text-orange-500",
@@ -571,17 +1521,17 @@ function KpiCard({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
 
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {title}
       </p>
 
-      <h2 className="mt-2 text-2xl font-bold text-slate-900">
-        {value}
-      </h2>
-
       <p
-        className={`mt-1 text-[10px] ${colorClass}`}
+        className={`mt-2 text-2xl font-bold tracking-tight ${valueColor}`}
       >
+        {value}
+      </p>
+
+      <p className="mt-1 text-[10px] text-slate-400">
         {subtitle}
       </p>
 
@@ -589,39 +1539,129 @@ function KpiCard({
   );
 }
 
-/* ============================================================
+
+/* =========================================================
+   MINI STAT
+   ========================================================= */
+
+type MiniStatProps = {
+  title: string;
+  value: string;
+  subtitle: string;
+  valueClass?: string;
+};
+
+function MiniStat({
+  title,
+  value,
+  subtitle,
+  valueClass = "text-slate-800",
+}: MiniStatProps) {
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
+
+      <p
+        className={`mt-2 text-xl font-bold ${valueClass}`}
+      >
+        {value}
+      </p>
+
+      <p className="mt-1 text-[10px] text-slate-400">
+        {subtitle}
+      </p>
+
+    </div>
+  );
+}
+
+
+/* =========================================================
+   BIN STATUS BADGE
+   ========================================================= */
+
+function BinStatusBadge({
+  status,
+}: {
+  status: BinStatus;
+}) {
+
+  const styles = {
+    Available: "bg-green-100 text-green-700",
+    "Partially Occupied":
+      "bg-blue-100 text-blue-700",
+    Full: "bg-orange-100 text-orange-700",
+    Blocked: "bg-red-100 text-red-700",
+  };
+
+  return (
+    <span
+      className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] font-semibold ${styles[status]}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+
+/* =========================================================
    INSIGHT CARD
-============================================================ */
+   ========================================================= */
+
+type InsightCardProps = {
+  title: string;
+  value: string;
+  description: string;
+  tone: "green" | "blue" | "orange";
+};
 
 function InsightCard({
   title,
   value,
   description,
-  warning = false,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  warning?: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+  tone,
+}: InsightCardProps) {
 
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+  const styles = {
+    green: {
+      wrapper:
+        "border-green-100 bg-green-50/40",
+      value: "text-green-700",
+    },
+
+    blue: {
+      wrapper:
+        "border-blue-100 bg-blue-50/40",
+      value: "text-blue-700",
+    },
+
+    orange: {
+      wrapper:
+        "border-orange-100 bg-orange-50/40",
+      value: "text-orange-600",
+    },
+  }[tone];
+
+  return (
+    <div
+      className={`rounded-xl border p-5 ${styles.wrapper}`}
+    >
+
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {title}
       </p>
 
-      <h3
-        className={`mt-2 text-2xl font-bold ${
-          warning
-            ? "text-orange-500"
-            : "text-slate-900"
-        }`}
+      <p
+        className={`mt-2 text-xl font-bold ${styles.value}`}
       >
         {value}
-      </h3>
+      </p>
 
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[11px] leading-5 text-slate-500">
         {description}
       </p>
 

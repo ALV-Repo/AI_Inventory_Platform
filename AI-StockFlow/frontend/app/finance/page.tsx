@@ -79,8 +79,10 @@ const formatCurrency = (value: number) =>
 
 export default function FinancePage() {
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] =
-    useState("All Types");
+  const [typeFilter, setTypeFilter] = useState("All Types");
+  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [categoryFilter, setCategoryFilter] =
+    useState("All Categories");
 
   const totalIncome = transactions
     .filter((item) => item.type === "Income")
@@ -96,43 +98,64 @@ export default function FinancePage() {
     .filter((item) => item.status === "Pending")
     .reduce((sum, item) => sum + item.amount, 0);
 
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter((item) => {
-      const searchText = search.toLowerCase();
-
-      const matchesSearch =
-        item.description
-          .toLowerCase()
-          .includes(searchText) ||
-        item.category
-          .toLowerCase()
-          .includes(searchText) ||
-        item.id
-          .toLowerCase()
-          .includes(searchText);
-
-      const matchesType =
-        typeFilter === "All Types" ||
-        item.type === typeFilter;
-
-      return matchesSearch && matchesType;
-    });
-  }, [search, typeFilter]);
-
   const profitMargin =
     totalIncome > 0
       ? ((netProfit / totalIncome) * 100).toFixed(1)
       : "0.0";
 
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((item) => {
+      const searchText = search.toLowerCase().trim();
+
+      const matchesSearch =
+        item.description.toLowerCase().includes(searchText) ||
+        item.category.toLowerCase().includes(searchText) ||
+        item.id.toLowerCase().includes(searchText);
+
+      const matchesType =
+        typeFilter === "All Types" ||
+        item.type === typeFilter;
+
+      const matchesStatus =
+        statusFilter === "All Status" ||
+        item.status === statusFilter;
+
+      const matchesCategory =
+        categoryFilter === "All Categories" ||
+        item.category === categoryFilter;
+
+      return (
+        matchesSearch &&
+        matchesType &&
+        matchesStatus &&
+        matchesCategory
+      );
+    });
+  }, [search, typeFilter, statusFilter, categoryFilter]);
+
+  const salesIncome = transactions
+    .filter(
+      (item) =>
+        item.type === "Income" &&
+        item.category === "Sales"
+    )
+    .reduce((sum, item) => sum + item.amount, 0);
+
+  const purchaseExpense = transactions
+    .filter(
+      (item) =>
+        item.type === "Expense" &&
+        item.category === "Purchases"
+    )
+    .reduce((sum, item) => sum + item.amount, 0);
+
   return (
     <PageLayout>
       <main className="min-h-screen bg-[#f8fafc] px-6 py-7 text-slate-900">
-
         <div className="mx-auto max-w-6xl">
 
           {/* HEADER */}
           <div className="mb-6 flex items-start justify-between">
-
             <div>
               <h1 className="text-2xl font-bold tracking-tight">
                 Finance
@@ -151,7 +174,6 @@ export default function FinancePage() {
             >
               Refresh
             </button>
-
           </div>
 
           {/* KPI CARDS */}
@@ -160,21 +182,21 @@ export default function FinancePage() {
             <KpiCard
               title="Total Revenue"
               value={formatCurrency(totalIncome)}
-              subtitle="↑ 12.4% this month"
+              subtitle="Customer sales income"
               color="green"
             />
 
             <KpiCard
               title="Total Expenses"
               value={formatCurrency(totalExpense)}
-              subtitle="Operating expenses"
+              subtitle="Business expenses"
               color="orange"
             />
 
             <KpiCard
               title="Net Profit"
               value={formatCurrency(netProfit)}
-              subtitle="Healthy margin"
+              subtitle={`${profitMargin}% profit margin`}
               color="green"
             />
 
@@ -191,7 +213,6 @@ export default function FinancePage() {
           <section className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
 
             <div className="border-b border-slate-200 px-5 py-4">
-
               <h2 className="text-sm font-semibold">
                 Financial Overview
               </h2>
@@ -199,89 +220,63 @@ export default function FinancePage() {
               <p className="mt-1 text-[11px] text-slate-500">
                 Revenue and expense performance
               </p>
-
             </div>
 
             <div className="grid gap-8 p-5 md:grid-cols-2">
 
-              {/* REVENUE */}
-              <div>
+              <FinancialBar
+                title="Revenue"
+                value={totalIncome}
+                maximum={Math.max(totalIncome, totalExpense)}
+                color="blue"
+              />
 
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-slate-500">
-                    Revenue
-                  </p>
-
-                  <strong className="text-sm">
-                    {formatCurrency(totalIncome)}
-                  </strong>
-                </div>
-
-                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
-
-                  <div
-                    className="h-full rounded-full bg-blue-600"
-                    style={{ width: "82%" }}
-                  />
-
-                </div>
-
-                <div className="mt-2 flex justify-between text-[11px] text-slate-500">
-                  <span>
-                    {formatCurrency(totalIncome)}
-                  </span>
-
-                  <span>82%</span>
-                </div>
-
-              </div>
-
-              {/* EXPENSE */}
-              <div>
-
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-slate-500">
-                    Expenses
-                  </p>
-
-                  <strong className="text-sm">
-                    {formatCurrency(totalExpense)}
-                  </strong>
-                </div>
-
-                <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
-
-                  <div
-                    className="h-full rounded-full bg-orange-500"
-                    style={{ width: "46%" }}
-                  />
-
-                </div>
-
-                <div className="mt-2 flex justify-between text-[11px] text-slate-500">
-                  <span>
-                    {formatCurrency(totalExpense)}
-                  </span>
-
-                  <span>46%</span>
-                </div>
-
-              </div>
+              <FinancialBar
+                title="Expenses"
+                value={totalExpense}
+                maximum={Math.max(totalIncome, totalExpense)}
+                color="orange"
+              />
 
             </div>
+          </section>
+
+          {/* QUICK FINANCE SUMMARY */}
+          <section className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+
+            <SummaryCard
+              title="Sales Income"
+              value={formatCurrency(salesIncome)}
+              description="Revenue generated from customer sales"
+              color="blue"
+            />
+
+            <SummaryCard
+              title="Purchase Expense"
+              value={formatCurrency(purchaseExpense)}
+              description="Payments made towards purchases"
+              color="orange"
+            />
+
+            <SummaryCard
+              title="Net Cash Position"
+              value={formatCurrency(netProfit)}
+              description="Income minus recorded expenses"
+              color="green"
+            />
 
           </section>
 
-          {/* SEARCH + FILTER */}
+          {/* SEARCH + FILTERS */}
           <section className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
 
-            <div className="grid gap-2 md:grid-cols-[1fr_180px]">
+            <div className="grid gap-2 md:grid-cols-4">
 
               <input
                 type="text"
                 value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
+                onChange={(event) =>
+                  setSearch(event.target.value)
                 }
                 placeholder="Search transaction, category or ID..."
                 className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
@@ -289,8 +284,8 @@ export default function FinancePage() {
 
               <select
                 value={typeFilter}
-                onChange={(e) =>
-                  setTypeFilter(e.target.value)
+                onChange={(event) =>
+                  setTypeFilter(event.target.value)
                 }
                 className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
               >
@@ -299,6 +294,47 @@ export default function FinancePage() {
                 <option>Expense</option>
               </select>
 
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                <option>All Status</option>
+                <option>Completed</option>
+                <option>Pending</option>
+              </select>
+
+              <select
+                value={categoryFilter}
+                onChange={(event) =>
+                  setCategoryFilter(event.target.value)
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
+              >
+                <option>All Categories</option>
+                <option>Sales</option>
+                <option>Purchases</option>
+                <option>Operations</option>
+                <option>HR</option>
+              </select>
+
+            </div>
+
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setTypeFilter("All Types");
+                  setStatusFilter("All Status");
+                  setCategoryFilter("All Categories");
+                }}
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+              >
+                Clear all filters
+              </button>
             </div>
 
           </section>
@@ -307,7 +343,6 @@ export default function FinancePage() {
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
 
             <div className="border-b border-slate-200 px-5 py-4">
-
               <h2 className="text-sm font-semibold">
                 Recent Transactions
               </h2>
@@ -315,7 +350,6 @@ export default function FinancePage() {
               <p className="mt-1 text-[11px] text-slate-500">
                 Latest financial activity
               </p>
-
             </div>
 
             <div className="overflow-x-auto">
@@ -361,9 +395,7 @@ export default function FinancePage() {
                       className="border-b border-slate-100 transition hover:bg-slate-50"
                     >
 
-                      {/* TRANSACTION */}
                       <td className="px-4 py-3">
-
                         <p className="font-semibold text-slate-800">
                           {item.description}
                         </p>
@@ -371,22 +403,17 @@ export default function FinancePage() {
                         <p className="mt-0.5 text-[10px] text-slate-400">
                           {item.id}
                         </p>
-
                       </td>
 
-                      {/* DATE */}
                       <td className="px-4 py-3 text-slate-600">
                         {item.date}
                       </td>
 
-                      {/* CATEGORY */}
                       <td className="px-4 py-3 text-slate-600">
                         {item.category}
                       </td>
 
-                      {/* TYPE */}
                       <td className="px-4 py-3">
-
                         <span
                           className={`font-semibold ${
                             item.type === "Income"
@@ -396,17 +423,13 @@ export default function FinancePage() {
                         >
                           {item.type}
                         </span>
-
                       </td>
 
-                      {/* AMOUNT */}
                       <td className="px-4 py-3 font-bold text-slate-800">
                         {formatCurrency(item.amount)}
                       </td>
 
-                      {/* STATUS */}
                       <td className="px-4 py-3">
-
                         <span
                           className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
                             item.status === "Completed"
@@ -416,7 +439,6 @@ export default function FinancePage() {
                         >
                           {item.status}
                         </span>
-
                       </td>
 
                     </tr>
@@ -429,32 +451,28 @@ export default function FinancePage() {
 
               {filteredTransactions.length === 0 && (
                 <div className="px-6 py-12 text-center">
-
                   <p className="text-sm font-medium text-slate-700">
                     No transactions found.
                   </p>
 
                   <p className="mt-1 text-xs text-slate-400">
-                    Try changing your search or filter.
+                    Try changing your search or filters.
                   </p>
-
                 </div>
               )}
 
             </div>
 
             <div className="border-t border-slate-200 px-5 py-3">
-
               <p className="text-[10px] text-slate-500">
                 Showing {filteredTransactions.length} of{" "}
                 {transactions.length} transactions
               </p>
-
             </div>
 
           </section>
 
-          {/* FINANCE INSIGHTS */}
+                    {/* FINANCE INSIGHTS */}
           <section className="mt-5 grid gap-3 md:grid-cols-3">
 
             <InsightCard
@@ -466,7 +484,7 @@ export default function FinancePage() {
             <InsightCard
               title="Cash Flow"
               value={formatCurrency(netProfit)}
-              description="Positive operating cash flow"
+              description="Income minus recorded expenses"
             />
 
             <InsightCard
@@ -488,6 +506,7 @@ export default function FinancePage() {
     </PageLayout>
   );
 }
+
 
 /* ============================================================
    KPI CARD
@@ -528,6 +547,115 @@ function KpiCard({
     </div>
   );
 }
+
+
+/* ============================================================
+   FINANCIAL BAR
+============================================================ */
+
+function FinancialBar({
+  title,
+  value,
+  maximum,
+  color,
+}: {
+  title: string;
+  value: number;
+  maximum: number;
+  color: "blue" | "orange";
+}) {
+  const percentage =
+    maximum > 0
+      ? Math.min((value / maximum) * 100, 100)
+      : 0;
+
+  return (
+    <div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-slate-500">
+          {title}
+        </p>
+
+        <strong className="text-sm">
+          {formatCurrency(value)}
+        </strong>
+      </div>
+
+      <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+
+        <div
+          className={`h-full rounded-full ${
+            color === "blue"
+              ? "bg-blue-600"
+              : "bg-orange-500"
+          }`}
+          style={{
+            width: `${percentage}%`,
+          }}
+        />
+
+      </div>
+
+      <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+
+        <span>
+          {formatCurrency(value)}
+        </span>
+
+        <span>
+          {Math.round(percentage)}%
+        </span>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+/* ============================================================
+   SUMMARY CARD
+============================================================ */
+
+function SummaryCard({
+  title,
+  value,
+  description,
+  color,
+}: {
+  title: string;
+  value: string;
+  description: string;
+  color: "blue" | "orange" | "green";
+}) {
+  const valueColor = {
+    blue: "text-blue-600",
+    orange: "text-orange-500",
+    green: "text-green-600",
+  }[color];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
+
+      <h3
+        className={`mt-2 text-xl font-bold ${valueColor}`}
+      >
+        {value}
+      </h3>
+
+      <p className="mt-1 text-[10px] leading-5 text-slate-500">
+        {description}
+      </p>
+
+    </div>
+  );
+}
+
 
 /* ============================================================
    INSIGHT CARD

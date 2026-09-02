@@ -1,33 +1,57 @@
-const BASE_URL = "http://127.0.0.1:8000/api/v1";
+import { request } from "./api";
 
-export async function getProducts() {
-  const token = localStorage.getItem("access_token");
+/* =========================================================
+   INVENTORY TYPES
+   ========================================================= */
 
-  const response = await fetch(`${BASE_URL}/inventory/products`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+export interface InventoryProduct {
+  id: number | string;
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch products");
-  }
+  name?: string;
 
-  return response.json();
+  sku?: string;
+
+  quantity?: number;
+
+  stock?: number;
+
+  price?: number;
+
+  cost_price?: number;
+
+  [key: string]: unknown;
 }
 
-export async function getStockMovements() {
-  const token = localStorage.getItem("access_token");
+export interface ProductsResponse {
+  products?: InventoryProduct[];
 
-  const response = await fetch(`${BASE_URL}/inventory/movements`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  items?: InventoryProduct[];
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch stock movements");
-  }
+  data?: InventoryProduct[];
 
-  return response.json();
+  total?: number;
+
+  [key: string]: unknown;
+}
+
+/* =========================================================
+   GET PRODUCTS
+   ========================================================= */
+
+export async function getProducts(): Promise<
+  ProductsResponse | InventoryProduct[]
+> {
+  return request<
+    ProductsResponse | InventoryProduct[]
+  >("/inventory/products");
+}
+
+/* =========================================================
+   GET STOCK MOVEMENTS
+   ========================================================= */
+
+export async function getStockMovements(): Promise<unknown> {
+  return request<unknown>(
+    "/inventory/movements"
+  );
 }

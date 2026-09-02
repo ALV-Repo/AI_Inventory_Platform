@@ -12,6 +12,9 @@ type Employee = {
   status: "Active" | "On Leave" | "Inactive";
   attendance: number;
   performance: number;
+  joiningDate: string;
+  email: string;
+  phone: string;
 };
 
 const employees: Employee[] = [
@@ -24,6 +27,9 @@ const employees: Employee[] = [
     status: "Active",
     attendance: 96,
     performance: 91,
+    joiningDate: "12 Jan 2024",
+    email: "aarav.sharma@aistockflow.com",
+    phone: "+91 98765 43210",
   },
   {
     id: "EMP-1002",
@@ -34,6 +40,9 @@ const employees: Employee[] = [
     status: "Active",
     attendance: 94,
     performance: 95,
+    joiningDate: "08 Mar 2023",
+    email: "priya.reddy@aistockflow.com",
+    phone: "+91 99887 66554",
   },
   {
     id: "EMP-1003",
@@ -44,6 +53,9 @@ const employees: Employee[] = [
     status: "On Leave",
     attendance: 88,
     performance: 84,
+    joiningDate: "21 Jul 2024",
+    email: "rahul.kumar@aistockflow.com",
+    phone: "+91 91234 56789",
   },
   {
     id: "EMP-1004",
@@ -54,6 +66,9 @@ const employees: Employee[] = [
     status: "Active",
     attendance: 97,
     performance: 93,
+    joiningDate: "15 Feb 2024",
+    email: "sneha.patel@aistockflow.com",
+    phone: "+91 93456 78901",
   },
   {
     id: "EMP-1005",
@@ -64,6 +79,9 @@ const employees: Employee[] = [
     status: "Active",
     attendance: 92,
     performance: 89,
+    joiningDate: "03 Nov 2023",
+    email: "vikram.singh@aistockflow.com",
+    phone: "+91 97654 32109",
   },
   {
     id: "EMP-1006",
@@ -74,6 +92,9 @@ const employees: Employee[] = [
     status: "On Leave",
     attendance: 90,
     performance: 87,
+    joiningDate: "18 May 2024",
+    email: "ananya.rao@aistockflow.com",
+    phone: "+91 94567 89012",
   },
 ];
 
@@ -84,20 +105,18 @@ export default function HRPage() {
   const [status, setStatus] =
     useState("All Status");
 
+  const [selectedEmployee, setSelectedEmployee] =
+    useState<Employee | null>(null);
+
   const filteredEmployees = useMemo(() => {
     return employees.filter((employee) => {
-      const searchText = search.toLowerCase();
+      const searchText = search.toLowerCase().trim();
 
       const matchesSearch =
-        employee.name
-          .toLowerCase()
-          .includes(searchText) ||
-        employee.id
-          .toLowerCase()
-          .includes(searchText) ||
-        employee.role
-          .toLowerCase()
-          .includes(searchText);
+        employee.name.toLowerCase().includes(searchText) ||
+        employee.id.toLowerCase().includes(searchText) ||
+        employee.role.toLowerCase().includes(searchText) ||
+        employee.location.toLowerCase().includes(searchText);
 
       const matchesDepartment =
         department === "All Departments" ||
@@ -123,6 +142,10 @@ export default function HRPage() {
     (employee) => employee.status === "On Leave"
   ).length;
 
+  const inactiveEmployees = employees.filter(
+    (employee) => employee.status === "Inactive"
+  ).length;
+
   const averageAttendance =
     employees.reduce(
       (sum, employee) => sum + employee.attendance,
@@ -135,10 +158,13 @@ export default function HRPage() {
       0
     ) / employees.length;
 
+  const highPerformers = employees.filter(
+    (employee) => employee.performance >= 90
+  ).length;
+
   return (
     <PageLayout>
       <main className="min-h-screen bg-[#f8fafc] px-6 py-7 text-slate-900">
-
         <div className="mx-auto max-w-6xl">
 
           {/* HEADER */}
@@ -198,6 +224,32 @@ export default function HRPage() {
 
           </div>
 
+          {/* SECONDARY SUMMARY */}
+          <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+
+            <SummaryCard
+              title="Average Performance"
+              value={`${averagePerformance.toFixed(1)}%`}
+              description="Average workforce performance"
+              color="text-blue-600"
+            />
+
+            <SummaryCard
+              title="High Performers"
+              value={highPerformers.toString()}
+              description="Employees scoring 90% or above"
+              color="text-green-600"
+            />
+
+            <SummaryCard
+              title="Inactive Employees"
+              value={inactiveEmployees.toString()}
+              description="Currently inactive employees"
+              color="text-slate-600"
+            />
+
+          </div>
+
           {/* SEARCH AND FILTERS */}
           <section className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
 
@@ -209,7 +261,7 @@ export default function HRPage() {
                 onChange={(e) =>
                   setSearch(e.target.value)
                 }
-                placeholder="Search employee, ID or role..."
+                placeholder="Search employee, ID, role or location..."
                 className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
               />
 
@@ -243,6 +295,22 @@ export default function HRPage() {
 
             </div>
 
+            <div className="mt-2 flex justify-end">
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setDepartment("All Departments");
+                  setStatus("All Status");
+                }}
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+              >
+                Clear Filters
+              </button>
+
+            </div>
+
           </section>
 
           {/* EMPLOYEE DIRECTORY */}
@@ -265,6 +333,7 @@ export default function HRPage() {
               <table className="w-full border-collapse text-xs">
 
                 <thead>
+
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
 
                     <th className="px-4 py-3 font-semibold text-slate-600">
@@ -300,6 +369,7 @@ export default function HRPage() {
                     </th>
 
                   </tr>
+
                 </thead>
 
                 <tbody>
@@ -314,13 +384,29 @@ export default function HRPage() {
                       {/* EMPLOYEE */}
                       <td className="px-4 py-3">
 
-                        <p className="font-semibold text-slate-800">
-                          {employee.name}
-                        </p>
+                        <div className="flex items-center gap-3">
 
-                        <p className="mt-0.5 text-[10px] text-slate-400">
-                          {employee.id}
-                        </p>
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
+                            {employee.name
+                              .split(" ")
+                              .map((part) => part[0])
+                              .join("")
+                              .slice(0, 2)}
+                          </div>
+
+                          <div>
+
+                            <p className="font-semibold text-slate-800">
+                              {employee.name}
+                            </p>
+
+                            <p className="mt-0.5 text-[10px] text-slate-400">
+                              {employee.id}
+                            </p>
+
+                          </div>
+
+                        </div>
 
                       </td>
 
@@ -347,7 +433,11 @@ export default function HRPage() {
                           <div className="h-2 w-16 overflow-hidden rounded-full bg-slate-200">
 
                             <div
-                              className="h-full rounded-full bg-blue-600"
+                              className={`h-full rounded-full ${
+                                employee.attendance >= 90
+                                  ? "bg-green-500"
+                                  : "bg-orange-500"
+                              }`}
                               style={{
                                 width: `${employee.attendance}%`,
                               }}
@@ -371,8 +461,8 @@ export default function HRPage() {
                             employee.performance >= 90
                               ? "text-green-600"
                               : employee.performance >= 80
-                                ? "text-yellow-600"
-                                : "text-red-600"
+                              ? "text-yellow-600"
+                              : "text-red-600"
                           }`}
                         >
                           {employee.performance}%
@@ -395,9 +485,7 @@ export default function HRPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            alert(
-                              `${employee.name}\n\nRole: ${employee.role}\nDepartment: ${employee.department}\nLocation: ${employee.location}\nAttendance: ${employee.attendance}%\nPerformance: ${employee.performance}%`
-                            )
+                            setSelectedEmployee(employee)
                           }
                           className="font-semibold text-blue-600 hover:text-blue-800"
                         >
@@ -441,31 +529,41 @@ export default function HRPage() {
 
           </section>
 
-          {/* HR INSIGHTS */}
+                    {/* HR INSIGHTS */}
           <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5">
 
             <h2 className="mb-4 text-sm font-semibold">
               HR Insights
             </h2>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
 
               <InsightCard
                 title="Workforce Performance"
                 value={`${averagePerformance.toFixed(1)}%`}
                 description="Average performance score across the current workforce."
+                tone="blue"
               />
 
               <InsightCard
                 title="Attendance Health"
                 value={`${averageAttendance.toFixed(1)}%`}
                 description="Average employee attendance is currently healthy."
+                tone="green"
               />
 
               <InsightCard
                 title="Leave Monitoring"
                 value={`${employeesOnLeave} employees`}
                 description="Employees are currently marked as being on leave."
+                tone="orange"
+              />
+
+              <InsightCard
+                title="High Performers"
+                value={`${highPerformers} employees`}
+                description="Employees currently achieving 90% or higher."
+                tone="purple"
               />
 
             </div>
@@ -478,11 +576,197 @@ export default function HRPage() {
           </div>
 
         </div>
-
       </main>
+
+      {/* EMPLOYEE DETAIL MODAL */}
+      {selectedEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+          <div className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl">
+
+            {/* MODAL HEADER */}
+            <div className="flex items-center justify-between border-b border-slate-200 p-5">
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 font-bold text-slate-700">
+                  {selectedEmployee.name
+                    .split(" ")
+                    .map((part) => part[0])
+                    .join("")
+                    .slice(0, 2)}
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-bold">
+                    {selectedEmployee.name}
+                  </h2>
+
+                  <p className="text-xs text-slate-500">
+                    {selectedEmployee.id}
+                  </p>
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedEmployee(null)}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                ×
+              </button>
+
+            </div>
+
+            {/* MODAL BODY */}
+            <div className="p-5">
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                <DetailItem
+                  label="Role"
+                  value={selectedEmployee.role}
+                />
+
+                <DetailItem
+                  label="Department"
+                  value={selectedEmployee.department}
+                />
+
+                <DetailItem
+                  label="Location"
+                  value={selectedEmployee.location}
+                />
+
+                <DetailItem
+                  label="Joining Date"
+                  value={selectedEmployee.joiningDate}
+                />
+
+                <DetailItem
+                  label="Email"
+                  value={selectedEmployee.email}
+                />
+
+                <DetailItem
+                  label="Phone"
+                  value={selectedEmployee.phone}
+                />
+
+              </div>
+
+              {/* ATTENDANCE */}
+              <div className="mt-5 rounded-lg border border-slate-200 p-4">
+
+                <div className="flex items-center justify-between">
+
+                  <span className="text-xs font-medium text-slate-500">
+                    Attendance
+                  </span>
+
+                  <strong className="text-sm text-slate-900">
+                    {selectedEmployee.attendance}%
+                  </strong>
+
+                </div>
+
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+
+                  <div
+                    className={`h-full rounded-full ${
+                      selectedEmployee.attendance >= 90
+                        ? "bg-green-500"
+                        : "bg-orange-500"
+                    }`}
+                    style={{
+                      width: `${selectedEmployee.attendance}%`,
+                    }}
+                  />
+
+                </div>
+
+              </div>
+
+              {/* PERFORMANCE */}
+              <div className="mt-3 rounded-lg border border-slate-200 p-4">
+
+                <div className="flex items-center justify-between">
+
+                  <span className="text-xs font-medium text-slate-500">
+                    Performance
+                  </span>
+
+                  <strong
+                    className={`text-sm ${
+                      selectedEmployee.performance >= 90
+                        ? "text-green-600"
+                        : selectedEmployee.performance >= 80
+                        ? "text-yellow-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {selectedEmployee.performance}%
+                  </strong>
+
+                </div>
+
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+
+                  <div
+                    className={`h-full rounded-full ${
+                      selectedEmployee.performance >= 90
+                        ? "bg-green-500"
+                        : selectedEmployee.performance >= 80
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
+                    }`}
+                    style={{
+                      width: `${selectedEmployee.performance}%`,
+                    }}
+                  />
+
+                </div>
+
+              </div>
+
+              {/* STATUS */}
+              <div className="mt-4 flex items-center justify-between">
+
+                <span className="text-xs font-medium text-slate-500">
+                  Current Status
+                </span>
+
+                <StatusBadge
+                  status={selectedEmployee.status}
+                />
+
+              </div>
+
+            </div>
+
+            {/* MODAL FOOTER */}
+            <div className="flex justify-end border-t border-slate-200 p-4">
+
+              <button
+                type="button"
+                onClick={() => setSelectedEmployee(null)}
+                className="rounded-md bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                Close
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
     </PageLayout>
   );
 }
+
 
 /* ============================================================
    KPI CARD
@@ -502,7 +786,7 @@ function KpiCard({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
 
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {title}
       </p>
 
@@ -519,6 +803,44 @@ function KpiCard({
     </div>
   );
 }
+
+
+/* ============================================================
+   SUMMARY CARD
+============================================================ */
+
+function SummaryCard({
+  title,
+  value,
+  description,
+  color,
+}: {
+  title: string;
+  value: string;
+  description: string;
+  color: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
+
+      <p
+        className={`mt-2 text-xl font-bold ${color}`}
+      >
+        {value}
+      </p>
+
+      <p className="mt-1 text-[10px] leading-5 text-slate-500">
+        {description}
+      </p>
+
+    </div>
+  );
+}
+
 
 /* ============================================================
    STATUS BADGE
@@ -544,6 +866,34 @@ function StatusBadge({
   );
 }
 
+
+/* ============================================================
+   DETAIL ITEM
+============================================================ */
+
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-3">
+
+      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+
+      <p className="mt-1 break-words text-xs font-semibold text-slate-800">
+        {value}
+      </p>
+
+    </div>
+  );
+}
+
+
 /* ============================================================
    INSIGHT CARD
 ============================================================ */
@@ -552,19 +902,44 @@ function InsightCard({
   title,
   value,
   description,
+  tone,
 }: {
   title: string;
   value: string;
   description: string;
+  tone: "blue" | "green" | "orange" | "purple";
 }) {
-  return (
-    <div className="rounded-lg border border-slate-200 p-4">
+  const styles = {
+    blue: {
+      wrapper: "border-blue-100 bg-blue-50/40",
+      value: "text-blue-700",
+    },
+    green: {
+      wrapper: "border-green-100 bg-green-50/40",
+      value: "text-green-700",
+    },
+    orange: {
+      wrapper: "border-orange-100 bg-orange-50/40",
+      value: "text-orange-600",
+    },
+    purple: {
+      wrapper: "border-purple-100 bg-purple-50/40",
+      value: "text-purple-700",
+    },
+  }[tone];
 
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">
+  return (
+    <div
+      className={`rounded-lg border p-4 ${styles.wrapper}`}
+    >
+
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {title}
       </p>
 
-      <p className="mt-2 text-xl font-bold text-slate-900">
+      <p
+        className={`mt-2 text-xl font-bold ${styles.value}`}
+      >
         {value}
       </p>
 

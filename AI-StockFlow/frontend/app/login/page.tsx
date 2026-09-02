@@ -12,7 +12,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
     e.preventDefault();
 
     setError("");
@@ -27,20 +29,28 @@ export default function LoginPage() {
 
       const data = await login(email.trim(), password);
 
-      console.log("LOGIN SUCCESS:", data);
-
+      // Store authentication data in localStorage
       localStorage.setItem("access_token", data.access_token);
 
       if (data.refresh_token) {
-        localStorage.setItem("refresh_token", data.refresh_token);
+        localStorage.setItem(
+          "refresh_token",
+          data.refresh_token
+        );
       }
 
       if (data.user_id !== undefined) {
-        localStorage.setItem("user_id", String(data.user_id));
+        localStorage.setItem(
+          "user_id",
+          String(data.user_id)
+        );
       }
 
       if (data.tenant_id !== undefined) {
-        localStorage.setItem("tenant_id", String(data.tenant_id));
+        localStorage.setItem(
+          "tenant_id",
+          String(data.tenant_id)
+        );
       }
 
       if (data.role) {
@@ -85,7 +95,10 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-5">
+        <form
+          onSubmit={handleLogin}
+          className="space-y-5"
+        >
 
           <div>
             <label

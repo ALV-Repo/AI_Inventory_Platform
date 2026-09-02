@@ -70,7 +70,7 @@ export class ApiError extends Error {
 
 const tokens = {
   get access() {
-    return typeof window === "undefined" ? null : sessionStorage.getItem("sf_access");
+    return typeof window === "undefined" ? null : sessionStorage.getItem("access_token")
   },
   get refresh() {
     return typeof window === "undefined" ? null : sessionStorage.getItem("sf_refresh");

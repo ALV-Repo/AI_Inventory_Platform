@@ -1,10 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import PageLayout from "../../components/layout/PageLayout";
+import useInventory, {
+  InventoryProduct,
+} from "../../hooks/useInventory";
 
-type StockStatus = "Healthy" | "Low Stock" | "Out of Stock";
+type StockStatus =
+  | "Healthy"
+  | "Low Stock"
+  | "Out of Stock";
 
 type Product = {
   id: number;
@@ -17,108 +27,6 @@ type Product = {
   reorderPoint: number;
   unitCost: number;
 };
-
-const initialProducts: Product[] = [
-  {
-    id: 1,
-    name: "Hot Wheels Track Set",
-    sku: "TOY-HW-002",
-    category: "Toys",
-    warehouse: "Main Store",
-    onHand: 24,
-    reserved: 6,
-    reorderPoint: 10,
-    unitCost: 4200,
-  },
-  {
-    id: 2,
-    name: "Bluetooth Speaker",
-    sku: "ELC-BT-600",
-    category: "Electronics",
-    warehouse: "Main Store",
-    onHand: 8,
-    reserved: 2,
-    reorderPoint: 10,
-    unitCost: 3200,
-  },
-  {
-    id: 3,
-    name: "Football Size 5",
-    sku: "SPT-BL-900",
-    category: "Sports",
-    warehouse: "Warehouse A",
-    onHand: 17,
-    reserved: 2,
-    reorderPoint: 8,
-    unitCost: 1800,
-  },
-  {
-    id: 4,
-    name: "Christmas Tree 4ft",
-    sku: "SEA-XM-960",
-    category: "Seasonal",
-    warehouse: "Main Store",
-    onHand: 81,
-    reserved: 0,
-    reorderPoint: 15,
-    unitCost: 12500,
-  },
-  {
-    id: 5,
-    name: "Fashion Doll Set",
-    sku: "TOY-DL-410",
-    category: "Toys",
-    warehouse: "Warehouse B",
-    onHand: 56,
-    reserved: 6,
-    reorderPoint: 12,
-    unitCost: 380,
-  },
-  {
-    id: 6,
-    name: "Ceramic Planter",
-    sku: "HOM-PL-810",
-    category: "Home",
-    warehouse: "Main Store",
-    onHand: 53,
-    reserved: 5,
-    reorderPoint: 10,
-    unitCost: 260,
-  },
-  {
-    id: 7,
-    name: "Wireless Keyboard",
-    sku: "ELC-KB-120",
-    category: "Electronics",
-    warehouse: "Warehouse A",
-    onHand: 3,
-    reserved: 0,
-    reorderPoint: 8,
-    unitCost: 1200,
-  },
-  {
-    id: 8,
-    name: "USB Microphone",
-    sku: "ELC-MC-500",
-    category: "Electronics",
-    warehouse: "Main Store",
-    onHand: 0,
-    reserved: 0,
-    reorderPoint: 5,
-    unitCost: 2400,
-  },
-  {
-    id: 9,
-    name: "Gaming Mouse",
-    sku: "ELC-MS-100",
-    category: "Electronics",
-    warehouse: "Main Store",
-    onHand: 20,
-    reserved: 0,
-    reorderPoint: 5,
-    unitCost: 1500,
-  },
-];
 
 const categories = [
   "All",
@@ -136,15 +44,23 @@ const warehouses = [
 ];
 
 function getAvailable(product: Product) {
-  return Math.max(product.onHand - product.reserved, 0);
+  return Math.max(
+    product.onHand - product.reserved,
+    0
+  );
 }
 
-function getStatus(product: Product): StockStatus {
+function getStatus(
+  product: Product
+): StockStatus {
   if (product.onHand === 0) {
     return "Out of Stock";
   }
 
-  if (getAvailable(product) <= product.reorderPoint) {
+  if (
+    getAvailable(product) <=
+    product.reorderPoint
+  ) {
     return "Low Stock";
   }
 
@@ -155,20 +71,122 @@ function formatCurrency(value: number) {
   return `₹${value.toLocaleString("en-IN")}`;
 }
 
+function mapInventoryProduct(
+  item: InventoryProduct
+): Product {
+  return {
+    id: Number(
+      item.id ??
+        item.product_id ??
+        0
+    ),
+
+    name:
+      item.name ??
+      item.product_name ??
+      "",
+
+    sku:
+      item.sku ??
+      item.code ??
+      "",
+
+    category:
+      item.category ??
+      item.category_name ??
+      "Uncategorized",
+
+    warehouse:
+      item.warehouse ??
+      item.warehouse_name ??
+      "Main Store",
+
+    onHand: Number(
+      item.on_hand ??
+        item.quantity ??
+        item.current_stock ??
+        0
+    ),
+
+    reserved: Number(
+      item.reserved ?? 0
+    ),
+
+    reorderPoint: Number(
+      item.reorder_point ??
+        item.reorder_level ??
+        0
+    ),
+
+    unitCost: Number(
+      item.unit_cost ??
+        item.cost_price ??
+        item.price ??
+        0
+    ),
+  };
+}
+
 export default function InventoryPage() {
   const router = useRouter();
 
+  /*
+   * Inventory data now comes through the
+   * useInventory hook.
+   *
+   * Flow:
+   *
+   * inventory/page.tsx
+   *       ↓
+   * useInventory()
+   *       ↓
+   * inventory.service.ts
+   *       ↓
+   * /inventory/products
+   */
+  const {
+    products: inventoryProducts,
+    loading,
+    error,
+  } = useInventory();
+
+  /*
+   * Keep a local Product[] state because the
+   * existing inventory UI supports local actions
+   * such as Add, Edit, Adjust, Transfer and
+   * Cycle Count.
+   */
   const [products, setProducts] =
-    useState<Product[]>(initialProducts);
+    useState<Product[]>([]);
+
+  /*
+   * Convert API products into the Product shape
+   * used by the existing UI.
+   */
+  useEffect(() => {
+    const mappedProducts =
+      inventoryProducts.map(
+        mapInventoryProduct
+      );
+
+    setProducts(mappedProducts);
+  }, [inventoryProducts]);
 
   // --------------------------------------------------
   // FILTERS
   // --------------------------------------------------
 
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
-  const [warehouse, setWarehouse] = useState("All");
-  const [stockStatus, setStockStatus] = useState("All");
+  const [search, setSearch] =
+    useState("");
+
+  const [category, setCategory] =
+    useState("All");
+
+  const [warehouse, setWarehouse] =
+    useState("All");
+
+  const [stockStatus, setStockStatus] =
+    useState("All");
 
   // --------------------------------------------------
   // ADD PRODUCT
@@ -177,15 +195,16 @@ export default function InventoryPage() {
   const [showAddProduct, setShowAddProduct] =
     useState(false);
 
-  const [newProduct, setNewProduct] = useState({
-    name: "",
-    sku: "",
-    category: "Electronics",
-    warehouse: "Main Store",
-    quantity: "",
-    reorderPoint: "10",
-    unitCost: "",
-  });
+  const [newProduct, setNewProduct] =
+    useState({
+      name: "",
+      sku: "",
+      category: "Electronics",
+      warehouse: "Main Store",
+      quantity: "",
+      reorderPoint: "10",
+      unitCost: "",
+    });
 
   // --------------------------------------------------
   // EDIT PRODUCT
@@ -208,13 +227,19 @@ export default function InventoryPage() {
     useState<Product | null>(null);
 
   const [adjustmentType, setAdjustmentType] =
-    useState<"increase" | "decrease">("increase");
+    useState<"increase" | "decrease">(
+      "increase"
+    );
 
-  const [adjustmentQuantity, setAdjustmentQuantity] =
-    useState("");
+  const [
+    adjustmentQuantity,
+    setAdjustmentQuantity,
+  ] = useState("");
 
-  const [adjustmentReason, setAdjustmentReason] =
-    useState("");
+  const [
+    adjustmentReason,
+    setAdjustmentReason,
+  ] = useState("");
 
   // --------------------------------------------------
   // TRANSFER STOCK
@@ -232,11 +257,15 @@ export default function InventoryPage() {
   const [transferTo, setTransferTo] =
     useState("");
 
-  const [transferQuantity, setTransferQuantity] =
-    useState("");
+  const [
+    transferQuantity,
+    setTransferQuantity,
+  ] = useState("");
 
-  const [transferReason, setTransferReason] =
-    useState("");
+  const [
+    transferReason,
+    setTransferReason,
+  ] = useState("");
 
   // --------------------------------------------------
   // BARCODE SCANNER
@@ -261,8 +290,10 @@ export default function InventoryPage() {
   const [cycleProduct, setCycleProduct] =
     useState<Product | null>(null);
 
-  const [physicalQuantity, setPhysicalQuantity] =
-    useState("");
+  const [
+    physicalQuantity,
+    setPhysicalQuantity,
+  ] = useState("");
 
   const [cycleReason, setCycleReason] =
     useState("");
@@ -316,43 +347,57 @@ export default function InventoryPage() {
   // KPI VALUES
   // --------------------------------------------------
 
-  const totalProducts = products.length;
+  const totalProducts =
+    products.length;
 
-  const totalUnits = products.reduce(
-    (total, product) =>
-      total + product.onHand,
-    0
-  );
+  const totalUnits =
+    products.reduce(
+      (total, product) =>
+        total + product.onHand,
+      0
+    );
 
-  const stockValue = products.reduce(
-    (total, product) =>
-      total +
-      product.onHand * product.unitCost,
-    0
-  );
+  const stockValue =
+    products.reduce(
+      (total, product) =>
+        total +
+        product.onHand *
+          product.unitCost,
+      0
+    );
 
-  const needsAttention = products.filter(
-    (product) =>
-      getStatus(product) !== "Healthy"
-  ).length;
+  const needsAttention =
+    products.filter(
+      (product) =>
+        getStatus(product) !==
+        "Healthy"
+    ).length;
 
-  const lowStockCount = products.filter(
-    (product) =>
-      getStatus(product) === "Low Stock"
-  ).length;
+  const lowStockCount =
+    products.filter(
+      (product) =>
+        getStatus(product) ===
+        "Low Stock"
+    ).length;
 
-  const outOfStockCount = products.filter(
-    (product) =>
-      getStatus(product) === "Out of Stock"
-  ).length;
+  const outOfStockCount =
+    products.filter(
+      (product) =>
+        getStatus(product) ===
+        "Out of Stock"
+    ).length;
 
   // --------------------------------------------------
   // VIEW PRODUCT
   // --------------------------------------------------
 
-  function handleView(product: Product) {
-  router.push(`/inventory/${product.id}`);
-}
+  function handleView(
+    product: Product
+  ) {
+    router.push(
+      `/inventory/${product.id}`
+    );
+  }
 
   // --------------------------------------------------
   // ADD PRODUCT
@@ -390,7 +435,9 @@ export default function InventoryPage() {
       Number.isNaN(reorderPoint) ||
       Number.isNaN(unitCost)
     ) {
-      alert("Please enter valid numbers.");
+      alert(
+        "Please enter valid numbers."
+      );
       return;
     }
 
@@ -402,7 +449,10 @@ export default function InventoryPage() {
         .toUpperCase(),
       category: newProduct.category,
       warehouse: newProduct.warehouse,
-      onHand: Math.max(quantity, 0),
+      onHand: Math.max(
+        quantity,
+        0
+      ),
       reserved: 0,
       reorderPoint: Math.max(
         reorderPoint,
@@ -431,7 +481,9 @@ export default function InventoryPage() {
 
     setShowAddProduct(false);
 
-    alert("Product added successfully.");
+    alert(
+      "Product added successfully."
+    );
   }
 
   // --------------------------------------------------
@@ -473,7 +525,9 @@ export default function InventoryPage() {
       ) ||
       editingProduct.onHand < 0
     ) {
-      alert("Enter a valid stock quantity.");
+      alert(
+        "Enter a valid stock quantity."
+      );
       return;
     }
 
@@ -495,19 +549,24 @@ export default function InventoryPage() {
       ) ||
       editingProduct.unitCost < 0
     ) {
-      alert("Enter a valid unit cost.");
+      alert(
+        "Enter a valid unit cost."
+      );
       return;
     }
 
     setProducts((current) =>
       current.map((product) =>
-        product.id === editingProduct.id
+        product.id ===
+        editingProduct.id
           ? {
               ...editingProduct,
-              name: editingProduct.name.trim(),
-              sku: editingProduct.sku
-                .trim()
-                .toUpperCase(),
+              name:
+                editingProduct.name.trim(),
+              sku:
+                editingProduct.sku
+                  .trim()
+                  .toUpperCase(),
             }
           : product
       )
@@ -552,13 +611,16 @@ export default function InventoryPage() {
       !Number.isFinite(quantity) ||
       quantity <= 0
     ) {
-      alert("Enter a valid quantity.");
+      alert(
+        "Enter a valid quantity."
+      );
       return;
     }
 
     if (
       adjustmentType === "decrease" &&
-      quantity > selectedProduct.onHand
+      quantity >
+        selectedProduct.onHand
     ) {
       alert(
         "Quantity cannot be greater than current stock."
@@ -578,7 +640,8 @@ export default function InventoryPage() {
         const newOnHand =
           adjustmentType ===
           "increase"
-            ? product.onHand + quantity
+            ? product.onHand +
+              quantity
             : Math.max(
                 product.onHand -
                   quantity,
@@ -604,16 +667,24 @@ export default function InventoryPage() {
   // TRANSFER STOCK
   // --------------------------------------------------
 
-  function openTransfer(product: Product) {
+  function openTransfer(
+    product: Product
+  ) {
     setTransferProduct(product);
-    setTransferFrom(product.warehouse);
+    setTransferFrom(
+      product.warehouse
+    );
 
     const defaultDestination =
       warehouses.find(
-        (item) => item !== product.warehouse
+        (item) =>
+          item !== product.warehouse
       ) || "";
 
-    setTransferTo(defaultDestination);
+    setTransferTo(
+      defaultDestination
+    );
+
     setTransferQuantity("");
     setTransferReason("");
     setShowTransfer(true);
@@ -636,25 +707,35 @@ export default function InventoryPage() {
       !Number.isFinite(quantity) ||
       quantity <= 0
     ) {
-      alert("Enter a valid transfer quantity.");
+      alert(
+        "Enter a valid transfer quantity."
+      );
       return;
     }
 
-    if (!transferFrom || !transferTo) {
+    if (
+      !transferFrom ||
+      !transferTo
+    ) {
       alert(
         "Please select both warehouses."
       );
       return;
     }
 
-    if (transferFrom === transferTo) {
+    if (
+      transferFrom === transferTo
+    ) {
       alert(
         "Source and destination warehouses must be different."
       );
       return;
     }
 
-    if (quantity > transferProduct.onHand) {
+    if (
+      quantity >
+      transferProduct.onHand
+    ) {
       alert(
         "Transfer quantity cannot exceed current stock."
       );
@@ -663,11 +744,14 @@ export default function InventoryPage() {
 
     /*
      * Frontend demo:
-     * We update the selected product's warehouse
-     * and reduce its available quantity.
      *
-     * The real create → approve → dispatch → receive
-     * workflow will later connect to the backend API.
+     * The selected product is moved to the
+     * destination warehouse and its quantity
+     * is reduced by the transferred amount.
+     *
+     * The real create → approve → dispatch
+     * → receive workflow can later connect
+     * to the backend API.
      */
 
     setProducts((current) =>
@@ -683,7 +767,8 @@ export default function InventoryPage() {
           ...product,
           warehouse: transferTo,
           onHand: Math.max(
-            product.onHand - quantity,
+            product.onHand -
+              quantity,
             0
           ),
         };
@@ -706,10 +791,13 @@ export default function InventoryPage() {
     product: Product
   ) {
     setCycleProduct(product);
+
     setPhysicalQuantity(
       product.onHand.toString()
     );
+
     setCycleReason("");
+
     setShowCycleCount(true);
   }
 
@@ -737,11 +825,13 @@ export default function InventoryPage() {
     }
 
     const variance =
-      physical - cycleProduct.onHand;
+      physical -
+      cycleProduct.onHand;
 
     setProducts((current) =>
       current.map((product) =>
-        product.id === cycleProduct.id
+        product.id ===
+        cycleProduct.id
           ? {
               ...product,
               onHand: physical,
@@ -755,9 +845,7 @@ export default function InventoryPage() {
 
     alert(
       `Cycle count completed.\n\nVariance: ${
-        variance > 0
-          ? "+"
-          : ""
+        variance > 0 ? "+" : ""
       }${variance} units.`
     );
   }
@@ -780,7 +868,9 @@ export default function InventoryPage() {
 
     const found = products.find(
       (product) =>
-        product.sku.toLowerCase() === value ||
+        product.sku
+          .toLowerCase() ===
+          value ||
         product.name
           .toLowerCase()
           .includes(value)
@@ -809,6 +899,10 @@ export default function InventoryPage() {
     setWarehouse("All");
     setStockStatus("All");
   }
+
+  // --------------------------------------------------
+  // PAGE
+  // --------------------------------------------------
 
   return (
     <PageLayout>
@@ -849,9 +943,14 @@ export default function InventoryPage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  setShowTransfer(true)
-                }
+                onClick={() => {
+                  setTransferProduct(null);
+                  setTransferFrom("");
+                  setTransferTo("");
+                  setTransferQuantity("");
+                  setTransferReason("");
+                  setShowTransfer(true);
+                }}
                 className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
               >
                 Transfer Stock
@@ -876,6 +975,8 @@ export default function InventoryPage() {
 
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
+            {/* TOTAL PRODUCTS */}
+
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
 
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
@@ -892,6 +993,8 @@ export default function InventoryPage() {
 
             </div>
 
+            {/* TOTAL UNITS */}
+
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
 
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
@@ -899,7 +1002,9 @@ export default function InventoryPage() {
               </p>
 
               <p className="mt-2 text-2xl font-bold text-blue-600">
-                {totalUnits.toLocaleString("en-IN")}
+                {totalUnits.toLocaleString(
+                  "en-IN"
+                )}
               </p>
 
               <p className="mt-1 text-[10px] text-gray-500">
@@ -908,6 +1013,8 @@ export default function InventoryPage() {
 
             </div>
 
+            {/* STOCK VALUE */}
+
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
 
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
@@ -915,7 +1022,9 @@ export default function InventoryPage() {
               </p>
 
               <p className="mt-2 text-2xl font-bold text-green-600">
-                {formatCurrency(stockValue)}
+                {formatCurrency(
+                  stockValue
+                )}
               </p>
 
               <p className="mt-1 text-[10px] text-gray-500">
@@ -923,6 +1032,8 @@ export default function InventoryPage() {
               </p>
 
             </div>
+
+            {/* NEEDS ATTENTION */}
 
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
 
@@ -977,6 +1088,7 @@ export default function InventoryPage() {
               {/* SEARCH */}
 
               <div>
+
                 <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                   Search
                 </label>
@@ -985,16 +1097,20 @@ export default function InventoryPage() {
                   type="text"
                   value={search}
                   onChange={(e) =>
-                    setSearch(e.target.value)
+                    setSearch(
+                      e.target.value
+                    )
                   }
                   placeholder="Product name or SKU..."
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
                 />
+
               </div>
 
               {/* CATEGORY */}
 
               <div>
+
                 <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                   Category
                 </label>
@@ -1002,10 +1118,13 @@ export default function InventoryPage() {
                 <select
                   value={category}
                   onChange={(e) =>
-                    setCategory(e.target.value)
+                    setCategory(
+                      e.target.value
+                    )
                   }
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
                 >
+
                   {categories.map(
                     (item) => (
                       <option
@@ -1018,12 +1137,15 @@ export default function InventoryPage() {
                       </option>
                     )
                   )}
+
                 </select>
+
               </div>
 
               {/* WAREHOUSE */}
 
               <div>
+
                 <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                   Warehouse
                 </label>
@@ -1031,10 +1153,13 @@ export default function InventoryPage() {
                 <select
                   value={warehouse}
                   onChange={(e) =>
-                    setWarehouse(e.target.value)
+                    setWarehouse(
+                      e.target.value
+                    )
                   }
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
                 >
+
                   <option value="All">
                     All Warehouses
                   </option>
@@ -1049,12 +1174,15 @@ export default function InventoryPage() {
                       </option>
                     )
                   )}
+
                 </select>
+
               </div>
 
               {/* STOCK STATUS */}
 
               <div>
+
                 <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                   Stock Status
                 </label>
@@ -1068,6 +1196,7 @@ export default function InventoryPage() {
                   }
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
                 >
+
                   <option value="All">
                     All Status
                   </option>
@@ -1083,11 +1212,29 @@ export default function InventoryPage() {
                   <option value="Out of Stock">
                     Out of Stock
                   </option>
+
                 </select>
+
               </div>
 
             </div>
           </section>
+
+          {/* =================================================
+              LOADING / ERROR
+          ================================================= */}
+
+          {loading && (
+            <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+              Loading inventory...
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
           {/* =================================================
               PRODUCT TABLE
@@ -1098,14 +1245,19 @@ export default function InventoryPage() {
             <div className="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
 
               <div>
+
                 <h2 className="text-sm font-semibold text-[#12213a]">
                   Product List
                 </h2>
 
                 <p className="mt-1 text-[10px] text-gray-400">
-                  Showing {filteredProducts.length} of{" "}
-                  {products.length} products
+                  Showing{" "}
+                  {filteredProducts.length}{" "}
+                  of{" "}
+                  {products.length}{" "}
+                  products
                 </p>
+
               </div>
 
               <div className="flex gap-2 text-[10px]">
@@ -1131,6 +1283,7 @@ export default function InventoryPage() {
               <table className="w-full min-w-[1000px] border-collapse text-xs">
 
                 <thead>
+
                   <tr className="border-b border-gray-200 bg-gray-50 text-left">
 
                     <th className="px-4 py-3 font-semibold text-gray-600">
@@ -1170,6 +1323,7 @@ export default function InventoryPage() {
                     </th>
 
                   </tr>
+
                 </thead>
 
                 <tbody>
@@ -1177,11 +1331,15 @@ export default function InventoryPage() {
                   {filteredProducts.map(
                     (product) => {
                       const status =
-                        getStatus(product);
+                        getStatus(
+                          product
+                        );
 
                       return (
                         <tr
-                          key={product.id}
+                          key={
+                            product.id
+                          }
                           className="border-b border-gray-100 transition hover:bg-gray-50"
                         >
 
@@ -1190,11 +1348,15 @@ export default function InventoryPage() {
                           <td className="px-4 py-3">
 
                             <p className="font-semibold text-[#12213a]">
-                              {product.name}
+                              {
+                                product.name
+                              }
                             </p>
 
                             <p className="mt-0.5 font-mono text-[10px] text-gray-400">
-                              {product.sku}
+                              {
+                                product.sku
+                              }
                             </p>
 
                           </td>
@@ -1202,33 +1364,43 @@ export default function InventoryPage() {
                           {/* CATEGORY */}
 
                           <td className="px-4 py-3 text-gray-600">
-                            {product.category}
+                            {
+                              product.category
+                            }
                           </td>
 
                           {/* WAREHOUSE */}
 
                           <td className="px-4 py-3 text-gray-600">
-                            {product.warehouse}
+                            {
+                              product.warehouse
+                            }
                           </td>
 
                           {/* ON HAND */}
 
                           <td className="px-4 py-3 font-semibold text-gray-800">
-                            {product.onHand}
+                            {
+                              product.onHand
+                            }
                           </td>
 
                           {/* RESERVED */}
 
                           <td className="px-4 py-3 text-gray-500">
-                            {product.reserved}
+                            {
+                              product.reserved
+                            }
                           </td>
 
                           {/* AVAILABLE */}
 
                           <td className="px-4 py-3 font-semibold text-gray-800">
-                            {getAvailable(
-                              product
-                            )}
+                            {
+                              getAvailable(
+                                product
+                              )
+                            }
                           </td>
 
                           {/* STATUS */}
@@ -1246,7 +1418,9 @@ export default function InventoryPage() {
                                   : "bg-red-100 text-red-700"
                               }`}
                             >
-                              {status}
+                              {
+                                status
+                              }
                             </span>
 
                           </td>
@@ -1340,6 +1514,8 @@ export default function InventoryPage() {
 
             </div>
 
+            {/* EMPTY STATE */}
+
             {filteredProducts.length ===
               0 && (
               <div className="px-6 py-14 text-center">
@@ -1355,7 +1531,9 @@ export default function InventoryPage() {
 
                 <button
                   type="button"
-                  onClick={clearFilters}
+                  onClick={
+                    clearFilters
+                  }
                   className="mt-4 rounded-lg bg-[#12213a] px-4 py-2 text-xs font-semibold text-white"
                 >
                   Clear Filters
@@ -1433,7 +1611,7 @@ export default function InventoryPage() {
 
               <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
 
-                {/* Modal Header */}
+                {/* Header */}
 
                 <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
 
@@ -1443,7 +1621,7 @@ export default function InventoryPage() {
                     </h2>
 
                     <p className="mt-1 text-xs text-gray-500">
-                      Add a new product to inventory.
+                      Add a new product to your inventory.
                     </p>
                   </div>
 
@@ -1462,71 +1640,92 @@ export default function InventoryPage() {
                 {/* Form */}
 
                 <form
-                  onSubmit={handleAddProduct}
+                  onSubmit={
+                    handleAddProduct
+                  }
                   className="space-y-4 p-5"
                 >
 
                   {/* Product Name */}
 
                   <div>
+
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
                       Product Name
                     </label>
 
                     <input
                       type="text"
-                      value={newProduct.name}
+                      value={
+                        newProduct.name
+                      }
                       onChange={(e) =>
-                        setNewProduct({
-                          ...newProduct,
-                          name: e.target.value,
-                        })
+                        setNewProduct(
+                          (current) => ({
+                            ...current,
+                            name:
+                              e.target.value,
+                          })
+                        )
                       }
                       placeholder="Enter product name"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       required
                     />
+
                   </div>
 
                   {/* SKU */}
 
                   <div>
+
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
                       SKU
                     </label>
 
                     <input
                       type="text"
-                      value={newProduct.sku}
-                      onChange={(e) =>
-                        setNewProduct({
-                          ...newProduct,
-                          sku: e.target.value,
-                        })
+                      value={
+                        newProduct.sku
                       }
-                      placeholder="Example: ELC-BT-700"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
+                      onChange={(e) =>
+                        setNewProduct(
+                          (current) => ({
+                            ...current,
+                            sku:
+                              e.target.value,
+                          })
+                        )
+                      }
+                      placeholder="Enter SKU"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
                       required
                     />
+
                   </div>
 
-                  {/* Category + Warehouse */}
+                  {/* Category / Warehouse */}
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Category
                       </label>
 
                       <select
-                        value={newProduct.category}
+                        value={
+                          newProduct.category
+                        }
                         onChange={(e) =>
-                          setNewProduct({
-                            ...newProduct,
-                            category:
-                              e.target.value,
-                          })
+                          setNewProduct(
+                            (current) => ({
+                              ...current,
+                              category:
+                                e.target.value,
+                            })
+                          )
                         }
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       >
@@ -1535,18 +1734,22 @@ export default function InventoryPage() {
                             (item) =>
                               item !== "All"
                           )
-                          .map((item) => (
-                            <option
-                              key={item}
-                              value={item}
-                            >
-                              {item}
-                            </option>
-                          ))}
+                          .map(
+                            (item) => (
+                              <option
+                                key={item}
+                                value={item}
+                              >
+                                {item}
+                              </option>
+                            )
+                          )}
                       </select>
+
                     </div>
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Warehouse
                       </label>
@@ -1556,11 +1759,13 @@ export default function InventoryPage() {
                           newProduct.warehouse
                         }
                         onChange={(e) =>
-                          setNewProduct({
-                            ...newProduct,
-                            warehouse:
-                              e.target.value,
-                          })
+                          setNewProduct(
+                            (current) => ({
+                              ...current,
+                              warehouse:
+                                e.target.value,
+                            })
+                          )
                         }
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       >
@@ -1575,15 +1780,17 @@ export default function InventoryPage() {
                           )
                         )}
                       </select>
+
                     </div>
 
                   </div>
 
-                  {/* Quantity + Reorder Point */}
+                  {/* Quantity / Reorder Point */}
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Initial Quantity
                       </label>
@@ -1595,19 +1802,23 @@ export default function InventoryPage() {
                           newProduct.quantity
                         }
                         onChange={(e) =>
-                          setNewProduct({
-                            ...newProduct,
-                            quantity:
-                              e.target.value,
-                          })
+                          setNewProduct(
+                            (current) => ({
+                              ...current,
+                              quantity:
+                                e.target.value,
+                            })
+                          )
                         }
                         placeholder="0"
                         className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                         required
                       />
+
                     </div>
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Reorder Point
                       </label>
@@ -1619,15 +1830,19 @@ export default function InventoryPage() {
                           newProduct.reorderPoint
                         }
                         onChange={(e) =>
-                          setNewProduct({
-                            ...newProduct,
-                            reorderPoint:
-                              e.target.value,
-                          })
+                          setNewProduct(
+                            (current) => ({
+                              ...current,
+                              reorderPoint:
+                                e.target.value,
+                            })
+                          )
                         }
+                        placeholder="10"
                         className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                         required
                       />
+
                     </div>
 
                   </div>
@@ -1635,6 +1850,7 @@ export default function InventoryPage() {
                   {/* Unit Cost */}
 
                   <div>
+
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
                       Unit Cost
                     </label>
@@ -1647,16 +1863,19 @@ export default function InventoryPage() {
                         newProduct.unitCost
                       }
                       onChange={(e) =>
-                        setNewProduct({
-                          ...newProduct,
-                          unitCost:
-                            e.target.value,
-                        })
+                        setNewProduct(
+                          (current) => ({
+                            ...current,
+                            unitCost:
+                              e.target.value,
+                          })
+                        )
                       }
-                      placeholder="₹0.00"
+                      placeholder="0.00"
                       className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       required
                     />
+
                   </div>
 
                   {/* Buttons */}
@@ -1683,7 +1902,9 @@ export default function InventoryPage() {
                   </div>
 
                 </form>
+
               </div>
+
             </div>
           )}
 
@@ -1707,7 +1928,7 @@ export default function InventoryPage() {
                       </h2>
 
                       <p className="mt-1 text-xs text-gray-500">
-                        Update product information.
+                        Update product and inventory details.
                       </p>
                     </div>
 
@@ -1740,6 +1961,7 @@ export default function InventoryPage() {
                     {/* Product Name */}
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Product Name
                       </label>
@@ -1750,20 +1972,28 @@ export default function InventoryPage() {
                           editingProduct.name
                         }
                         onChange={(e) =>
-                          setEditingProduct({
-                            ...editingProduct,
-                            name: e.target
-                              .value,
-                          })
+                          setEditingProduct(
+                            (current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    name:
+                                      e.target
+                                        .value,
+                                  }
+                                : current
+                          )
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                         required
                       />
+
                     </div>
 
                     {/* SKU */}
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         SKU
                       </label>
@@ -1774,22 +2004,30 @@ export default function InventoryPage() {
                           editingProduct.sku
                         }
                         onChange={(e) =>
-                          setEditingProduct({
-                            ...editingProduct,
-                            sku: e.target
-                              .value,
-                          })
+                          setEditingProduct(
+                            (current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    sku:
+                                      e.target
+                                        .value,
+                                  }
+                                : current
+                          )
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
                         required
                       />
+
                     </div>
 
-                    {/* Category + Warehouse */}
+                    {/* Category / Warehouse */}
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
                       <div>
+
                         <label className="mb-1 block text-xs font-semibold text-gray-700">
                           Category
                         </label>
@@ -1799,33 +2037,48 @@ export default function InventoryPage() {
                             editingProduct.category
                           }
                           onChange={(e) =>
-                            setEditingProduct({
-                              ...editingProduct,
-                              category:
-                                e.target
-                                  .value,
-                            })
+                            setEditingProduct(
+                              (current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      category:
+                                        e.target
+                                          .value,
+                                    }
+                                  : current
+                            )
                           }
                           className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                         >
+
                           {categories
                             .filter(
                               (item) =>
                                 item !==
                                 "All"
                             )
-                            .map((item) => (
-                              <option
-                                key={item}
-                                value={item}
-                              >
-                                {item}
-                              </option>
-                            ))}
+                            .map(
+                              (item) => (
+                                <option
+                                  key={
+                                    item
+                                  }
+                                  value={
+                                    item
+                                  }
+                                >
+                                  {item}
+                                </option>
+                              )
+                            )}
+
                         </select>
+
                       </div>
 
                       <div>
+
                         <label className="mb-1 block text-xs font-semibold text-gray-700">
                           Warehouse
                         </label>
@@ -1835,37 +2088,50 @@ export default function InventoryPage() {
                             editingProduct.warehouse
                           }
                           onChange={(e) =>
-                            setEditingProduct({
-                              ...editingProduct,
-                              warehouse:
-                                e.target
-                                  .value,
-                            })
+                            setEditingProduct(
+                              (current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      warehouse:
+                                        e.target
+                                          .value,
+                                    }
+                                  : current
+                            )
                           }
                           className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                         >
+
                           {warehouses.map(
                             (item) => (
                               <option
-                                key={item}
-                                value={item}
+                                key={
+                                  item
+                                }
+                                value={
+                                  item
+                                }
                               >
                                 {item}
                               </option>
                             )
                           )}
+
                         </select>
+
                       </div>
 
                     </div>
 
-                    {/* Stock + Reorder */}
+                    {/* Stock / Reorder Point */}
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
                       <div>
+
                         <label className="mb-1 block text-xs font-semibold text-gray-700">
-                          On Hand
+                          Current Stock
                         </label>
 
                         <input
@@ -1875,18 +2141,28 @@ export default function InventoryPage() {
                             editingProduct.onHand
                           }
                           onChange={(e) =>
-                            setEditingProduct({
-                              ...editingProduct,
-                              onHand: Number(
-                                e.target.value
-                              ),
-                            })
+                            setEditingProduct(
+                              (current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      onHand:
+                                        Number(
+                                          e.target
+                                            .value
+                                        ),
+                                    }
+                                  : current
+                            )
                           }
                           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                          required
                         />
+
                       </div>
 
                       <div>
+
                         <label className="mb-1 block text-xs font-semibold text-gray-700">
                           Reorder Point
                         </label>
@@ -1898,17 +2174,24 @@ export default function InventoryPage() {
                             editingProduct.reorderPoint
                           }
                           onChange={(e) =>
-                            setEditingProduct({
-                              ...editingProduct,
-                              reorderPoint:
-                                Number(
-                                  e.target
-                                    .value
-                                ),
-                            })
+                            setEditingProduct(
+                              (current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      reorderPoint:
+                                        Number(
+                                          e.target
+                                            .value
+                                        ),
+                                    }
+                                  : current
+                            )
                           }
                           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                          required
                         />
+
                       </div>
 
                     </div>
@@ -1916,6 +2199,7 @@ export default function InventoryPage() {
                     {/* Unit Cost */}
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Unit Cost
                       </label>
@@ -1928,17 +2212,58 @@ export default function InventoryPage() {
                           editingProduct.unitCost
                         }
                         onChange={(e) =>
-                          setEditingProduct({
-                            ...editingProduct,
-                            unitCost:
-                              Number(
-                                e.target
-                                  .value
-                              ),
-                          })
+                          setEditingProduct(
+                            (current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    unitCost:
+                                      Number(
+                                        e.target
+                                          .value
+                                      ),
+                                  }
+                                : current
+                          )
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                        required
+                      />
+
+                    </div>
+
+                    {/* Reserved */}
+
+                    <div>
+
+                      <label className="mb-1 block text-xs font-semibold text-gray-700">
+                        Reserved Quantity
+                      </label>
+
+                      <input
+                        type="number"
+                        min="0"
+                        value={
+                          editingProduct.reserved
+                        }
+                        onChange={(e) =>
+                          setEditingProduct(
+                            (current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    reserved:
+                                      Number(
+                                        e.target
+                                          .value
+                                      ),
+                                  }
+                                : current
+                          )
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       />
+
                     </div>
 
                     {/* Buttons */}
@@ -1970,7 +2295,9 @@ export default function InventoryPage() {
                     </div>
 
                   </form>
+
                 </div>
+
               </div>
             )}
 
@@ -1989,13 +2316,15 @@ export default function InventoryPage() {
                   <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
 
                     <div>
+
                       <h2 className="text-lg font-bold text-[#12213a]">
                         Stock Adjustment
                       </h2>
 
                       <p className="mt-1 text-xs text-gray-500">
-                        {selectedProduct.name}
+                        Adjust inventory quantity for this product.
                       </p>
+
                     </div>
 
                     <button
@@ -2015,18 +2344,46 @@ export default function InventoryPage() {
 
                   </div>
 
-                  {/* Current Stock */}
+                  {/* Product Summary */}
 
-                  <div className="mx-5 mt-5 rounded-lg bg-gray-50 p-4">
+                  <div className="border-b border-gray-200 bg-gray-50 px-5 py-4">
 
                     <div className="flex items-center justify-between">
+
+                      <div>
+
+                        <p className="text-sm font-semibold text-[#12213a]">
+                          {
+                            selectedProduct.name
+                          }
+                        </p>
+
+                        <p className="mt-1 font-mono text-[10px] text-gray-400">
+                          {
+                            selectedProduct.sku
+                          }
+                        </p>
+
+                      </div>
+
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-600">
+                        {
+                          selectedProduct.warehouse
+                        }
+                      </span>
+
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between">
 
                       <span className="text-xs text-gray-500">
                         Current Stock
                       </span>
 
                       <span className="text-lg font-bold text-[#12213a]">
-                        {selectedProduct.onHand}
+                        {
+                          selectedProduct.onHand
+                        }
                       </span>
 
                     </div>
@@ -2059,6 +2416,7 @@ export default function InventoryPage() {
                     {/* Adjustment Type */}
 
                     <div>
+
                       <label className="mb-2 block text-xs font-semibold text-gray-700">
                         Adjustment Type
                       </label>
@@ -2100,11 +2458,13 @@ export default function InventoryPage() {
                         </button>
 
                       </div>
+
                     </div>
 
                     {/* Quantity */}
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Quantity
                       </label>
@@ -2124,11 +2484,13 @@ export default function InventoryPage() {
                         className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                         required
                       />
+
                     </div>
 
                     {/* Reason Code */}
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Reason Code
                       </label>
@@ -2145,6 +2507,7 @@ export default function InventoryPage() {
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                         required
                       >
+
                         <option value="">
                           Select reason
                         </option>
@@ -2176,7 +2539,9 @@ export default function InventoryPage() {
                         <option value="Other">
                           Other
                         </option>
+
                       </select>
+
                     </div>
 
                     {/* Buttons */}
@@ -2208,11 +2573,13 @@ export default function InventoryPage() {
                     </div>
 
                   </form>
+
                 </div>
+
               </div>
             )}
 
-          {/* =================================================
+                      {/* =================================================
               TRANSFER STOCK MODAL
           ================================================= */}
 
@@ -2258,6 +2625,7 @@ export default function InventoryPage() {
                   {/* Product */}
 
                   <div>
+
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
                       Product
                     </label>
@@ -2267,6 +2635,7 @@ export default function InventoryPage() {
                         transferProduct?.id ?? ""
                       }
                       onChange={(e) => {
+
                         const product =
                           products.find(
                             (item) =>
@@ -2280,13 +2649,16 @@ export default function InventoryPage() {
                           setTransferProduct(
                             product
                           );
+
                           setTransferFrom(
                             product.warehouse
                           );
                         }
+
                       }}
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                     >
+
                       <option value="">
                         Select product
                       </option>
@@ -2302,7 +2674,9 @@ export default function InventoryPage() {
                           </option>
                         )
                       )}
+
                     </select>
+
                   </div>
 
                   {/* Current Stock */}
@@ -2339,12 +2713,15 @@ export default function InventoryPage() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         From Warehouse
                       </label>
 
                       <select
-                        value={transferFrom}
+                        value={
+                          transferFrom
+                        }
                         onChange={(e) =>
                           setTransferFrom(
                             e.target.value
@@ -2352,6 +2729,7 @@ export default function InventoryPage() {
                         }
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       >
+
                         <option value="">
                           Select source
                         </option>
@@ -2366,16 +2744,21 @@ export default function InventoryPage() {
                             </option>
                           )
                         )}
+
                       </select>
+
                     </div>
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         To Warehouse
                       </label>
 
                       <select
-                        value={transferTo}
+                        value={
+                          transferTo
+                        }
                         onChange={(e) =>
                           setTransferTo(
                             e.target.value
@@ -2383,6 +2766,7 @@ export default function InventoryPage() {
                         }
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       >
+
                         <option value="">
                           Select destination
                         </option>
@@ -2397,7 +2781,9 @@ export default function InventoryPage() {
                             </option>
                           )
                         )}
+
                       </select>
+
                     </div>
 
                   </div>
@@ -2405,6 +2791,7 @@ export default function InventoryPage() {
                   {/* Quantity */}
 
                   <div>
+
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
                       Transfer Quantity
                     </label>
@@ -2424,17 +2811,21 @@ export default function InventoryPage() {
                       className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       required
                     />
+
                   </div>
 
                   {/* Reason */}
 
                   <div>
+
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
                       Transfer Reason
                     </label>
 
                     <select
-                      value={transferReason}
+                      value={
+                        transferReason
+                      }
                       onChange={(e) =>
                         setTransferReason(
                           e.target.value
@@ -2442,6 +2833,7 @@ export default function InventoryPage() {
                       }
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                     >
+
                       <option value="">
                         Select reason
                       </option>
@@ -2465,7 +2857,9 @@ export default function InventoryPage() {
                       <option value="Other">
                         Other
                       </option>
+
                     </select>
+
                   </div>
 
                   {/* Workflow Status */}
@@ -2518,9 +2912,7 @@ export default function InventoryPage() {
                       type="button"
                       onClick={() => {
                         setShowTransfer(false);
-                        setTransferProduct(
-                          null
-                        );
+                        setTransferProduct(null);
                       }}
                       className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
@@ -2537,7 +2929,9 @@ export default function InventoryPage() {
                   </div>
 
                 </form>
+
               </div>
+
             </div>
           )}
 
@@ -2556,6 +2950,7 @@ export default function InventoryPage() {
                   <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
 
                     <div>
+
                       <h2 className="text-lg font-bold text-[#12213a]">
                         Cycle Count
                       </h2>
@@ -2563,13 +2958,18 @@ export default function InventoryPage() {
                       <p className="mt-1 text-xs text-gray-500">
                         Verify physical stock and calculate variance.
                       </p>
+
                     </div>
 
                     <button
                       type="button"
                       onClick={() => {
-                        setShowCycleCount(false);
-                        setCycleProduct(null);
+                        setShowCycleCount(
+                          false
+                        );
+                        setCycleProduct(
+                          null
+                        );
                       }}
                       className="text-xl text-gray-400 hover:text-gray-700"
                     >
@@ -2579,7 +2979,9 @@ export default function InventoryPage() {
                   </div>
 
                   <form
-                    onSubmit={handleCycleCount}
+                    onSubmit={
+                      handleCycleCount
+                    }
                     className="space-y-4 p-5"
                   >
 
@@ -2588,16 +2990,20 @@ export default function InventoryPage() {
                     <div className="rounded-lg bg-gray-50 p-4">
 
                       <p className="text-sm font-semibold text-[#12213a]">
-                        {cycleProduct.name}
+                        {
+                          cycleProduct.name
+                        }
                       </p>
 
                       <p className="mt-1 font-mono text-[10px] text-gray-400">
-                        {cycleProduct.sku}
+                        {
+                          cycleProduct.sku
+                        }
                       </p>
 
                     </div>
 
-                    {/* System Quantity */}
+                    {/* System / Physical */}
 
                     <div className="grid grid-cols-2 gap-3">
 
@@ -2668,6 +3074,7 @@ export default function InventoryPage() {
                               : "text-gray-600"
                           }`}
                         >
+
                           {Number(
                             physicalQuantity ||
                               0
@@ -2676,11 +3083,13 @@ export default function InventoryPage() {
                           0
                             ? "+"
                             : ""}
+
                           {Number(
                             physicalQuantity ||
                               0
                           ) -
                             cycleProduct.onHand}
+
                         </span>
 
                       </div>
@@ -2690,12 +3099,15 @@ export default function InventoryPage() {
                     {/* Reason */}
 
                     <div>
+
                       <label className="mb-1 block text-xs font-semibold text-gray-700">
                         Count Reason
                       </label>
 
                       <select
-                        value={cycleReason}
+                        value={
+                          cycleReason
+                        }
                         onChange={(e) =>
                           setCycleReason(
                             e.target.value
@@ -2703,6 +3115,7 @@ export default function InventoryPage() {
                         }
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       >
+
                         <option value="">
                           Select reason
                         </option>
@@ -2726,7 +3139,9 @@ export default function InventoryPage() {
                         <option value="Other">
                           Other
                         </option>
+
                       </select>
+
                     </div>
 
                     {/* Buttons */}
@@ -2736,7 +3151,9 @@ export default function InventoryPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          setShowCycleCount(false);
+                          setShowCycleCount(
+                            false
+                          );
                           setCycleProduct(
                             null
                           );
@@ -2756,7 +3173,9 @@ export default function InventoryPage() {
                     </div>
 
                   </form>
+
                 </div>
+
               </div>
             )}
 
@@ -2774,6 +3193,7 @@ export default function InventoryPage() {
                 <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
 
                   <div>
+
                     <h2 className="text-lg font-bold text-[#12213a]">
                       Barcode Scanner
                     </h2>
@@ -2781,6 +3201,7 @@ export default function InventoryPage() {
                     <p className="mt-1 text-xs text-gray-500">
                       Scan a barcode or enter a product SKU.
                     </p>
+
                   </div>
 
                   <button
@@ -2830,19 +3251,24 @@ export default function InventoryPage() {
                     <input
                       autoFocus
                       type="text"
-                      value={barcodeValue}
+                      value={
+                        barcodeValue
+                      }
                       onChange={(e) =>
                         setBarcodeValue(
                           e.target.value
                         )
                       }
                       onKeyDown={(e) => {
+
                         if (
-                          e.key === "Enter"
+                          e.key ===
+                          "Enter"
                         ) {
                           e.preventDefault();
                           handleBarcodeSearch();
                         }
+
                       }}
                       placeholder="Scan or enter SKU..."
                       className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
@@ -2955,7 +3381,9 @@ export default function InventoryPage() {
                   </div>
 
                 </div>
+
               </div>
+
             </div>
           )}
 
@@ -2972,5 +3400,3 @@ export default function InventoryPage() {
     </PageLayout>
   );
 }
-
-

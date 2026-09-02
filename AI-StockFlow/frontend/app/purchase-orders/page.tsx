@@ -1,568 +1,855 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import PageLayout from "../../components/layout/PageLayout";
 
+/* =========================================================
+   TYPES
+========================================================= */
+
+type POStatus =
+  | "Draft"
+  | "Pending Approval"
+  | "Approved"
+  | "Sent"
+  | "Partially Received"
+  | "Received"
+  | "Cancelled";
+
+type PurchaseOrderItem = {
+  product: string;
+  sku: string;
+  ordered: number;
+  received: number;
+  unitPrice: number;
+  total: number;
+};
+
 type PurchaseOrder = {
-  id?: number | string;
-  order_id?: number | string;
-  order_number?: string;
-  po_number?: string;
-
-  supplier?: string;
-  supplier_name?: string;
-
-  status?: string;
-
-  total?: number;
-  total_value?: number;
-  amount?: number;
-
-  order_date?: string;
-  created_at?: string;
-  expected_date?: string;
-  delivery_date?: string;
+  id: string;
+  number: string;
+  supplier: string;
+  supplierGST: string;
+  warehouse: string;
+  requester: string;
+  orderDate: string;
+  expectedDate: string;
+  paymentTerms: string;
+  status: POStatus;
+  notes: string;
+  items: PurchaseOrderItem[];
 };
 
-type PurchaseSummary = {
-  total_orders?: number;
-  draft_orders?: number;
-  submitted_orders?: number;
-  approved_orders?: number;
-  received_orders?: number;
-  cancelled_orders?: number;
-  total_value?: number;
+type NewPOForm = {
+  supplier: string;
+  warehouse: string;
+  requester: string;
+  expectedDate: string;
+  paymentTerms: string;
+  notes: string;
+  product: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
 };
+
+/* =========================================================
+   DEMO PURCHASE ORDERS
+========================================================= */
+
+const initialPurchaseOrders: PurchaseOrder[] = [
+  {
+    id: "1",
+    number: "PO-202608-00001",
+    supplier: "Tech Supplies India",
+    supplierGST: "36AABCT1234F1Z5",
+    warehouse: "Hyderabad Central",
+    requester: "Inventory Team",
+    orderDate: "25 Aug 2026",
+    expectedDate: "05 Sept 2026",
+    paymentTerms: "30 days",
+    status: "Approved",
+    notes: "Created from approved purchase request PR-2026-001.",
+    items: [
+      {
+        product: "Wireless Keyboard",
+        sku: "KB-WL-001",
+        ordered: 250,
+        received: 0,
+        unitPrice: 850,
+        total: 212500,
+      },
+    ],
+  },
+
+  {
+    id: "2",
+    number: "PO-202608-00002",
+    supplier: "Digital World",
+    supplierGST: "29AABCD5678G1Z2",
+    warehouse: "Bengaluru Warehouse",
+    requester: "Sales Team",
+    orderDate: "24 Aug 2026",
+    expectedDate: "02 Sept 2026",
+    paymentTerms: "30 days",
+    status: "Sent",
+    notes: "Purchase order sent to supplier.",
+    items: [
+      {
+        product: "USB Microphone",
+        sku: "MIC-USB-002",
+        ordered: 150,
+        received: 0,
+        unitPrice: 1250,
+        total: 187500,
+      },
+    ],
+  },
+
+  {
+    id: "3",
+    number: "PO-202608-00003",
+    supplier: "Metro Electronics",
+    supplierGST: "27AABCM9012H1Z8",
+    warehouse: "Mumbai Distribution Hub",
+    requester: "IT Department",
+    orderDate: "22 Aug 2026",
+    expectedDate: "12 Sept 2026",
+    paymentTerms: "45 days",
+    status: "Partially Received",
+    notes: "Partial shipment received from supplier.",
+    items: [
+      {
+        product: "24-inch Monitor",
+        sku: "MON-24-004",
+        ordered: 100,
+        received: 40,
+        unitPrice: 14200,
+        total: 1420000,
+      },
+    ],
+  },
+
+  {
+    id: "4",
+    number: "PO-202608-00004",
+    supplier: "Office Mart",
+    supplierGST: "07AABCO3456J1Z1",
+    warehouse: "Delhi Store Center",
+    requester: "Administration",
+    orderDate: "20 Aug 2026",
+    expectedDate: "10 Sept 2026",
+    paymentTerms: "30 days",
+    status: "Draft",
+    notes: "Draft purchase order awaiting approval.",
+    items: [
+      {
+        product: "Office Chair",
+        sku: "CHA-OFC-003",
+        ordered: 80,
+        received: 0,
+        unitPrice: 5200,
+        total: 416000,
+      },
+    ],
+  },
+
+  {
+    id: "5",
+    number: "PO-202608-00005",
+    supplier: "Industrial Solutions",
+    supplierGST: "33AABCI7890K1Z4",
+    warehouse: "Pune Distribution Center",
+    requester: "Warehouse Team",
+    orderDate: "18 Aug 2026",
+    expectedDate: "15 Sept 2026",
+    paymentTerms: "30 days",
+    status: "Received",
+    notes: "All ordered quantities received.",
+    items: [
+      {
+        product: "Storage Bins",
+        sku: "BIN-ST-005",
+        ordered: 120,
+        received: 120,
+        unitPrice: 680,
+        total: 81600,
+      },
+    ],
+  },
+
+  {
+    id: "6",
+    number: "PO-202608-00006",
+    supplier: "Retail Systems",
+    supplierGST: "36AABCR4567L1Z8",
+    warehouse: "Hyderabad Central",
+    requester: "Warehouse Team",
+    orderDate: "17 Aug 2026",
+    expectedDate: "08 Sept 2026",
+    paymentTerms: "30 days",
+    status: "Cancelled",
+    notes: "Order cancelled after budget review.",
+    items: [
+      {
+        product: "Barcode Scanner",
+        sku: "SCAN-BAR-006",
+        ordered: 25,
+        received: 0,
+        unitPrice: 3500,
+        total: 87500,
+      },
+    ],
+  },
+];
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const statusTabs: Array<"All" | POStatus> = [
+  "All",
+  "Draft",
+  "Pending Approval",
+  "Approved",
+  "Sent",
+  "Partially Received",
+  "Received",
+  "Cancelled",
+];
+
+function money(value: number) {
+  return `₹${Number(value || 0).toLocaleString("en-IN")}`;
+}
+
+function getPOValue(po: PurchaseOrder) {
+  return po.items.reduce((sum, item) => sum + item.total, 0);
+}
+
+function getStatusClass(status: POStatus) {
+  switch (status) {
+    case "Approved":
+      return "bg-emerald-100 text-emerald-700";
+
+    case "Sent":
+      return "bg-blue-100 text-blue-700";
+
+    case "Partially Received":
+      return "bg-amber-100 text-amber-700";
+
+    case "Received":
+      return "bg-emerald-100 text-emerald-700";
+
+    case "Cancelled":
+      return "bg-red-100 text-red-700";
+
+    case "Pending Approval":
+      return "bg-orange-100 text-orange-700";
+
+    case "Draft":
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
+}
+
+/* =========================================================
+   PAGE
+========================================================= */
 
 export default function PurchaseOrdersPage() {
-  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-  const [summary, setSummary] = useState<PurchaseSummary | null>(null);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(
+    initialPurchaseOrders
+  );
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
 
-  const [selectedOrder, setSelectedOrder] =
+  const [activeStatus, setActiveStatus] =
+    useState<"All" | POStatus>("All");
+
+  const [selectedPO, setSelectedPO] =
     useState<PurchaseOrder | null>(null);
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreatePO, setShowCreatePO] = useState(false);
 
-  // ------------------------------------------------------------
-  // LOAD FRONTEND DEMO DATA
-  // ------------------------------------------------------------
+  const [newPO, setNewPO] = useState<NewPOForm>({
+    supplier: "",
+    warehouse: "Hyderabad Central",
+    requester: "",
+    expectedDate: "",
+    paymentTerms: "30 days",
+    notes: "",
+    product: "",
+    sku: "",
+    quantity: 1,
+    unitPrice: 0,
+  });
 
   useEffect(() => {
-    loadPurchaseOrders();
-  }, []);
+  const savedOrders = localStorage.getItem(
+    "stockflow-purchase-orders"
+  );
 
-  async function loadPurchaseOrders() {
-    try {
-      setLoading(true);
-      setError("");
-
-      // Frontend-only demo data.
-      // Backend Purchase Order API is not connected here.
-
-      const demoOrders: PurchaseOrder[] = [
-        {
-          id: 1,
-          order_number: "PO-1001",
-          supplier_name: "Tech Supplies India",
-          status: "Approved",
-          total_value: 125000,
-          order_date: "2026-08-10",
-          expected_date: "2026-08-20",
-        },
-        {
-          id: 2,
-          order_number: "PO-1002",
-          supplier_name: "Global Electronics",
-          status: "Pending",
-          total_value: 87500,
-          order_date: "2026-08-11",
-          expected_date: "2026-08-23",
-        },
-        {
-          id: 3,
-          order_number: "PO-1003",
-          supplier_name: "Smart Components Pvt Ltd",
-          status: "Submitted",
-          total_value: 156000,
-          order_date: "2026-08-12",
-          expected_date: "2026-08-25",
-        },
-        {
-          id: 4,
-          order_number: "PO-1004",
-          supplier_name: "Digital World Traders",
-          status: "Received",
-          total_value: 98500,
-          order_date: "2026-08-08",
-          expected_date: "2026-08-15",
-        },
-        {
-          id: 5,
-          order_number: "PO-1005",
-          supplier_name: "Prime Tech Solutions",
-          status: "Approved",
-          total_value: 142750,
-          order_date: "2026-08-13",
-          expected_date: "2026-08-28",
-        },
-        {
-          id: 6,
-          order_number: "PO-1006",
-          supplier_name: "ABC Office Systems",
-          status: "Draft",
-          total_value: 54000,
-          order_date: "2026-08-14",
-          expected_date: "2026-08-30",
-        },
-      ];
-
-      const demoSummary: PurchaseSummary = {
-        total_orders: 6,
-        draft_orders: 1,
-        submitted_orders: 1,
-        approved_orders: 2,
-        received_orders: 1,
-        cancelled_orders: 0,
-        total_value: 663750,
-      };
-
-      setOrders(demoOrders);
-      setSummary(demoSummary);
-    } catch (err) {
-      console.error("Purchase Orders error:", err);
-      setError("Unable to load purchase orders.");
-    } finally {
-      setLoading(false);
-    }
+  if (!savedOrders) {
+    return;
   }
 
-  // ------------------------------------------------------------
-  // HELPER FUNCTIONS
-  // ------------------------------------------------------------
+  try {
+    const parsedOrders =
+      JSON.parse(savedOrders);
 
-  const getOrderNumber = (order: PurchaseOrder) => {
-    return (
-      order.order_number ??
-      order.po_number ??
-      order.order_id ??
-      order.id ??
-      "-"
-    );
-  };
-
-  const getSupplier = (order: PurchaseOrder) => {
-    return order.supplier_name ?? order.supplier ?? "-";
-  };
-
-  const getAmount = (order: PurchaseOrder) => {
-    return Number(
-      order.total_value ??
-        order.total ??
-        order.amount ??
-        0
-    );
-  };
-
-  const getOrderDate = (order: PurchaseOrder) => {
-    return order.order_date ?? order.created_at ?? "-";
-  };
-
-  const getExpectedDate = (order: PurchaseOrder) => {
-    return order.expected_date ?? order.delivery_date ?? "-";
-  };
-
-  const getStatus = (order: PurchaseOrder) => {
-    return order.status ?? "Pending";
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 2,
-    }).format(value);
-  };
-
-  const formatDate = (value: string) => {
-    if (!value || value === "-") {
-      return "-";
+    if (Array.isArray(parsedOrders)) {
+      setPurchaseOrders(parsedOrders);
     }
+  } catch {
+    localStorage.removeItem(
+      "stockflow-purchase-orders"
+    );
+  }
+}, []);
 
-    const date = new Date(value);
+useEffect(() => {
+  localStorage.setItem(
+    "stockflow-purchase-orders",
+    JSON.stringify(purchaseOrders)
+  );
+}, [purchaseOrders]);
 
-    if (Number.isNaN(date.getTime())) {
-      return value;
-    }
-
-    return date.toLocaleDateString("en-IN");
-  };
-
-  // ------------------------------------------------------------
-  // SEARCH + FILTER
-  // ------------------------------------------------------------
+  /* =========================================================
+     FILTERING
+  ========================================================= */
 
   const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const orderNumber = String(
-        getOrderNumber(order)
-      ).toLowerCase();
+    const query = search.trim().toLowerCase();
 
-      const supplier = String(
-        getSupplier(order)
-      ).toLowerCase();
-
-      const status = String(
-        getStatus(order)
-      ).toLowerCase();
-
-      const searchValue = search.toLowerCase().trim();
-
+    return purchaseOrders.filter((po) => {
       const matchesSearch =
-        !searchValue ||
-        orderNumber.includes(searchValue) ||
-        supplier.includes(searchValue) ||
-        status.includes(searchValue);
+        !query ||
+        po.number.toLowerCase().includes(query) ||
+        po.supplier.toLowerCase().includes(query) ||
+        po.warehouse.toLowerCase().includes(query) ||
+        po.requester.toLowerCase().includes(query) ||
+        po.items.some(
+          (item) =>
+            item.product.toLowerCase().includes(query) ||
+            item.sku.toLowerCase().includes(query)
+        );
 
       const matchesStatus =
-        statusFilter === "All" ||
-        status === statusFilter.toLowerCase();
+        activeStatus === "All" || po.status === activeStatus;
 
       return matchesSearch && matchesStatus;
     });
-  }, [orders, search, statusFilter]);
+  }, [purchaseOrders, search, activeStatus]);
 
-  // ------------------------------------------------------------
-  // SUMMARY VALUES
-  // ------------------------------------------------------------
+  /* =========================================================
+     KPI VALUES
+  ========================================================= */
 
-  const totalOrders =
-    summary?.total_orders ?? orders.length;
+  const totalOrders = purchaseOrders.length;
 
-  const totalValue =
-    summary?.total_value ??
-    orders.reduce(
-      (sum, order) => sum + getAmount(order),
-      0
+  const pendingApproval = purchaseOrders.filter(
+    (po) => po.status === "Pending Approval"
+  ).length;
+
+  const approvedOrSent = purchaseOrders.filter(
+    (po) =>
+      po.status === "Approved" ||
+      po.status === "Sent"
+  ).length;
+
+  const totalValue = purchaseOrders
+    .filter((po) => po.status !== "Cancelled")
+    .reduce((sum, po) => sum + getPOValue(po), 0);
+
+  const draftCount = purchaseOrders.filter(
+    (po) => po.status === "Draft"
+  ).length;
+
+  const partiallyReceivedCount = purchaseOrders.filter(
+    (po) => po.status === "Partially Received"
+  ).length;
+
+  const receivedCount = purchaseOrders.filter(
+    (po) => po.status === "Received"
+  ).length;
+
+  const cancelledCount = purchaseOrders.filter(
+    (po) => po.status === "Cancelled"
+  ).length;
+
+  const outstandingValue = purchaseOrders
+    .filter(
+      (po) =>
+        po.status !== "Received" &&
+        po.status !== "Cancelled"
+    )
+    .reduce((sum, po) => sum + getPOValue(po), 0);
+
+  /* =========================================================
+     ACTIONS
+  ========================================================= */
+
+  const handleSendPO = (id: string) => {
+    setPurchaseOrders((current) =>
+      current.map((po) =>
+        po.id === id
+          ? {
+              ...po,
+              status: "Sent",
+            }
+          : po
+      )
     );
 
-  const approvedOrders =
-    summary?.approved_orders ??
-    orders.filter(
-      (order) =>
-        getStatus(order).toLowerCase() === "approved"
-    ).length;
-
-  const receivedOrders =
-    summary?.received_orders ??
-    orders.filter(
-      (order) =>
-        getStatus(order).toLowerCase() === "received"
-    ).length;
-
-  const pendingOrders = orders.filter((order) => {
-    const status = getStatus(order).toLowerCase();
-
-    return (
-      status === "pending" ||
-      status === "draft" ||
-      status === "submitted"
+    setSelectedPO((current) =>
+      current?.id === id
+        ? {
+            ...current,
+            status: "Sent",
+          }
+        : current
     );
-  }).length;
-
-  // ------------------------------------------------------------
-  // STATUS STYLES
-  // ------------------------------------------------------------
-
-  const statusClasses = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "approved":
-        return "bg-green-50 text-green-700 border-green-200";
-
-      case "received":
-        return "bg-blue-50 text-blue-700 border-blue-200";
-
-      case "submitted":
-        return "bg-yellow-50 text-yellow-700 border-yellow-200";
-
-      case "draft":
-        return "bg-gray-100 text-gray-700 border-gray-200";
-
-      case "cancelled":
-      case "canceled":
-        return "bg-red-50 text-red-700 border-red-200";
-
-      case "pending":
-        return "bg-orange-50 text-orange-700 border-orange-200";
-
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
   };
 
-  // ------------------------------------------------------------
-  // UI
-  // ------------------------------------------------------------
+  const handleApprovePO = (id: string) => {
+    setPurchaseOrders((current) =>
+      current.map((po) =>
+        po.id === id
+          ? {
+              ...po,
+              status: "Approved",
+            }
+          : po
+      )
+    );
+
+    setSelectedPO((current) =>
+      current?.id === id
+        ? {
+            ...current,
+            status: "Approved",
+          }
+        : current
+    );
+  };
+
+  const handleCancelPO = (id: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this purchase order?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setPurchaseOrders((current) =>
+      current.map((po) =>
+        po.id === id
+          ? {
+              ...po,
+              status: "Cancelled",
+            }
+          : po
+      )
+    );
+
+    setSelectedPO((current) =>
+      current?.id === id
+        ? {
+            ...current,
+            status: "Cancelled",
+          }
+        : current
+    );
+  };
+
+  const resetNewPO = () => {
+    setNewPO({
+      supplier: "",
+      warehouse: "Hyderabad Central",
+      requester: "",
+      expectedDate: "",
+      paymentTerms: "30 days",
+      notes: "",
+      product: "",
+      sku: "",
+      quantity: 1,
+      unitPrice: 0,
+    });
+  };
+
+  const handleCreatePO = () => {
+    if (
+      !newPO.supplier.trim() ||
+      !newPO.requester.trim() ||
+      !newPO.expectedDate ||
+      !newPO.product.trim() ||
+      !newPO.sku.trim() ||
+      newPO.quantity <= 0 ||
+      newPO.unitPrice <= 0
+    ) {
+      window.alert(
+        "Please fill all required fields."
+      );
+      return;
+    }
+
+    const nextNumber =
+      purchaseOrders.length + 1;
+
+    const newPurchaseOrder: PurchaseOrder = {
+      id: Date.now().toString(),
+
+      number: `PO-202608-${String(
+        nextNumber
+      ).padStart(5, "0")}`,
+
+      supplier: newPO.supplier,
+
+      supplierGST: "GSTIN-PENDING",
+
+      warehouse: newPO.warehouse,
+
+      requester: newPO.requester,
+
+      orderDate:
+        new Date().toLocaleDateString(
+          "en-GB",
+          {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }
+        ),
+
+      expectedDate:
+        new Date(
+          `${newPO.expectedDate}T00:00:00`
+        ).toLocaleDateString(
+          "en-GB",
+          {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }
+        ),
+
+      paymentTerms: newPO.paymentTerms,
+
+      status: "Draft",
+
+      notes:
+        newPO.notes ||
+        "Purchase order created manually.",
+
+      items: [
+        {
+          product: newPO.product,
+
+          sku: newPO.sku,
+
+          ordered: newPO.quantity,
+
+          received: 0,
+
+          unitPrice: newPO.unitPrice,
+
+          total:
+            newPO.quantity *
+            newPO.unitPrice,
+        },
+      ],
+    };
+
+    setPurchaseOrders((current) => [
+      newPurchaseOrder,
+      ...current,
+    ]);
+
+    setShowCreatePO(false);
+
+    resetNewPO();
+  };
+
+    /* =========================================================
+     CREATE PO TOTAL
+  ========================================================= */
+
+  const newPOTotal =
+    Number(newPO.quantity || 0) *
+    Number(newPO.unitPrice || 0);
+
+  /* =========================================================
+     RENDER
+  ========================================================= */
 
   return (
     <PageLayout>
-    <main className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className="min-h-screen bg-[#f5f7fa] px-5 py-6">
+        <div className="mx-auto max-w-7xl">
 
-        {/* HEADER */}
+          {/* =================================================
+              HEADER
+          ================================================= */}
 
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Purchase Orders
-            </h1>
+          <div className="mb-6 flex items-start justify-between">
 
-            <p className="mt-1 text-sm text-gray-500">
-              Manage purchase orders, suppliers and procurement activity
-            </p>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Purchase Orders
+              </h1>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Manage purchase orders, approvals, supplier
+                communication and receipts.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowCreatePO(true)}
+              className="rounded-md bg-[#12213a] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1b3152]"
+            >
+              + New Purchase Order
+            </button>
+
           </div>
 
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-          >
-            + Create Purchase Order
-          </button>
-        </div>
+          {/* =================================================
+              KPI CARDS
+          ================================================= */}
 
-        {/* ERROR */}
+          <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-4">
 
-        {error && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+            {/* Total Orders */}
+
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Total Orders
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {totalOrders}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                All purchase orders
+              </p>
+
+            </div>
+
+            {/* Pending Approval */}
+
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Pending Approval
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-orange-500">
+                {pendingApproval}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Require approval
+              </p>
+
+            </div>
+
+            {/* Approved / Sent */}
+
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Approved / Sent
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-blue-600">
+                {approvedOrSent}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Ready or sent to supplier
+              </p>
+
+            </div>
+
+            {/* Total Value */}
+
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Total Value
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-emerald-600">
+                {money(totalValue)}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Active order value
+              </p>
+
+            </div>
+
           </div>
-        )}
 
-        {/* SUMMARY CARDS */}
+          {/* =================================================
+              SEARCH + STATUS FILTERS
+          ================================================= */}
 
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
-          {/* TOTAL ORDERS */}
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">
-              Total Orders
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-gray-900">
-              {loading ? "..." : totalOrders}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              All purchase orders
-            </p>
-          </div>
-
-          {/* TOTAL VALUE */}
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">
-              Total Value
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-gray-900">
-              {loading
-                ? "..."
-                : formatCurrency(totalValue)}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Purchase order value
-            </p>
-          </div>
-
-          {/* APPROVED */}
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">
-              Approved
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-green-600">
-              {loading ? "..." : approvedOrders}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Approved orders
-            </p>
-          </div>
-
-          {/* PENDING */}
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">
-              Pending
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-orange-600">
-              {loading ? "..." : pendingOrders}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Awaiting action
-            </p>
-          </div>
-        </div>
-
-        {/* FILTER BAR */}
-
-        <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row">
-
-            <div className="flex-1">
               <input
                 type="text"
                 value={search}
                 onChange={(event) =>
                   setSearch(event.target.value)
                 }
-                placeholder="Search order number, supplier or status..."
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                placeholder="Search PO, supplier, product, SKU..."
+                className="min-w-0 flex-1 rounded-md border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
               />
-            </div>
 
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value)
-              }
-              className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-            >
-              <option value="All">
-                All Status
-              </option>
+              <div className="flex flex-wrap gap-2">
 
-              <option value="Draft">
-                Draft
-              </option>
+                {statusTabs.map((status) => {
 
-              <option value="Submitted">
-                Submitted
-              </option>
+                  const isActive =
+                    activeStatus === status;
 
-              <option value="Approved">
-                Approved
-              </option>
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() =>
+                        setActiveStatus(status)
+                      }
+                      className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${
+                        isActive
+                          ? "border-[#12213a] bg-[#12213a] text-white"
+                          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  );
+                })}
 
-              <option value="Received">
-                Received
-              </option>
-
-              <option value="Pending">
-                Pending
-              </option>
-
-              <option value="Cancelled">
-                Cancelled
-              </option>
-            </select>
-
-            <button
-              onClick={loadPurchaseOrders}
-              className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        {/* PURCHASE ORDERS TABLE */}
-
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-
-          <div className="border-b border-gray-200 px-6 py-5">
-            <div className="flex items-center justify-between">
-
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Purchase Orders
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Recent procurement activity
-                </p>
               </div>
 
-              <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
-                Demo Data
-              </span>
-
             </div>
+
           </div>
 
-          {loading ? (
-            <div className="px-6 py-16 text-center">
+          {/* =================================================
+              SUMMARY LINE
+          ================================================= */}
 
-              <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+          <div className="mb-5 flex flex-wrap items-center gap-4 px-1 text-xs text-slate-500">
 
-              <p className="text-sm text-gray-500">
-                Loading purchase orders...
+            <span>
+              Draft:{" "}
+              <strong className="text-slate-700">
+                {draftCount}
+              </strong>
+            </span>
+
+            <span>
+              Partially Received:{" "}
+              <strong className="text-slate-700">
+                {partiallyReceivedCount}
+              </strong>
+            </span>
+
+            <span>
+              Received:{" "}
+              <strong className="text-slate-700">
+                {receivedCount}
+              </strong>
+            </span>
+
+            <span>
+              Cancelled:{" "}
+              <strong className="text-slate-700">
+                {cancelledCount}
+              </strong>
+            </span>
+
+            <span>
+              Outstanding Value:{" "}
+              <strong className="text-slate-700">
+                {money(outstandingValue)}
+              </strong>
+            </span>
+
+          </div>
+
+          {/* =================================================
+              PURCHASE ORDER TABLE
+          ================================================= */}
+
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+
+            {/* Table Header */}
+
+            <div className="border-b border-slate-200 px-5 py-4">
+
+              <h2 className="text-base font-bold text-slate-900">
+                Purchase Orders
+              </h2>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Showing{" "}
+                {filteredOrders.length} of{" "}
+                {purchaseOrders.length} purchase orders
               </p>
 
             </div>
-          ) : filteredOrders.length === 0 ? (
-
-            <div className="px-6 py-16 text-center">
-
-              <div className="mb-3 text-4xl">
-                📦
-              </div>
-
-              <h3 className="text-lg font-semibold text-gray-900">
-                No purchase orders found
-              </h3>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Try changing your search or status filter.
-              </p>
-
-            </div>
-
-          ) : (
 
             <div className="overflow-x-auto">
 
-              <table className="w-full min-w-[900px] text-left">
+              <table className="w-full min-w-[1100px] text-left">
 
-                <thead className="border-b border-gray-200 bg-gray-50">
+                <thead>
 
-                  <tr>
+                  <tr className="border-b border-slate-200 bg-slate-50">
 
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Order Number
+                    <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      PO Number
                     </th>
 
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                       Supplier
                     </th>
 
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                       Order Date
                     </th>
 
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                       Expected
                     </th>
 
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Amount
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Items
                     </th>
 
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Value
+                    </th>
+
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                       Status
                     </th>
 
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                       Action
                     </th>
 
@@ -570,79 +857,149 @@ export default function PurchaseOrdersPage() {
 
                 </thead>
 
-                <tbody className="divide-y divide-gray-100">
+                <tbody>
 
-                  {filteredOrders.map((order, index) => {
+                  {filteredOrders.map((po) => {
 
-                    const status = getStatus(order);
+                    const orderValue =
+                      getPOValue(po);
+
+                    const totalItems =
+                      po.items.reduce(
+                        (sum, item) =>
+                          sum + item.ordered,
+                        0
+                      );
 
                     return (
                       <tr
-                        key={
-                          order.id ??
-                          order.order_id ??
-                          `${getOrderNumber(order)}-${index}`
-                        }
-                        className="transition hover:bg-gray-50"
+                        key={po.id}
+                        className="border-b border-slate-100 hover:bg-slate-50"
                       >
 
-                        <td className="px-6 py-4">
+                        {/* PO Number */}
+
+                        <td className="px-5 py-4">
 
                           <button
+                            type="button"
                             onClick={() =>
-                              setSelectedOrder(order)
+                              setSelectedPO(po)
                             }
-                            className="font-semibold text-blue-600 hover:text-blue-800"
+                            className="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline"
                           >
-                            {getOrderNumber(order)}
+                            {po.number}
                           </button>
 
+                          <div className="mt-1 text-[10px] text-slate-400">
+                            {po.warehouse}
+                          </div>
+
                         </td>
 
-                        <td className="px-6 py-4 text-sm text-gray-700">
-                          {getSupplier(order)}
+                        {/* Supplier */}
+
+                        <td className="px-4 py-4">
+
+                          <div className="text-sm font-semibold text-slate-800">
+                            {po.supplier}
+                          </div>
+
+                          <div className="mt-1 text-[10px] text-slate-400">
+                            {po.supplierGST}
+                          </div>
+
                         </td>
 
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {formatDate(
-                            String(getOrderDate(order))
-                          )}
+                        {/* Order Date */}
+
+                        <td className="px-4 py-4 text-sm text-slate-600">
+                          {po.orderDate}
                         </td>
 
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {formatDate(
-                            String(getExpectedDate(order))
-                          )}
+                        {/* Expected Date */}
+
+                        <td className="px-4 py-4 text-sm text-slate-600">
+                          {po.expectedDate}
                         </td>
 
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                          {formatCurrency(
-                            getAmount(order)
-                          )}
+                        {/* Items */}
+
+                        <td className="px-4 py-4">
+
+                          <div className="text-sm font-semibold text-slate-700">
+                            {po.items.length}
+                          </div>
+
+                          <div className="mt-1 text-[10px] text-slate-400">
+                            {totalItems} units
+                          </div>
+
                         </td>
 
-                        <td className="px-6 py-4">
+                        {/* Value */}
+
+                        <td className="px-4 py-4 text-right text-sm font-semibold text-slate-800">
+                          {money(orderValue)}
+                        </td>
+
+                        {/* Status */}
+
+                        <td className="px-4 py-4">
 
                           <span
-                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${statusClasses(
-                              status
+                            className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${getStatusClass(
+                              po.status
                             )}`}
                           >
-                            {status}
+                            {po.status}
                           </span>
 
                         </td>
 
-                        <td className="px-6 py-4">
+                        {/* Actions */}
 
-                          <button
-                            onClick={() =>
-                              setSelectedOrder(order)
-                            }
-                            className="text-sm font-medium text-blue-600 hover:text-blue-800"
-                          >
-                            View
-                          </button>
+                        <td className="px-5 py-4">
+
+                          <div className="flex justify-end gap-2">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedPO(po)
+                              }
+                              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              View
+                            </button>
+
+                            {po.status === "Approved" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleSendPO(po.id)
+                                }
+                                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                              >
+                                Send
+                              </button>
+                            )}
+
+                            {po.status === "Pending Approval" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleApprovePO(
+                                    po.id
+                                  )
+                                }
+                                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                              >
+                                Approve
+                              </button>
+                            )}
+
+                          </div>
 
                         </td>
 
@@ -650,304 +1007,870 @@ export default function PurchaseOrdersPage() {
                     );
                   })}
 
+                  {/* Empty State */}
+
+                  {filteredOrders.length === 0 && (
+                    <tr>
+
+                      <td
+                        colSpan={8}
+                        className="px-5 py-14 text-center"
+                      >
+
+                        <p className="text-sm font-semibold text-slate-700">
+                          No purchase orders found
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-400">
+                          Try changing your search or
+                          status filter.
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearch("");
+                            setActiveStatus("All");
+                          }}
+                          className="mt-4 rounded-md border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                          Clear Filters
+                        </button>
+
+                      </td>
+
+                    </tr>
+                  )}
+
                 </tbody>
 
               </table>
 
             </div>
-          )}
-
-          {/* TABLE FOOTER */}
-
-          {!loading && filteredOrders.length > 0 && (
-            <div className="border-t border-gray-200 px-6 py-4">
-
-              <p className="text-sm text-gray-500">
-
-                Showing{" "}
-
-                <span className="font-medium text-gray-900">
-                  {filteredOrders.length}
-                </span>{" "}
-
-                of{" "}
-
-                <span className="font-medium text-gray-900">
-                  {orders.length}
-                </span>{" "}
-
-                purchase orders
-
-              </p>
-
-            </div>
-          )}
-
-        </div>
-
-        {/* ADDITIONAL SUMMARY */}
-
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-
-            <p className="text-sm text-gray-500">
-              Received Orders
-            </p>
-
-            <p className="mt-2 text-xl font-bold text-blue-600">
-              {receivedOrders}
-            </p>
-
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-
-            <p className="text-sm text-gray-500">
-              Submitted Orders
-            </p>
-
-            <p className="mt-2 text-xl font-bold text-yellow-600">
-              {summary?.submitted_orders ?? 0}
-            </p>
-
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-
-            <p className="text-sm text-gray-500">
-              Cancelled Orders
-            </p>
-
-            <p className="mt-2 text-xl font-bold text-red-600">
-              {summary?.cancelled_orders ?? 0}
-            </p>
 
           </div>
 
         </div>
-
       </div>
 
-      {/* =====================================================
-          VIEW ORDER MODAL
-      ====================================================== */}
+            {/* =====================================================
+          PURCHASE ORDER DETAIL MODAL
+      ===================================================== */}
 
-      {selectedOrder && (
+      {selectedPO && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={() => setSelectedOrder(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setSelectedPO(null)}
         >
-
           <div
-            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
+            className="w-full max-w-4xl overflow-hidden rounded-xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
           >
 
-            <div className="mb-6 flex items-center justify-between">
+            {/* Modal Header */}
+
+            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
 
               <div>
-
-                <h2 className="text-xl font-bold text-gray-900">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">
                   Purchase Order
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  {getOrderNumber(selectedOrder)}
                 </p>
 
+                <h2 className="mt-1 text-xl font-bold text-slate-900">
+                  {selectedPO.number}
+                </h2>
               </div>
 
               <button
-                onClick={() =>
-                  setSelectedOrder(null)
-                }
-                className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
+                type="button"
+                onClick={() => setSelectedPO(null)}
+                className="text-xl text-slate-400 hover:text-slate-700"
+                aria-label="Close"
               >
-                ✕
+                ×
               </button>
 
             </div>
 
-            <div className="space-y-4">
+            {/* PO Information */}
 
-              <div className="flex justify-between border-b pb-3">
+            <div className="grid grid-cols-1 gap-5 border-b border-slate-200 px-6 py-5 md:grid-cols-3">
 
-                <span className="text-sm text-gray-500">
-                  Order Number
-                </span>
-
-                <span className="text-sm font-semibold text-gray-900">
-                  {getOrderNumber(selectedOrder)}
-                </span>
-
-              </div>
-
-              <div className="flex justify-between border-b pb-3">
-
-                <span className="text-sm text-gray-500">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   Supplier
-                </span>
+                </p>
 
-                <span className="text-sm font-semibold text-gray-900">
-                  {getSupplier(selectedOrder)}
-                </span>
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {selectedPO.supplier}
+                </p>
 
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {selectedPO.supplierGST}
+                </p>
               </div>
 
-              <div className="flex justify-between border-b pb-3">
-
-                <span className="text-sm text-gray-500">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   Order Date
-                </span>
+                </p>
 
-                <span className="text-sm font-semibold text-gray-900">
-                  {formatDate(
-                    String(
-                      getOrderDate(selectedOrder)
-                    )
-                  )}
-                </span>
-
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {selectedPO.orderDate}
+                </p>
               </div>
 
-              <div className="flex justify-between border-b pb-3">
-
-                <span className="text-sm text-gray-500">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   Expected Date
-                </span>
+                </p>
 
-                <span className="text-sm font-semibold text-gray-900">
-                  {formatDate(
-                    String(
-                      getExpectedDate(selectedOrder)
-                    )
-                  )}
-                </span>
-
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {selectedPO.expectedDate}
+                </p>
               </div>
 
-              <div className="flex justify-between border-b pb-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Warehouse
+                </p>
 
-                <span className="text-sm text-gray-500">
-                  Total Amount
-                </span>
-
-                <span className="text-lg font-bold text-gray-900">
-                  {formatCurrency(
-                    getAmount(selectedOrder)
-                  )}
-                </span>
-
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {selectedPO.warehouse}
+                </p>
               </div>
 
-              <div className="flex justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Requester
+                </p>
 
-                <span className="text-sm text-gray-500">
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {selectedPO.requester}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Payment Terms
+                </p>
+
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {selectedPO.paymentTerms}
+                </p>
+              </div>
+
+              <div className="md:col-span-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   Status
-                </span>
+                </p>
 
                 <span
-                  className={`rounded-full border px-3 py-1 text-xs font-medium ${statusClasses(
-                    getStatus(selectedOrder)
+                  className={`mt-2 inline-flex rounded-full px-3 py-1 text-[10px] font-semibold ${getStatusClass(
+                    selectedPO.status
                   )}`}
                 >
-                  {getStatus(selectedOrder)}
+                  {selectedPO.status}
                 </span>
-
               </div>
 
             </div>
 
-            <button
-              onClick={() =>
-                setSelectedOrder(null)
-              }
-              className="mt-6 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              Close
-            </button>
+            {/* Order Items */}
+
+            <div className="px-6 py-5">
+
+              <h3 className="mb-3 text-sm font-bold text-slate-900">
+                Order Items
+              </h3>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+
+                <div className="overflow-x-auto">
+
+                  <table className="w-full min-w-[700px] text-left">
+
+                    <thead>
+
+                      <tr className="border-b border-slate-200 bg-slate-50">
+
+                        <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                          Product
+                        </th>
+
+                        <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                          SKU
+                        </th>
+
+                        <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                          Ordered
+                        </th>
+
+                        <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                          Received
+                        </th>
+
+                        <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                          Unit Price
+                        </th>
+
+                        <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                          Total
+                        </th>
+
+                      </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                      {selectedPO.items.map((item, index) => (
+                        <tr
+                          key={`${selectedPO.id}-${index}`}
+                          className="border-b border-slate-100 last:border-b-0"
+                        >
+
+                          <td className="px-4 py-4">
+
+                            <div className="text-sm font-semibold text-slate-800">
+                              {item.product}
+                            </div>
+
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-slate-500">
+                            {item.sku}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-sm font-semibold text-slate-700">
+                            {item.ordered}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-sm text-slate-600">
+                            {item.received}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-sm text-slate-600">
+                            {money(item.unitPrice)}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-sm font-semibold text-slate-800">
+                            {money(item.total)}
+                          </td>
+
+                        </tr>
+                      ))}
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+              </div>
+
+              {/* Total */}
+
+              <div className="mt-4 flex justify-end">
+
+                <div className="rounded-lg bg-slate-50 px-5 py-3 text-right">
+
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    Order Total
+                  </p>
+
+                  <p className="mt-1 text-lg font-bold text-slate-900">
+                    {money(getPOValue(selectedPO))}
+                  </p>
+
+                </div>
+
+              </div>
+
+              {/* Notes */}
+
+              {selectedPO.notes && (
+                <div className="mt-4 rounded-lg bg-slate-50 p-4">
+
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    Notes
+                  </p>
+
+                  <p className="mt-2 text-xs leading-5 text-slate-600">
+                    {selectedPO.notes}
+                  </p>
+
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Actions */}
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
+
+              {/* Approve */}
+
+              {selectedPO.status === "Pending Approval" && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleApprovePO(selectedPO.id)
+                  }
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                >
+                  Approve PO
+                </button>
+              )}
+
+              {/* Send */}
+
+              {(selectedPO.status === "Approved" ||
+                selectedPO.status === "Pending Approval") && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSendPO(selectedPO.id)
+                  }
+                  className="rounded-md bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                >
+                  Send to Supplier
+                </button>
+              )}
+
+              {/* Receive */}
+
+              {(selectedPO.status === "Sent" ||
+                selectedPO.status === "Partially Received") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPurchaseOrders((current) =>
+                      current.map((po) => {
+
+                        if (po.id !== selectedPO.id) {
+                          return po;
+                        }
+
+                        const updatedItems =
+                          po.items.map((item) => ({
+                            ...item,
+                            received:
+                              item.ordered,
+                          }));
+
+                        return {
+                          ...po,
+                          status: "Received",
+                          items: updatedItems,
+                        };
+                      })
+                    );
+
+                    setSelectedPO((current) => {
+
+                      if (!current) {
+                        return current;
+                      }
+
+                      return {
+                        ...current,
+                        status: "Received",
+                        items: current.items.map(
+                          (item) => ({
+                            ...item,
+                            received:
+                              item.ordered,
+                          })
+                        ),
+                      };
+                    });
+                  }}
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                >
+                  Receive Goods
+                </button>
+              )}
+
+              {/* Cancel */}
+
+              {selectedPO.status !== "Received" &&
+                selectedPO.status !== "Cancelled" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleCancelPO(
+                        selectedPO.id
+                      )
+                    }
+                    className="rounded-md border border-red-300 bg-white px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+                  >
+                    Cancel
+                  </button>
+                )}
+
+              {/* Print */}
+
+              <button
+                type="button"
+                onClick={() => {
+                  window.print();
+                }}
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Print PO
+              </button>
+
+              {/* Close */}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedPO(null)
+                }
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+
+            </div>
 
           </div>
-
         </div>
       )}
 
-      {/* =====================================================
+            {/* =====================================================
           CREATE PURCHASE ORDER MODAL
-      ====================================================== */}
+      ===================================================== */}
 
-      {showCreateModal && (
+      {showCreatePO && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={() =>
-            setShowCreateModal(false)
-          }
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowCreatePO(false)}
         >
-
           <div
-            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
+            className="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
           >
 
-            <div className="mb-5 flex items-center justify-between">
+            {/* Modal Header */}
+
+            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
 
               <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">
+                  Procurement
+                </p>
 
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="mt-1 text-xl font-bold text-slate-900">
                   Create Purchase Order
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  Purchase order creation
+                <p className="mt-1 text-xs text-slate-500">
+                  Create a new purchase order for a supplier.
                 </p>
-
               </div>
 
               <button
-                onClick={() =>
-                  setShowCreateModal(false)
-                }
-                className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
+                type="button"
+                onClick={() => {
+                  setShowCreatePO(false);
+                  resetNewPO();
+                }}
+                className="text-xl text-slate-400 hover:text-slate-700"
+                aria-label="Close"
               >
-                ✕
+                ×
               </button>
 
             </div>
 
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+            {/* Form */}
 
-              <p className="text-sm font-medium text-blue-800">
-                Purchase order creation UI
-              </p>
+            <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
 
-              <p className="mt-1 text-sm text-blue-700">
-                This page is currently using frontend demo
-                data. The backend Purchase Order creation
-                endpoint is not connected.
-              </p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+                {/* Supplier */}
+
+                <div className="md:col-span-2">
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Supplier *
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newPO.supplier}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        supplier:
+                          event.target.value,
+                      }))
+                    }
+                    placeholder="Supplier name"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+
+                </div>
+
+                {/* Warehouse */}
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Warehouse *
+                  </label>
+
+                  <select
+                    value={newPO.warehouse}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        warehouse:
+                          event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+
+                    <option>
+                      Hyderabad Central
+                    </option>
+
+                    <option>
+                      Bengaluru Warehouse
+                    </option>
+
+                    <option>
+                      Mumbai Distribution Hub
+                    </option>
+
+                    <option>
+                      Delhi Store Center
+                    </option>
+
+                    <option>
+                      Pune Distribution Center
+                    </option>
+
+                    <option>
+                      Chennai Warehouse
+                    </option>
+
+                  </select>
+
+                </div>
+
+                {/* Requester */}
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Requester *
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newPO.requester}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        requester:
+                          event.target.value,
+                      }))
+                    }
+                    placeholder="Requester / department"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+
+                </div>
+
+                {/* Expected Date */}
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Expected Date *
+                  </label>
+
+                  <input
+                    type="date"
+                    value={newPO.expectedDate}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        expectedDate:
+                          event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+
+                </div>
+
+                {/* Payment Terms */}
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Payment Terms
+                  </label>
+
+                  <select
+                    value={newPO.paymentTerms}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        paymentTerms:
+                          event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+
+                    <option>
+                      15 days
+                    </option>
+
+                    <option>
+                      30 days
+                    </option>
+
+                    <option>
+                      45 days
+                    </option>
+
+                    <option>
+                      60 days
+                    </option>
+
+                    <option>
+                      Advance Payment
+                    </option>
+
+                  </select>
+
+                </div>
+
+                {/* Product */}
+
+                <div className="md:col-span-2">
+
+                  <div className="mb-3 border-t border-slate-200 pt-5">
+
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Order Item
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Add the product and quantity for this purchase order.
+                    </p>
+
+                  </div>
+
+                </div>
+
+                {/* Product Name */}
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Product *
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newPO.product}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        product:
+                          event.target.value,
+                      }))
+                    }
+                    placeholder="Product name"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+
+                </div>
+
+                {/* SKU */}
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    SKU *
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newPO.sku}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        sku:
+                          event.target.value,
+                      }))
+                    }
+                    placeholder="SKU-001"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+
+                </div>
+
+                {/* Quantity */}
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Quantity *
+                  </label>
+
+                  <input
+                    type="number"
+                    min={1}
+                    value={newPO.quantity}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        quantity:
+                          Number(
+                            event.target.value
+                          ),
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+
+                </div>
+
+                {/* Unit Price */}
+
+                <div>
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Unit Price (₹) *
+                  </label>
+
+                  <input
+                    type="number"
+                    min={0}
+                    value={newPO.unitPrice}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        unitPrice:
+                          Number(
+                            event.target.value
+                          ),
+                      }))
+                    }
+                    placeholder="0"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+
+                </div>
+
+                {/* Notes */}
+
+                <div className="md:col-span-2">
+
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Notes
+                  </label>
+
+                  <textarea
+                    value={newPO.notes}
+                    onChange={(event) =>
+                      setNewPO((current) => ({
+                        ...current,
+                        notes:
+                          event.target.value,
+                      }))
+                    }
+                    placeholder="Additional notes..."
+                    rows={3}
+                    className="w-full resize-none rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+
+                </div>
+
+              </div>
+
+              {/* Order Summary */}
+
+              <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
+
+                <div className="flex items-center justify-between">
+
+                  <div>
+
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">
+                      Order Summary
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-600">
+                      {newPO.quantity || 0} units ×{" "}
+                      {money(
+                        newPO.unitPrice || 0
+                      )}
+                    </p>
+
+                  </div>
+
+                  <div className="text-right">
+
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">
+                      Estimated Value
+                    </p>
+
+                    <p className="mt-1 text-lg font-bold text-blue-700">
+                      {money(newPOTotal)}
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
 
             </div>
 
-            <button
-              onClick={() =>
-                setShowCreateModal(false)
-              }
-              className="mt-6 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              Close
-            </button>
+            {/* Modal Footer */}
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreatePO(false);
+                  resetNewPO();
+                }}
+                className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCreatePO}
+                className="rounded-md bg-[#12213a] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1b3152]"
+              >
+                Create Purchase Order
+              </button>
+
+            </div>
 
           </div>
-
         </div>
-      )}
+           )}
 
-    </main>
+      {/* =====================================================
+          END PAGE
+      ===================================================== */}
+
     </PageLayout>
   );
 }

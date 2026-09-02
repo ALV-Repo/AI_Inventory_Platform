@@ -1,33 +1,52 @@
-const BASE_URL = "http://127.0.0.1:8000/api/v1";
+import { request } from "./api";
 
-export async function getPurchaseOrders() {
-  const token = localStorage.getItem("access_token");
+export interface PurchaseOrder {
+  id?: string | number;
+  request_number?: string;
+  pr_number?: string;
 
-  const response = await fetch(`${BASE_URL}/purchase-orders`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  product?: string;
+  product_name?: string;
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch purchase orders");
-  }
+  sku?: string;
+  product_code?: string;
 
-  return response.json();
+  quantity?: number;
+  requested_quantity?: number;
+
+  estimated_value?: number;
+  amount?: number;
+  total_value?: number;
+
+  requester?: string;
+  requested_by?: string;
+
+  department?: string;
+  warehouse?: string;
+  warehouse_name?: string;
+
+  supplier?: string;
+  supplier_name?: string;
+
+  requested_date?: string;
+  request_date?: string;
+  created_at?: string;
+
+  required_date?: string;
+
+  priority?: string;
+  status?: string;
+
+  reason?: string;
+  notes?: string;
+
+  [key: string]: unknown;
 }
 
-export async function getPurchaseOrderSummary() {
-  const token = localStorage.getItem("access_token");
+export async function getPurchaseOrders(): Promise<unknown> {
+  return request<unknown>("/purchase-orders");
+}
 
-  const response = await fetch(`${BASE_URL}/purchase-orders/summary`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch purchase order summary");
-  }
-
-  return response.json();
+export async function getPurchaseOrderSummary(): Promise<unknown> {
+  return request<unknown>("/purchase-orders/summary");
 }
