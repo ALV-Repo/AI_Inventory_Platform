@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -7,6 +7,8 @@ from app.core.database import Base, get_db
 from app.main import app
 from app.models.entities import (
     Product,
+    ProductBOM,
+    ProductBOMLine,
     StockItem,
     StockSerial,
     Tenant,
@@ -160,6 +162,78 @@ def add_stock(db, sales_data, quantity=10):
 
 
 class TestSales:
+
+    def test_bom_sale_deducts_components(
+        self,
+        client,
+        auth_headers,
+        db,
+        sales_data,
+    ):
+        bundle_stock = add_stock(db, sales_data, 5)
+
+        component = Product(
+            tenant_id=sales_data["tenant_id"],
+            sku="COMP-001",
+            name="BOM Component",
+            cost_price=40,
+            selling_price=60,
+            gst_rate=18,
+            is_active=True,
+            track_serial=False,
+            track_batch=False,
+        )
+        db.add(component)
+        db.flush()
+
+        component_stock = StockItem(
+            tenant_id=sales_data["tenant_id"],
+            product_id=component.id,
+            warehouse_id=sales_data["warehouse_id"],
+            quantity=10,
+            reserved_qty=0,
+            avg_cost=40,
+        )
+        db.add(component_stock)
+
+        bom = ProductBOM(
+            tenant_id=sales_data["tenant_id"],
+            product_id=sales_data["product_id"],
+            is_active=True,
+        )
+        db.add(bom)
+        db.flush()
+
+        db.add(ProductBOMLine(
+            tenant_id=sales_data["tenant_id"],
+            bom_id=bom.id,
+            component_product_id=component.id,
+            quantity=2,
+        ))
+        db.commit()
+
+        response = client.post(
+            "/api/v1/sales",
+            headers=auth_headers,
+            json={
+                "warehouse_id": sales_data["warehouse_id"],
+                "lines": [
+                    {
+                        "product_id": sales_data["product_id"],
+                        "quantity": 3,
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 201, response.text
+
+        db.refresh(bundle_stock)
+        db.refresh(component_stock)
+
+        assert bundle_stock.quantity == 2
+        assert component_stock.quantity == 4
+        assert response.json()["gross_profit"] == -90.0
 
     def test_create_sale(
         self,
@@ -538,3 +612,4 @@ class TestCustomers:
 
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+

@@ -1,4 +1,9 @@
 """Inventory endpoints (SRS §3.1)."""
+import barcode
+import io
+import qrcode
+from barcode.writer import ImageWriter
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
@@ -11,6 +16,8 @@ from app.models.entities import (
     CycleCountEntry,
     CycleCountSession,
     Product,
+    ProductBOM,
+    ProductBOMLine,
     StockItem,
     StockMovement,
     StockTransfer,
@@ -109,6 +116,16 @@ class ReservationIn(BaseModel):
     product_id: int
     warehouse_id: int
     quantity: float = Field(gt=0)
+class BOMLineRequest(BaseModel):
+    component_product_id: int
+    quantity: float = Field(gt=0)
+
+
+class BOMCreateRequest(BaseModel):
+    product_id: int
+    lines: list[BOMLineRequest] = Field(min_length=1)
+
+
 # ------------------------------------------------------------------ helpers
 def _stock_row(db: Session, tenant_id: int, product_id: int, warehouse_id: int) -> StockItem:
     row = (
@@ -1248,6 +1265,103 @@ def stock_ledger(
     ]
 
 
+
+@router.post("/bom")
+def create_bom(
+    body: BOMCreateRequest,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    """Create or replace a product BOM definition (FR-INV-10)."""
+    product = scoped(db, Product, user.tenant_id).filter(Product.id == body.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    component_ids = [line.component_product_id for line in body.lines]
+    components = scoped(db, Product, user.tenant_id).filter(
+        Product.id.in_(component_ids)
+    ).all()
+
+    if len(components) != len(set(component_ids)):
+        raise HTTPException(
+            status_code=404,
+            detail="One or more component products not found",
+        )
+
+    if body.product_id in component_ids:
+        raise HTTPException(status_code=400, detail="A BOM cannot contain itself")
+
+    bom = scoped(db, ProductBOM, user.tenant_id).filter(
+        ProductBOM.product_id == body.product_id
+    ).first()
+
+    if bom:
+        bom.is_active = True
+        bom.lines.clear()
+    else:
+        bom = ProductBOM(
+            tenant_id=user.tenant_id,
+            product_id=body.product_id,
+            is_active=True,
+        )
+        db.add(bom)
+        db.flush()
+
+    for line in body.lines:
+        bom.lines.append(
+            ProductBOMLine(
+                tenant_id=user.tenant_id,
+                component_product_id=line.component_product_id,
+                quantity=line.quantity,
+            )
+        )
+
+    db.commit()
+    db.refresh(bom)
+
+    return {
+        "id": bom.id,
+        "product_id": bom.product_id,
+        "is_active": bom.is_active,
+        "lines": [
+            {
+                "component_product_id": line.component_product_id,
+                "quantity": line.quantity,
+            }
+            for line in bom.lines
+        ],
+    }
+
+
+@router.get("/bom/{product_id}")
+def get_bom(
+    product_id: int,
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    """Get the active BOM for a product (FR-INV-10)."""
+    bom = scoped(db, ProductBOM, user.tenant_id).filter(
+        ProductBOM.product_id == product_id,
+        ProductBOM.is_active.is_(True),
+    ).first()
+
+    if not bom:
+        raise HTTPException(status_code=404, detail="BOM not found")
+
+    return {
+        "id": bom.id,
+        "product_id": bom.product_id,
+        "is_active": bom.is_active,
+        "lines": [
+            {
+                "component_product_id": line.component_product_id,
+                "quantity": line.quantity,
+            }
+            for line in bom.lines
+        ],
+    }
+
+
 @router.get("/warehouses")
 def list_warehouses(
     user: User = Depends(require("inventory:read")), db: Session = Depends(get_db)
@@ -1256,8 +1370,3 @@ def list_warehouses(
         {"id": w.id, "code": w.code, "name": w.name}
         for w in scoped(db, Warehouse, user.tenant_id).filter(Warehouse.is_active.is_(True)).all()
     ]
-import io
-import barcode
-import qrcode
-
-from barcode.writer import ImageWriter

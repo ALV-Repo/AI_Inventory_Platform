@@ -1,4 +1,4 @@
-"""Sales and POS endpoints (SRS §3.3)."""
+﻿"""Sales and POS endpoints (SRS Â§3.3)."""
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, scoped
 from app.core.security import require
 from app.models.entities import (
-    AuditLog, Customer, Product, SalesOrder, SalesOrderLine, StockItem, StockMovement, StockSerial, User,
+    AuditLog, Customer, Product, ProductBOM, SalesOrder, SalesOrderLine, StockItem, StockMovement, StockSerial, User,
 )
 from app.services.logic import compute_gst
 
@@ -43,7 +43,7 @@ def _next_number(db: Session, tenant_id: int, attempt: int = 0) -> str:
 
     Derived from the highest existing id rather than a row count, so deletions
     can never cause a reuse. A concurrent insert can still race to the same
-    number — the unique index on (tenant_id, order_number) catches that, and
+    number â€” the unique index on (tenant_id, order_number) catches that, and
     create_sale retries with a bumped sequence (NFR-05: atomic, no lost bills).
     """
     last_id = (
@@ -69,7 +69,7 @@ def create_sale(
             db.rollback()
             constraint = str(exc.orig).lower()
             if "idem" in constraint and body.idempotency_key:
-                # A concurrent replay of the same offline bill won the race —
+                # A concurrent replay of the same offline bill won the race â€”
                 # return the bill it created rather than erroring (NFR-05).
                 existing = (
                     scoped(db, SalesOrder, user.tenant_id)
@@ -84,7 +84,7 @@ def create_sale(
             # Otherwise it was an order-number collision; retry with a bumped sequence.
     raise HTTPException(
         status.HTTP_503_SERVICE_UNAVAILABLE,
-        "The store is very busy right now. The bill was not saved — try again.",
+        "The store is very busy right now. The bill was not saved â€” try again.",
     )
 
 
@@ -136,6 +136,25 @@ def _create_sale_once(body: SaleIn, user: User, db: Session, attempt: int):
                 f"{product.name}: {available} available, {line.quantity} requested.",
             )
 
+        bom = scoped(db, ProductBOM, user.tenant_id).filter(ProductBOM.product_id == product.id, ProductBOM.is_active.is_(True)).first()
+
+        if bom:
+            for bom_line in bom.lines:
+                component_stock = scoped(db, StockItem, user.tenant_id).filter(
+                    StockItem.product_id == bom_line.component_product_id,
+                    StockItem.warehouse_id == body.warehouse_id,
+                ).first()
+                required_qty = bom_line.quantity * line.quantity
+                component_available = component_stock.available if component_stock else 0
+                if component_available < required_qty:
+                    component = scoped(db, Product, user.tenant_id).filter(
+                        Product.id == bom_line.component_product_id
+                    ).first()
+                    component_name = component.name if component else str(bom_line.component_product_id)
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST,
+                        f"{product.name} BOM component {component_name}: {component_available} available, {required_qty} required.",
+                    )
         if product.track_serial:
             if len(line.serial_numbers) != int(line.quantity):
                 raise HTTPException(
@@ -184,6 +203,28 @@ def _create_sale_once(body: SaleIn, user: User, db: Session, attempt: int):
             reference_type="sales_order", reference_id=order.id, user_id=user.id,
         ))
 
+        if bom:
+            for bom_line in bom.lines:
+                component_stock = scoped(db, StockItem, user.tenant_id).filter(
+                    StockItem.product_id == bom_line.component_product_id,
+                    StockItem.warehouse_id == body.warehouse_id,
+                ).first()
+                required_qty = bom_line.quantity * line.quantity
+                component_cost = component_stock.avg_cost if component_stock and component_stock.avg_cost else 0.0
+                cogs += component_cost * required_qty
+                component_stock.quantity -= required_qty
+                db.add(StockMovement(
+                    tenant_id=user.tenant_id,
+                    product_id=bom_line.component_product_id,
+                    warehouse_id=body.warehouse_id,
+                    movement_type="bom_sale",
+                    quantity=-required_qty,
+                    unit_cost=component_cost,
+                    reason_code="bom_sale",
+                    reference_type="sales_order",
+                    reference_id=order.id,
+                    user_id=user.id,
+                ))
         subtotal += tax.taxable_value
         tax_total += tax.total_tax
         discount_total += line.discount
@@ -247,3 +288,7 @@ def list_customers(
         }
         for c in scoped(db, Customer, user.tenant_id).order_by(Customer.name).all()
     ]
+
+
+
+

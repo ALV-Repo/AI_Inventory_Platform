@@ -383,3 +383,68 @@ class StockSerial(Base, TenantMixin):
             unique=True,
         ),
     )
+class ProductBOM(Base, TenantMixin):
+    """Bill of materials / bundle definition (FR-INV-10)."""
+    __tablename__ = "product_boms"
+
+    id = Column(Integer, primary_key=True)
+
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    is_active = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=utcnow,
+        nullable=True,
+    )
+
+    product = relationship("Product")
+
+    lines = relationship(
+        "ProductBOMLine",
+        back_populates="bom",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProductBOMLine(Base, TenantMixin):
+    """Component required by a bundle/BOM."""
+    __tablename__ = "product_bom_lines"
+
+    id = Column(Integer, primary_key=True)
+
+    bom_id = Column(
+        Integer,
+        ForeignKey("product_boms.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    component_product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    quantity = Column(
+        Float,
+        nullable=False,
+    )
+
+    bom = relationship(
+        "ProductBOM",
+        back_populates="lines",
+    )
+
+    component_product = relationship("Product")

@@ -479,6 +479,32 @@ class TestLoginLockout:
 
         assert second.status_code == 200
         assert isinstance(second.json(), list)
+
+    def test_mfa_toggle(self, client):
+        headers = {
+            "Authorization": (
+                f"Bearer {token_for(client, 'alpha@example.com')}"
+            )
+        }
+
+        r = client.patch(
+            "/api/v1/auth/mfa",
+            json={"enabled": True},
+            headers=headers,
+        )
+
+        assert r.status_code == 200
+        assert r.json()["mfa_enabled"] is True
+
+        r = client.patch(
+            "/api/v1/auth/mfa",
+            json={"enabled": False},
+            headers=headers,
+        )
+
+        assert r.status_code == 200
+        assert r.json()["mfa_enabled"] is False
+
     def test_five_failures_lock_the_account(self, client, db):
         """SRS §9: brute-force protection on sign-in."""
 
@@ -521,6 +547,8 @@ class TestLoginLockout:
 
         assert r.status_code == 429
         assert "Retry-After" in r.headers
+
+
 class TestForecastEndpoints:
     """API tests for demand forecast and forecast accuracy."""
 
