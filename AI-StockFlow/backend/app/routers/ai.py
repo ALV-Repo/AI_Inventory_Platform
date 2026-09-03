@@ -20,6 +20,7 @@ from app.models.entities import (
     StockItem,
     Supplier,
     User,
+    Warehouse,
 )
 from app.services.copilot import answer_question
 from app.services.logic import (
@@ -450,10 +451,24 @@ def decide_recommendation(
         )
         if product and supplier and payload.get("suggested_qty"):
             po_count = scoped(db, PurchaseOrder, user.tenant_id).count()
+
+            warehouse = (
+                scoped(db, Warehouse, user.tenant_id)
+                .filter(Warehouse.code == "WH-MAIN", Warehouse.is_active.is_(True))
+                .first()
+            )
+
+            if not warehouse:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "No active main warehouse is configured for this tenant.",
+                )
+
             po = PurchaseOrder(
                 tenant_id=user.tenant_id,
                 po_number=f"PO-{datetime.now(timezone.utc).strftime('%Y%m')}-{po_count + 1:05d}",
                 supplier_id=supplier.id,
+                warehouse_id=warehouse.id,
                 status="draft",
                 created_by_ai=True,
                 ai_reasoning=rec.reasoning,
@@ -469,15 +484,13 @@ def decide_recommendation(
             ))
             draft_po_id = po.id
 
-    db.add(AuditLog(
-        tenant_id=user.tenant_id, user_id=user.id, action=f"ai.recommendation.{body.decision}",
-        entity_type="ai_recommendation", entity_id=rec.id,
-        details={"type": rec.rec_type, "draft_po_id": draft_po_id},
-    ))
-    db.commit()
-    return {"id": rec.id, "status": rec.status, "draft_po_id": draft_po_id}
-
-
+        db.add(AuditLog(
+            tenant_id=user.tenant_id, user_id=user.id, action=f"ai.recommendation.{body.decision}",
+            entity_type="ai_recommendation", entity_id=rec.id,
+            details={"type": rec.rec_type, "draft_po_id": draft_po_id},
+        ))
+        db.commit()
+        return {"id": rec.id, "status": rec.status, "draft_po_id": draft_po_id}
 # ------------------------------------------------------------------ copilot
 class CopilotQuestion(BaseModel):
     question: str = Field(min_length=3, max_length=500)

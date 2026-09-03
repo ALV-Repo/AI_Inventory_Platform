@@ -38,22 +38,6 @@ class ProductIn(BaseModel):
     track_batch: bool = False
     track_serial: bool = False
     parent_id: int | None = None
-class ProductUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=220)
-    category: str | None = None
-    brand: str | None = None
-    uom: str = "pcs"
-    hsn_code: str | None = None
-    gst_rate: float = Field(default=18.0, ge=0, le=100)
-    cost_price: float = Field(default=0, ge=0)
-    selling_price: float = Field(default=0, ge=0)
-    reorder_level: int = Field(default=10, ge=0)
-    safety_stock: int = Field(default=5, ge=0)
-    barcode: str | None = None
-    attributes: dict = Field(default_factory=dict)
-    track_batch: bool = False
-    track_serial: bool = False
-    parent_id: int | None = None
 class ProductOut(BaseModel):
     id: int
     sku: str
@@ -233,39 +217,6 @@ def create_product(
 
     db.commit()
     db.refresh(product)
-    return ProductOut.model_validate(product)
-# ------------------------------------------------------------------ update product
-@router.patch("/products/{product_id}", response_model=ProductOut)
-def update_product(
-    product_id: int,
-    body: ProductUpdate,
-    user: User = Depends(require("inventory:write")),
-    db: Session = Depends(get_db),
-):
-    product = (
-        scoped(db, Product, user.tenant_id)
-        .filter(
-            Product.id == product_id,
-            Product.is_active.is_(True),
-        )
-        .first()
-    )
-
-    if not product:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            "Product not found.",
-        )
-
-    if body.name is not None:
-        product.name = body.name
-
-    if body.category is not None:
-        product.category = body.category
-
-    db.commit()
-    db.refresh(product)
-
     return ProductOut.model_validate(product)
 # ------------------------------------------------------------------ product variants
 # ------------------------------------------------------------------ single product

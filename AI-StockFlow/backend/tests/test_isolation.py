@@ -63,7 +63,7 @@ def db():
 
         wh = Warehouse(
             tenant_id=tenant.id,
-            code="WH1",
+            code="WH-MAIN",
             name="Main",
         )
         session.add(wh)
