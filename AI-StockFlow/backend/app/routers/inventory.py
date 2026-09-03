@@ -1,4 +1,4 @@
-"""Inventory endpoints (SRS §3.1)."""
+﻿"""Inventory endpoints (SRS Â§3.1)."""
 import barcode
 import io
 import qrcode
@@ -84,7 +84,7 @@ class ProductUpdate(BaseModel):
     track_serial: bool | None = None
 
 class AdjustmentIn(BaseModel):
-    """FR-INV-08 — a reason code is mandatory."""
+    """FR-INV-08 â€” a reason code is mandatory."""
     product_id: int
     warehouse_id: int
     quantity: float = Field(description="Signed: positive adds stock, negative removes it.")
@@ -101,18 +101,18 @@ class TransferIn(BaseModel):
 
 
 class CycleCountSessionIn(BaseModel):
-    """FR-INV-07 — open a physical cycle-count session."""
+    """FR-INV-07 â€” open a physical cycle-count session."""
     warehouse_id: int
 
 
 class CycleCountEntryIn(BaseModel):
-    """FR-INV-07 — submit a physical count."""
+    """FR-INV-07 â€” submit a physical count."""
     product_id: int
     counted_quantity: float = Field(ge=0)
 
 
 class ReservationIn(BaseModel):
-    """FR-INV-09 — reserve available stock."""
+    """FR-INV-09 â€” reserve available stock."""
     product_id: int
     warehouse_id: int
     quantity: float = Field(gt=0)
@@ -373,7 +373,7 @@ def list_product_variants(
     user: User = Depends(require("inventory:read")),
     db: Session = Depends(get_db),
 ):
-    """FR-INV-02 — list active variants belonging to a parent product."""
+    """FR-INV-02 â€” list active variants belonging to a parent product."""
 
     parent = (
         scoped(db, Product, user.tenant_id)
@@ -414,7 +414,7 @@ def create_product_variant(
     user: User = Depends(require("inventory:write")),
     db: Session = Depends(get_db),
 ):
-    """FR-INV-02 — create a size/colour variant under a parent SKU."""
+    """FR-INV-02 â€” create a size/colour variant under a parent SKU."""
 
     parent = (
         scoped(db, Product, user.tenant_id)
@@ -487,7 +487,7 @@ def generate_product_barcode(
     user: User = Depends(require("inventory:read")),
     db: Session = Depends(get_db),
 ):
-    """FR-INV-03 — generate a Code128 barcode for a product SKU."""
+    """FR-INV-03 â€” generate a Code128 barcode for a product SKU."""
 
     product = (
         scoped(db, Product, user.tenant_id)
@@ -534,7 +534,7 @@ def generate_product_qr(
     user: User = Depends(require("inventory:read")),
     db: Session = Depends(get_db),
 ):
-    """FR-INV-03 — generate a QR code containing product information."""
+    """FR-INV-03 â€” generate a QR code containing product information."""
 
     product = (
         scoped(db, Product, user.tenant_id)
@@ -1362,6 +1362,38 @@ def get_bom(
     }
 
 
+@router.get("/low-stock-alerts")
+def low_stock_alerts(
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    """Return products at or below their reorder level (FR-INV-11)."""
+    products = scoped(db, Product, user.tenant_id).filter(
+        Product.is_active.is_(True)
+    ).order_by(Product.name).all()
+
+    totals = dict(
+        scoped(db, StockItem, user.tenant_id)
+        .with_entities(StockItem.product_id, func.sum(StockItem.quantity))
+        .group_by(StockItem.product_id)
+        .all()
+    )
+
+    alerts = []
+    for product in products:
+        on_hand = float(totals.get(product.id) or 0)
+        if on_hand <= product.reorder_level:
+            alerts.append({
+                "product_id": product.id,
+                "sku": product.sku,
+                "name": product.name,
+                "on_hand": on_hand,
+                "reorder_level": product.reorder_level,
+                "shortfall": max(float(product.reorder_level) - on_hand, 0),
+            })
+
+    return alerts
+
 @router.get("/warehouses")
 def list_warehouses(
     user: User = Depends(require("inventory:read")), db: Session = Depends(get_db)
@@ -1370,3 +1402,4 @@ def list_warehouses(
         {"id": w.id, "code": w.code, "name": w.name}
         for w in scoped(db, Warehouse, user.tenant_id).filter(Warehouse.is_active.is_(True)).all()
     ]
+

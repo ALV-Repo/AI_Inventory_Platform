@@ -1,6 +1,6 @@
-"""Cross-tenant isolation tests (NFR-01, SRS §13 release gate).
+﻿"""Cross-tenant isolation tests (NFR-01, SRS Â§13 release gate).
 
-These run on every build. A failure here blocks the release — a leak between
+These run on every build. A failure here blocks the release â€” a leak between
 tenants is the single most damaging defect this platform can ship.
 """
 
@@ -506,7 +506,7 @@ class TestLoginLockout:
         assert r.json()["mfa_enabled"] is False
 
     def test_five_failures_lock_the_account(self, client, db):
-        """SRS §9: brute-force protection on sign-in."""
+        """SRS Â§9: brute-force protection on sign-in."""
 
         alpha = (
             db.query(Tenant)
@@ -884,6 +884,19 @@ class TestInventoryEndpoints:
 
         assert r.status_code == 200
 
+    def test_low_stock_alerts(self, client):
+        r = client.get(
+            "/api/v1/inventory/low-stock-alerts",
+            headers={
+                "Authorization": (
+                    f"Bearer {token_for(client, 'alpha@example.com')}"
+                )
+            },
+        )
+
+        assert r.status_code == 200
+        assert isinstance(r.json(), list)
+
     def test_create_duplicate_product_is_rejected(self, client):
         r = client.post(
             "/api/v1/inventory/products",
@@ -977,3 +990,4 @@ class TestInventoryEndpoints:
         )
 
         assert r.status_code == 400
+
