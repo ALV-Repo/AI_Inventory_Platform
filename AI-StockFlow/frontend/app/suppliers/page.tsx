@@ -20,7 +20,7 @@ type Supplier = {
   lastOrder: string;
 };
 
-const suppliers: Supplier[] = [
+const initialSuppliers: Supplier[] = [
   {
     id: 1,
     name: "Tech Supplies India",
@@ -123,20 +123,49 @@ const money = (value: number) =>
   `₹${value.toLocaleString("en-IN")}`;
 
 export default function SuppliersPage() {
+  const [supplierList, setSupplierList] =
+    useState<Supplier[]>(initialSuppliers);
+
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All Categories");
-  const [status, setStatus] = useState("All Statuses");
+  const [category, setCategory] =
+    useState("All Categories");
+  const [status, setStatus] =
+    useState("All Statuses");
+
+  const [showForm, setShowForm] =
+    useState(false);
+
+  const [newSupplier, setNewSupplier] = useState({
+    name: "",
+    code: "",
+    contact: "",
+    email: "",
+    phone: "",
+    category: "Electronics",
+    location: "",
+    status: "Active" as "Active" | "On Hold",
+  });
 
   const filteredSuppliers = useMemo(() => {
-    return suppliers.filter((supplier) => {
-      const searchText = search.toLowerCase().trim();
+    return supplierList.filter((supplier) => {
+      const searchText = search
+        .toLowerCase()
+        .trim();
 
       const matchesSearch =
         !searchText ||
-        supplier.name.toLowerCase().includes(searchText) ||
-        supplier.code.toLowerCase().includes(searchText) ||
-        supplier.contact.toLowerCase().includes(searchText) ||
-        supplier.location.toLowerCase().includes(searchText);
+        supplier.name
+          .toLowerCase()
+          .includes(searchText) ||
+        supplier.code
+          .toLowerCase()
+          .includes(searchText) ||
+        supplier.contact
+          .toLowerCase()
+          .includes(searchText) ||
+        supplier.location
+          .toLowerCase()
+          .includes(searchText);
 
       const matchesCategory =
         category === "All Categories" ||
@@ -146,23 +175,96 @@ export default function SuppliersPage() {
         status === "All Statuses" ||
         supplier.status === status;
 
-      return matchesSearch && matchesCategory && matchesStatus;
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesStatus
+      );
     });
-  }, [search, category, status]);
+  }, [
+    search,
+    category,
+    status,
+    supplierList,
+  ]);
 
-  const totalValue = suppliers.reduce(
-    (sum, supplier) => sum + supplier.totalValue,
+  const totalValue = supplierList.reduce(
+    (sum, supplier) =>
+      sum + supplier.totalValue,
     0
   );
 
-  const outstanding = suppliers.reduce(
-    (sum, supplier) => sum + supplier.outstanding,
+  const outstanding = supplierList.reduce(
+    (sum, supplier) =>
+      sum + supplier.outstanding,
     0
   );
 
-  const activeSuppliers = suppliers.filter(
-    (supplier) => supplier.status === "Active"
-  ).length;
+  const activeSuppliers =
+    supplierList.filter(
+      (supplier) =>
+        supplier.status === "Active"
+    ).length;
+
+  const handleCreateSupplier = () => {
+    if (
+      !newSupplier.name.trim() ||
+      !newSupplier.code.trim() ||
+      !newSupplier.contact.trim() ||
+      !newSupplier.email.trim() ||
+      !newSupplier.phone.trim() ||
+      !newSupplier.location.trim()
+    ) {
+      alert(
+        "Please fill all required fields."
+      );
+      return;
+    }
+
+    const nextId =
+      supplierList.length > 0
+        ? Math.max(
+            ...supplierList.map(
+              (supplier) => supplier.id
+            )
+          ) + 1
+        : 1;
+
+    const createdSupplier: Supplier = {
+      id: nextId,
+      name: newSupplier.name.trim(),
+      code: newSupplier.code.trim(),
+      contact: newSupplier.contact.trim(),
+      email: newSupplier.email.trim(),
+      phone: newSupplier.phone.trim(),
+      category: newSupplier.category,
+      location: newSupplier.location.trim(),
+      rating: 0,
+      totalOrders: 0,
+      totalValue: 0,
+      outstanding: 0,
+      status: newSupplier.status,
+      lastOrder: "No orders yet",
+    };
+
+    setSupplierList((current) => [
+      createdSupplier,
+      ...current,
+    ]);
+
+    setNewSupplier({
+      name: "",
+      code: "",
+      contact: "",
+      email: "",
+      phone: "",
+      category: "Electronics",
+      location: "",
+      status: "Active",
+    });
+
+    setShowForm(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] px-5 py-6">
@@ -176,20 +278,257 @@ export default function SuppliersPage() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              Manage suppliers, contacts, performance and purchase history.
+              Manage suppliers, contacts,
+              performance and purchase history.
             </p>
           </div>
 
           <button
             type="button"
             className="rounded-md bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1b3152]"
-            onClick={() =>
-              alert("New supplier form will be connected here.")
-            }
+            onClick={() => setShowForm(true)}
           >
             + New Supplier
           </button>
         </div>
+
+                {/* New Supplier Modal */}
+        {showForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    New Supplier
+                  </h2>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Add a new supplier to your supplier directory.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="text-2xl leading-none text-slate-400 hover:text-slate-700"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Form */}
+              <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-2">
+
+                {/* Supplier Name */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Supplier Name *
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newSupplier.name}
+                    onChange={(e) =>
+                      setNewSupplier({
+                        ...newSupplier,
+                        name: e.target.value,
+                      })
+                    }
+                    placeholder="Enter supplier name"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Supplier Code */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Supplier Code *
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newSupplier.code}
+                    onChange={(e) =>
+                      setNewSupplier({
+                        ...newSupplier,
+                        code: e.target.value,
+                      })
+                    }
+                    placeholder="SUP-007"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Contact */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Contact Person *
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newSupplier.contact}
+                    onChange={(e) =>
+                      setNewSupplier({
+                        ...newSupplier,
+                        contact: e.target.value,
+                      })
+                    }
+                    placeholder="Contact person name"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Email *
+                  </label>
+
+                  <input
+                    type="email"
+                    value={newSupplier.email}
+                    onChange={(e) =>
+                      setNewSupplier({
+                        ...newSupplier,
+                        email: e.target.value,
+                      })
+                    }
+                    placeholder="supplier@example.com"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Phone *
+                  </label>
+
+                  <input
+                    type="tel"
+                    value={newSupplier.phone}
+                    onChange={(e) =>
+                      setNewSupplier({
+                        ...newSupplier,
+                        phone: e.target.value,
+                      })
+                    }
+                    placeholder="+91 XXXXX XXXXX"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Category */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Category
+                  </label>
+
+                  <select
+                    value={newSupplier.category}
+                    onChange={(e) =>
+                      setNewSupplier({
+                        ...newSupplier,
+                        category: e.target.value,
+                      })
+                    }
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="Electronics">
+                      Electronics
+                    </option>
+
+                    <option value="Office Supplies">
+                      Office Supplies
+                    </option>
+
+                    <option value="Industrial">
+                      Industrial
+                    </option>
+
+                    <option value="Home">
+                      Home
+                    </option>
+                  </select>
+                </div>
+
+                {/* Location */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Location *
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newSupplier.location}
+                    onChange={(e) =>
+                      setNewSupplier({
+                        ...newSupplier,
+                        location: e.target.value,
+                      })
+                    }
+                    placeholder="City"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">
+                    Status
+                  </label>
+
+                  <select
+                    value={newSupplier.status}
+                    onChange={(e) =>
+                      setNewSupplier({
+                        ...newSupplier,
+                        status:
+                          e.target.value as
+                            | "Active"
+                            | "On Hold",
+                      })
+                    }
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="Active">
+                      Active
+                    </option>
+
+                    <option value="On Hold">
+                      On Hold
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCreateSupplier}
+                  className="rounded-md bg-[#12213a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1b3152]"
+                >
+                  Create Supplier
+                </button>
+
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* KPI Cards */}
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -200,7 +539,7 @@ export default function SuppliersPage() {
             </p>
 
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              {suppliers.length}
+              {supplierList.length}
             </p>
 
             <p className="mt-1 text-xs text-slate-500">
@@ -251,7 +590,7 @@ export default function SuppliersPage() {
           </div>
         </div>
 
-        {/* Search / Filters */}
+                {/* Search / Filters */}
         <div className="mb-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px_180px_auto]">
@@ -297,6 +636,7 @@ export default function SuppliersPage() {
             >
               Clear
             </button>
+
           </div>
         </div>
 
@@ -309,14 +649,17 @@ export default function SuppliersPage() {
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
-              Showing {filteredSuppliers.length} of {suppliers.length} suppliers
+              Showing {filteredSuppliers.length} of{" "}
+              {supplierList.length} suppliers
             </p>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px] text-left">
+
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
+
                   <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                     Supplier
                   </th>
@@ -352,17 +695,20 @@ export default function SuppliersPage() {
                   <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                     Action
                   </th>
+
                 </tr>
               </thead>
 
               <tbody>
+
                 {filteredSuppliers.map((supplier) => (
                   <tr
                     key={supplier.id}
                     className="border-b border-slate-100 hover:bg-slate-50"
                   >
+
                     <td className="px-5 py-4">
-                      <div className="font-semibold text-sm text-slate-900">
+                      <div className="text-sm font-semibold text-slate-900">
                         {supplier.name}
                       </div>
 
@@ -379,6 +725,10 @@ export default function SuppliersPage() {
                       <div className="mt-1 text-xs text-slate-400">
                         {supplier.phone}
                       </div>
+
+                      <div className="mt-1 text-xs text-slate-400">
+                        {supplier.email}
+                      </div>
                     </td>
 
                     <td className="px-4 py-4 text-sm text-slate-600">
@@ -390,8 +740,8 @@ export default function SuppliersPage() {
                     </td>
 
                     <td className="px-4 py-4">
-                      <span className="font-semibold text-sm text-slate-700">
-                        ★ {supplier.rating}
+                      <span className="text-sm font-semibold text-slate-700">
+                        ★ {supplier.rating || "—"}
                       </span>
                     </td>
 
@@ -423,6 +773,7 @@ export default function SuppliersPage() {
                         View
                       </Link>
                     </td>
+
                   </tr>
                 ))}
 
@@ -442,15 +793,17 @@ export default function SuppliersPage() {
                     </td>
                   </tr>
                 )}
+
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Footer information */}
+                {/* Footer Information */}
         <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          {/* Best Rated */}
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
               Best Rated
             </p>
@@ -464,7 +817,8 @@ export default function SuppliersPage() {
             </p>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          {/* Highest Purchase Value */}
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
               Highest Purchase Value
             </p>
@@ -478,7 +832,8 @@ export default function SuppliersPage() {
             </p>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          {/* Attention Required */}
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
               Attention Required
             </p>

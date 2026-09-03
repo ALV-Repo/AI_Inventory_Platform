@@ -7,74 +7,117 @@ type RequestStatus =
   | "Draft"
   | "Pending Approval"
   | "Approved"
-  | "Rejected";
+  | "Rejected"
+  | "Converted";
+
+type RequestPriority = "High" | "Medium" | "Low";
 
 type PurchaseRequest = {
   id: string;
   requestNumber: string;
-  requestedBy: string;
-  department: string;
-  supplier: string;
-  item: string;
+  product: string;
+  sku: string;
   quantity: number;
-  estimatedAmount: number;
+  estimatedValue: number;
+  priority: RequestPriority;
+  requester: string;
+  department: string;
+  warehouse: string;
+  supplier: string;
   date: string;
   status: RequestStatus;
-  priority: "Low" | "Medium" | "High";
 };
 
 const initialRequests: PurchaseRequest[] = [
   {
     id: "1",
     requestNumber: "PR-2026-001",
-    requestedBy: "Rahul Kumar",
-    department: "Inventory",
-    supplier: "Tech Supplies India",
-    item: "Wireless Keyboard",
-    quantity: 20,
-    estimatedAmount: 24000,
-    date: "2026-08-21",
-    status: "Pending Approval",
+    product: "Wireless Keyboard",
+    sku: "KB-WL-001",
+    quantity: 250,
+    estimatedValue: 212500,
     priority: "High",
+    requester: "Inventory Team",
+    department: "Operations",
+    warehouse: "Hyderabad Central",
+    supplier: "Tech Supplies India",
+    date: "2026-08-25",
+    status: "Pending Approval",
   },
   {
     id: "2",
     requestNumber: "PR-2026-002",
-    requestedBy: "Priya Sharma",
-    department: "IT",
+    product: "USB Microphone",
+    sku: "MIC-USB-002",
+    quantity: 150,
+    estimatedValue: 187500,
+    priority: "High",
+    requester: "Sales Team",
+    department: "Sales",
+    warehouse: "Bengaluru Warehouse",
     supplier: "Digital World",
-    item: "USB Microphone",
-    quantity: 10,
-    estimatedAmount: 24000,
-    date: "2026-08-20",
+    date: "2026-08-24",
     status: "Pending Approval",
-    priority: "Medium",
   },
   {
     id: "3",
     requestNumber: "PR-2026-003",
-    requestedBy: "Arjun Rao",
-    department: "Sales",
+    product: "24-inch Monitor",
+    sku: "MON-24-004",
+    quantity: 100,
+    estimatedValue: 1420000,
+    priority: "Medium",
+    requester: "IT Department",
+    department: "Information Technology",
+    warehouse: "Hyderabad Central",
     supplier: "Office Mart",
-    item: "Office Chairs",
-    quantity: 8,
-    estimatedAmount: 32000,
-    date: "2026-08-19",
+    date: "2026-08-22",
     status: "Approved",
-    priority: "Low",
   },
   {
     id: "4",
     requestNumber: "PR-2026-004",
-    requestedBy: "Sneha Reddy",
-    department: "Warehouse",
-    supplier: "Industrial Solutions",
-    item: "Storage Bins",
-    quantity: 50,
-    estimatedAmount: 18500,
-    date: "2026-08-18",
-    status: "Draft",
+    product: "Office Chair",
+    sku: "CHA-OFC-003",
+    quantity: 80,
+    estimatedValue: 416000,
     priority: "Medium",
+    requester: "Administration",
+    department: "HR & Admin",
+    warehouse: "Chennai Warehouse",
+    supplier: "Office Mart",
+    date: "2026-08-20",
+    status: "Draft",
+  },
+  {
+    id: "5",
+    requestNumber: "PR-2026-005",
+    product: "Storage Bins",
+    sku: "BIN-ST-005",
+    quantity: 120,
+    estimatedValue: 81600,
+    priority: "Low",
+    requester: "Warehouse Team",
+    department: "Warehouse",
+    warehouse: "Hyderabad Central",
+    supplier: "Industrial Solutions",
+    date: "2026-08-18",
+    status: "Converted",
+  },
+  {
+    id: "6",
+    requestNumber: "PR-2026-006",
+    product: "Barcode Scanner",
+    sku: "SCAN-BAR-006",
+    quantity: 25,
+    estimatedValue: 87500,
+    priority: "Low",
+    requester: "Warehouse Team",
+    department: "Warehouse",
+    warehouse: "Bengaluru Warehouse",
+    supplier: "Tech Supplies India",
+    date: "2026-08-17",
+    status: "Rejected",
   },
 ];
 
@@ -94,6 +137,9 @@ function getStatusClass(status: RequestStatus) {
     case "Pending Approval":
       return "bg-amber-100 text-amber-700";
 
+    case "Converted":
+      return "bg-blue-100 text-blue-700";
+
     case "Rejected":
       return "bg-red-100 text-red-700";
 
@@ -103,16 +149,17 @@ function getStatusClass(status: RequestStatus) {
   }
 }
 
-function getPriorityClass(priority: PurchaseRequest["priority"]) {
+function getPriorityClass(priority: RequestPriority) {
   switch (priority) {
     case "High":
-      return "bg-red-100 text-red-700";
+      return "bg-red-50 text-red-600";
 
     case "Medium":
-      return "bg-amber-100 text-amber-700";
+      return "bg-amber-50 text-amber-700";
 
+    case "Low":
     default:
-      return "bg-emerald-100 text-emerald-700";
+      return "bg-blue-50 text-blue-700";
   }
 }
 
@@ -121,146 +168,319 @@ export default function PurchaseRequestsPage() {
     useState<PurchaseRequest[]>(initialRequests);
 
   const [search, setSearch] = useState("");
+
   const [statusFilter, setStatusFilter] =
     useState<"All" | RequestStatus>("All");
 
   const [showForm, setShowForm] = useState(false);
 
+  const [selectedRequest, setSelectedRequest] =
+    useState<PurchaseRequest | null>(null);
+
   const [newRequest, setNewRequest] = useState({
-    requestedBy: "",
-    department: "Inventory",
-    supplier: "",
-    item: "",
+    product: "",
+    sku: "",
     quantity: 1,
-    estimatedAmount: 0,
-    priority: "Medium" as PurchaseRequest["priority"],
+    estimatedValue: 0,
+    priority: "Medium" as RequestPriority,
+    requester: "",
+    department: "",
+    warehouse: "Hyderabad Central",
+    supplier: "",
   });
 
   const filteredRequests = useMemo(() => {
-    return requests.filter((request) => {
-      const searchText = search.toLowerCase();
+    const query = search.trim().toLowerCase();
 
+    return requests.filter((item) => {
       const matchesSearch =
-        request.requestNumber
-          .toLowerCase()
-          .includes(searchText) ||
-        request.requestedBy
-          .toLowerCase()
-          .includes(searchText) ||
-        request.supplier
-          .toLowerCase()
-          .includes(searchText) ||
-        request.item
-          .toLowerCase()
-          .includes(searchText);
+        !query ||
+        item.requestNumber.toLowerCase().includes(query) ||
+        item.product.toLowerCase().includes(query) ||
+        item.sku.toLowerCase().includes(query) ||
+        item.requester.toLowerCase().includes(query) ||
+        item.supplier.toLowerCase().includes(query);
 
       const matchesStatus =
         statusFilter === "All" ||
-        request.status === statusFilter;
+        item.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
   }, [requests, search, statusFilter]);
 
   const pendingCount = requests.filter(
-    (request) => request.status === "Pending Approval"
+    (item) => item.status === "Pending Approval"
   ).length;
 
   const approvedCount = requests.filter(
-    (request) => request.status === "Approved"
+    (item) => item.status === "Approved"
+  ).length;
+
+  const convertedCount = requests.filter(
+    (item) => item.status === "Converted"
+  ).length;
+
+  const rejectedCount = requests.filter(
+    (item) => item.status === "Rejected"
   ).length;
 
   const draftCount = requests.filter(
-    (request) => request.status === "Draft"
+    (item) => item.status === "Draft"
   ).length;
 
-  const totalValue = requests.reduce(
-    (total, request) =>
-      total + request.estimatedAmount,
+  const highPriorityCount = requests.filter(
+    (item) =>
+      item.priority === "High" &&
+      item.status === "Pending Approval"
+  ).length;
+
+  const totalRequestedValue = requests.reduce(
+    (total, item) => total + item.estimatedValue,
     0
   );
 
+  const pendingValue = requests
+    .filter((item) => item.status === "Pending Approval")
+    .reduce(
+      (total, item) => total + item.estimatedValue,
+      0
+    );
+
   const handleCreateRequest = () => {
     if (
-      !newRequest.requestedBy ||
-      !newRequest.supplier ||
-      !newRequest.item ||
+      !newRequest.product.trim() ||
+      !newRequest.sku.trim() ||
+      !newRequest.requester.trim() ||
+      !newRequest.department.trim() ||
+      !newRequest.supplier.trim() ||
       newRequest.quantity <= 0
     ) {
       alert("Please fill all required fields.");
       return;
     }
 
-    const nextNumber =
-      String(requests.length + 1).padStart(3, "0");
+    const nextNumber = String(requests.length + 1).padStart(
+      3,
+      "0"
+    );
 
-    const request: PurchaseRequest = {
+    const createdRequest: PurchaseRequest = {
       id: Date.now().toString(),
       requestNumber: `PR-2026-${nextNumber}`,
-      requestedBy: newRequest.requestedBy,
-      department: newRequest.department,
-      supplier: newRequest.supplier,
-      item: newRequest.item,
+      product: newRequest.product,
+      sku: newRequest.sku,
       quantity: newRequest.quantity,
-      estimatedAmount: newRequest.estimatedAmount,
+      estimatedValue: newRequest.estimatedValue,
+      priority: newRequest.priority,
+      requester: newRequest.requester,
+      department: newRequest.department,
+      warehouse: newRequest.warehouse,
+      supplier: newRequest.supplier,
       date: new Date().toISOString().split("T")[0],
       status: "Draft",
-      priority: newRequest.priority,
     };
 
-    setRequests((current) => [request, ...current]);
+    setRequests((current) => [
+      createdRequest,
+      ...current,
+    ]);
 
     setNewRequest({
-      requestedBy: "",
-      department: "Inventory",
-      supplier: "",
-      item: "",
+      product: "",
+      sku: "",
       quantity: 1,
-      estimatedAmount: 0,
+      estimatedValue: 0,
       priority: "Medium",
+      requester: "",
+      department: "",
+      warehouse: "Hyderabad Central",
+      supplier: "",
     });
 
     setShowForm(false);
   };
 
-  const handleSubmitForApproval = (id: string) => {
+  const handleSubmit = (id: string) => {
     setRequests((current) =>
-      current.map((request) =>
-        request.id === id
+      current.map((item) =>
+        item.id === id
           ? {
-              ...request,
+              ...item,
               status: "Pending Approval",
             }
-          : request
+          : item
       )
     );
   };
 
   const handleApprove = (id: string) => {
     setRequests((current) =>
-      current.map((request) =>
-        request.id === id
+      current.map((item) =>
+        item.id === id
           ? {
-              ...request,
+              ...item,
               status: "Approved",
             }
-          : request
+          : item
       )
     );
+
+    setSelectedRequest(null);
   };
 
   const handleReject = (id: string) => {
     setRequests((current) =>
-      current.map((request) =>
-        request.id === id
+      current.map((item) =>
+        item.id === id
           ? {
-              ...request,
+              ...item,
               status: "Rejected",
             }
-          : request
+          : item
       )
     );
+
+    setSelectedRequest(null);
   };
+
+  const handleConvert = (id: string) => {
+  const request = requests.find(
+    (item) => item.id === id
+  );
+
+  if (!request) {
+    return;
+  }
+
+  // Get existing Purchase Orders
+  const savedOrders = localStorage.getItem(
+    "stockflow-purchase-orders"
+  );
+
+  let purchaseOrders: any[] = [];
+
+  if (savedOrders) {
+    try {
+      const parsedOrders = JSON.parse(savedOrders);
+
+      if (Array.isArray(parsedOrders)) {
+        purchaseOrders = parsedOrders;
+      }
+    } catch {
+      purchaseOrders = [];
+    }
+  }
+
+  // Generate next PO number
+  const existingNumbers = purchaseOrders
+    .map((po) => {
+      const match = String(po.number || "").match(
+        /PO-\d{6}-(\d+)$/
+      );
+
+      return match
+        ? Number(match[1])
+        : 0;
+    })
+    .filter((number) => Number.isFinite(number));
+
+  const nextNumber =
+    existingNumbers.length > 0
+      ? Math.max(...existingNumbers) + 1
+      : 1;
+
+  // Calculate estimated unit price
+  const unitPrice =
+    request.quantity > 0
+      ? Math.round(
+          request.estimatedValue /
+            request.quantity
+        )
+      : 0;
+
+  // Create Purchase Order from Purchase Request
+  const createdPO = {
+    id: Date.now().toString(),
+
+    number: `PO-202608-${String(
+      nextNumber
+    ).padStart(5, "0")}`,
+
+    supplier: request.supplier,
+
+    supplierGST: "GSTIN-PENDING",
+
+    warehouse: request.warehouse,
+
+    requester: request.requester,
+
+    orderDate:
+      new Date().toLocaleDateString(
+        "en-GB",
+        {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }
+      ),
+
+    expectedDate: "Not specified",
+
+    paymentTerms: "30 days",
+
+    status: "Draft",
+
+    notes: `Created from purchase request ${request.requestNumber}.`,
+
+    items: [
+      {
+        product: request.product,
+
+        sku: request.sku,
+
+        ordered: request.quantity,
+
+        received: 0,
+
+        unitPrice: unitPrice,
+
+        total: request.estimatedValue,
+      },
+    ],
+  };
+
+  // Save the new PO
+  const updatedPurchaseOrders = [
+    createdPO,
+    ...purchaseOrders,
+  ];
+
+  localStorage.setItem(
+    "stockflow-purchase-orders",
+    JSON.stringify(
+      updatedPurchaseOrders
+    )
+  );
+
+  // Mark Purchase Request as Converted
+  setRequests((current) =>
+    current.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            status: "Converted",
+          }
+        : item
+    )
+  );
+
+  setSelectedRequest(null);
+
+  alert(
+    `Purchase Order ${createdPO.number} created successfully.`
+  );
+};
 
   return (
     <PageLayout>
@@ -271,30 +491,57 @@ export default function PurchaseRequestsPage() {
 
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-500">
+                Procurement
+              </p>
+
+              <h1 className="mt-1 text-3xl font-bold text-gray-900">
                 Purchase Requests
               </h1>
 
               <p className="mt-1 text-sm text-gray-500">
-                Create purchase requests and manage approval workflow
+                Create, review and manage internal purchase requests.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="rounded-lg bg-[#12213a] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1c3152]"
-            >
-              + New Purchase Request
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setRequests([...requests])}
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Refresh
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="rounded-lg bg-[#12213a] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1c3152]"
+              >
+                + Create Request
+              </button>
+            </div>
           </div>
 
-          {/* SUMMARY */}
+          {/* FRONTEND NOTICE */}
+
+          <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+            <p className="text-xs font-semibold text-blue-800">
+              Purchase Requests
+            </p>
+
+            <p className="mt-1 text-[11px] text-blue-600">
+              Frontend workflow is active. Request data is currently
+              handled locally.
+            </p>
+          </div>
+
+          {/* KPI CARDS */}
 
           <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
             <div className="rounded-xl border bg-white p-5 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
                 Total Requests
               </p>
 
@@ -308,7 +555,7 @@ export default function PurchaseRequestsPage() {
             </div>
 
             <div className="rounded-xl border bg-white p-5 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
                 Pending Approval
               </p>
 
@@ -317,12 +564,12 @@ export default function PurchaseRequestsPage() {
               </p>
 
               <p className="mt-1 text-xs text-gray-500">
-                Waiting for approval
+                Require review
               </p>
             </div>
 
             <div className="rounded-xl border bg-white p-5 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
                 Approved
               </p>
 
@@ -336,821 +583,943 @@ export default function PurchaseRequestsPage() {
             </div>
 
             <div className="rounded-xl border bg-white p-5 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Estimated Value
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                Requested Value
               </p>
 
               <p className="mt-2 text-2xl font-bold text-blue-600">
-                {formatCurrency(totalValue)}
+                {formatCurrency(totalRequestedValue)}
               </p>
 
               <p className="mt-1 text-xs text-gray-500">
-                Combined request value
+                Estimated request value
               </p>
             </div>
 
           </div>
 
-          {/* APPROVAL INBOX */}
+                    {/* PURCHASE REQUEST QUEUE */}
 
           <div className="mb-6 rounded-xl border bg-white shadow-sm">
+            <div className="flex flex-col gap-4 border-b px-5 py-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">
+                  Purchase Request Queue
+                </h2>
 
-            <div className="border-b px-6 py-4">
-              <div className="flex items-center justify-between">
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Review internal purchasing requirements before creating
+                  purchase orders.
+                </p>
+              </div>
 
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Approval Inbox
-                  </h2>
-
-                  <p className="text-sm text-gray-500">
-                    Review and approve purchase requests
-                  </p>
-                </div>
-
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
+              <div className="flex gap-2">
+                <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-semibold text-amber-700">
                   {pendingCount} Pending
                 </span>
 
+                <span className="rounded-full bg-red-50 px-3 py-1 text-[10px] font-semibold text-red-600">
+                  {highPriorityCount} High Priority
+                </span>
+
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold text-blue-700">
+                  {formatCurrency(pendingValue)}
+                </span>
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="grid gap-3 p-5 md:grid-cols-3">
+              {requests
+                .filter(
+                  (item) =>
+                    item.status === "Pending Approval"
+                )
+                .slice(0, 3)
+                .map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-lg border border-gray-100 bg-gray-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold text-blue-700">
+                          {item.requestNumber}
+                        </p>
 
-              {pendingCount === 0 ? (
-                <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-                  <p className="font-medium text-gray-700">
-                    No requests waiting for approval
-                  </p>
+                        <p className="mt-1 text-sm font-semibold text-gray-900">
+                          {item.product}
+                        </p>
 
-                  <p className="mt-1 text-sm text-gray-500">
-                    The approval inbox is currently clear.
+                        <p className="mt-1 text-[10px] text-gray-500">
+                          {item.quantity} units · {item.warehouse}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`rounded-full px-2 py-1 text-[9px] font-semibold ${getPriorityClass(
+                          item.priority
+                        )}`}
+                      >
+                        {item.priority}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-sm font-bold text-gray-900">
+                        {formatCurrency(item.estimatedValue)}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedRequest(item)
+                        }
+                        className="rounded-lg bg-[#12213a] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#1c3152]"
+                      >
+                        Review
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {pendingCount === 0 && (
+              <div className="px-5 py-8 text-center text-xs text-gray-500">
+                No purchase requests are currently pending approval.
+              </div>
+            )}
+          </div>
+
+          {/* MAIN REQUEST TABLE */}
+
+          <div className="rounded-xl border bg-white shadow-sm">
+            <div className="border-b px-5 py-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900">
+                    Purchase Requests
+                  </h2>
+
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Review and manage internal purchase requirements.
                   </p>
                 </div>
-              ) : (
-                <div className="space-y-3">
 
-                  {requests
-                    .filter(
-                      (request) =>
-                        request.status ===
-                        "Pending Approval"
-                    )
-                    .map((request) => (
-                      <div
-                        key={request.id}
-                        className="rounded-lg border border-amber-100 bg-amber-50/40 p-4"
-                      >
+                <div className="w-full lg:w-72">
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(event) =>
+                      setSearch(event.target.value)
+                    }
+                    placeholder="Search request, product or requester..."
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
 
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              </div>
 
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold text-gray-900">
-                                {request.requestNumber}
-                              </span>
+              {/* STATUS FILTERS */}
 
-                              <span
-                                className={`rounded-full px-2 py-1 text-[10px] font-medium ${getPriorityClass(
-                                  request.priority
-                                )}`}
-                              >
-                                {request.priority} Priority
-                              </span>
-                            </div>
+              <div className="mt-4 flex flex-wrap gap-2">
 
-                            <p className="mt-1 text-sm text-gray-700">
-                              {request.item} ×{" "}
-                              {request.quantity}
-                            </p>
+                {(
+                  [
+                    "All",
+                    "Draft",
+                    "Pending Approval",
+                    "Approved",
+                    "Rejected",
+                    "Converted",
+                  ] as const
+                ).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() =>
+                      setStatusFilter(status)
+                    }
+                    className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold transition ${
+                      statusFilter === status
+                        ? "bg-[#12213a] text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
 
-                            <p className="mt-1 text-xs text-gray-500">
-                              Requested by{" "}
-                              {request.requestedBy} ·{" "}
-                              {request.department} ·{" "}
-                              {request.supplier}
-                            </p>
-                          </div>
+              </div>
+            </div>
 
-                          <div className="flex items-center gap-2">
+            {/* TABLE */}
 
-                            <span className="mr-2 font-semibold text-gray-900">
-                              {formatCurrency(
-                                request.estimatedAmount
-                              )}
-                            </span>
+            <div className="overflow-x-auto">
+              <table className="min-w-[1100px] w-full text-left">
 
+                <thead>
+                  <tr className="border-b bg-gray-50">
+
+                    <th className="px-5 py-3 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                      Request
+                    </th>
+
+                    <th className="px-4 py-3 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                      Product
+                    </th>
+
+                    <th className="px-4 py-3 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                      Quantity
+                    </th>
+
+                    <th className="px-4 py-3 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                      Value
+                    </th>
+
+                    <th className="px-4 py-3 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                      Priority
+                    </th>
+
+                    <th className="px-4 py-3 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                      Requester
+                    </th>
+
+                    <th className="px-4 py-3 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                      Status
+                    </th>
+
+                    <th className="px-5 py-3 text-right text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                      Actions
+                    </th>
+
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y">
+
+                  {filteredRequests.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="transition hover:bg-gray-50"
+                    >
+
+                      {/* REQUEST */}
+
+                      <td className="px-5 py-4">
+                        <div>
+                          <p className="text-xs font-bold text-blue-700">
+                            {item.requestNumber}
+                          </p>
+
+                          <p className="mt-1 text-[10px] text-gray-400">
+                            {item.date}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* PRODUCT */}
+
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-900">
+                            {item.product}
+                          </p>
+
+                          <p className="mt-1 text-[9px] text-gray-400">
+                            SKU: {item.sku}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* QUANTITY */}
+
+                      <td className="px-4 py-4">
+                        <span className="text-xs font-semibold text-gray-900">
+                          {item.quantity}
+                        </span>
+                      </td>
+
+                      {/* VALUE */}
+
+                      <td className="px-4 py-4">
+                        <span className="text-xs font-semibold text-gray-900">
+                          {formatCurrency(item.estimatedValue)}
+                        </span>
+                      </td>
+
+                      {/* PRIORITY */}
+
+                      <td className="px-4 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[9px] font-semibold ${getPriorityClass(
+                            item.priority
+                          )}`}
+                        >
+                          {item.priority}
+                        </span>
+                      </td>
+
+                      {/* REQUESTER */}
+
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="text-[10px] font-semibold text-gray-800">
+                            {item.requester}
+                          </p>
+
+                          <p className="mt-1 text-[9px] text-gray-400">
+                            {item.department}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* STATUS */}
+
+                      <td className="px-4 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[9px] font-semibold ${getStatusClass(
+                            item.status
+                          )}`}
+                        >
+                          {item.status}
+                        </span>
+                      </td>
+
+                      {/* ACTIONS */}
+
+                      <td className="px-5 py-4">
+                        <div className="flex justify-end gap-2">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedRequest(item)
+                            }
+                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[9px] font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            View
+                          </button>
+
+                          {item.status === "Draft" && (
                             <button
                               type="button"
                               onClick={() =>
-                                handleReject(
-                                  request.id
-                                )
+                                handleSubmit(item.id)
                               }
-                              className="rounded-lg border border-red-300 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+                              className="rounded-lg bg-blue-600 px-3 py-1.5 text-[9px] font-semibold text-white hover:bg-blue-700"
                             >
-                              Reject
+                              Submit
                             </button>
+                          )}
 
+                          {item.status === "Pending Approval" && (
                             <button
                               type="button"
                               onClick={() =>
-                                handleApprove(
-                                  request.id
-                                )
+                                handleApprove(item.id)
                               }
-                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700"
+                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[9px] font-semibold text-white hover:bg-emerald-700"
                             >
                               Approve
                             </button>
+                          )}
 
-                          </div>
+                          {item.status === "Approved" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleConvert(item.id)
+                              }
+                              className="rounded-lg bg-[#12213a] px-3 py-1.5 text-[9px] font-semibold text-white hover:bg-[#1c3152]"
+                            >
+                              Convert
+                            </button>
+                          )}
 
                         </div>
-
-                      </div>
-                    ))}
-
-                </div>
-              )}
-
-            </div>
-          </div>
-
-                    {/* SEARCH + FILTERS */}
-
-          <div className="mb-6 rounded-xl border bg-white p-4 shadow-sm">
-
-            <div className="flex flex-col gap-3 md:flex-row">
-
-              <div className="flex-1">
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(event) =>
-                    setSearch(event.target.value)
-                  }
-                  placeholder="Search request number, requester, supplier or item..."
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(
-                    event.target.value as
-                      | "All"
-                      | RequestStatus
-                  )
-                }
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-              >
-                <option value="All">
-                  All Statuses
-                </option>
-
-                <option value="Draft">
-                  Draft
-                </option>
-
-                <option value="Pending Approval">
-                  Pending Approval
-                </option>
-
-                <option value="Approved">
-                  Approved
-                </option>
-
-                <option value="Rejected">
-                  Rejected
-                </option>
-              </select>
-
-            </div>
-
-          </div>
-
-          {/* REQUEST TABLE */}
-
-          <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-
-            <div className="border-b px-6 py-4">
-
-              <h2 className="text-lg font-semibold text-gray-900">
-                Purchase Requests
-              </h2>
-
-              <p className="text-sm text-gray-500">
-                {filteredRequests.length} request
-                {filteredRequests.length === 1
-                  ? ""
-                  : "s"} found
-              </p>
-
-            </div>
-
-            {filteredRequests.length === 0 ? (
-              <div className="p-10 text-center">
-
-                <p className="font-medium text-gray-700">
-                  No purchase requests found
-                </p>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Try changing your search or status filter.
-                </p>
-
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-
-                <table className="min-w-full text-sm">
-
-                  <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-
-                    <tr>
-
-                      <th className="px-6 py-4">
-                        Request
-                      </th>
-
-                      <th className="px-6 py-4">
-                        Requested By
-                      </th>
-
-                      <th className="px-6 py-4">
-                        Supplier
-                      </th>
-
-                      <th className="px-6 py-4">
-                        Item
-                      </th>
-
-                      <th className="px-6 py-4">
-                        Amount
-                      </th>
-
-                      <th className="px-6 py-4">
-                        Priority
-                      </th>
-
-                      <th className="px-6 py-4">
-                        Status
-                      </th>
-
-                      <th className="px-6 py-4 text-right">
-                        Action
-                      </th>
+                      </td>
 
                     </tr>
+                  ))}
 
-                  </thead>
+                </tbody>
 
-                  <tbody className="divide-y">
+              </table>
 
-                    {filteredRequests.map(
-                      (request) => (
-                        <tr
-                          key={request.id}
-                          className="hover:bg-gray-50"
-                        >
+              {filteredRequests.length === 0 && (
+                <div className="px-5 py-16 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+                    📦
+                  </div>
 
-                          <td className="px-6 py-4">
-
-                            <p className="font-semibold text-gray-900">
-                              {request.requestNumber}
-                            </p>
-
-                            <p className="mt-1 text-xs text-gray-500">
-                              {request.date}
-                            </p>
-
-                          </td>
-
-                          <td className="px-6 py-4">
-
-                            <p className="font-medium text-gray-800">
-                              {request.requestedBy}
-                            </p>
-
-                            <p className="mt-1 text-xs text-gray-500">
-                              {request.department}
-                            </p>
-
-                          </td>
-
-                          <td className="px-6 py-4 text-gray-700">
-                            {request.supplier}
-                          </td>
-
-                          <td className="px-6 py-4">
-
-                            <p className="font-medium text-gray-800">
-                              {request.item}
-                            </p>
-
-                            <p className="mt-1 text-xs text-gray-500">
-                              Qty: {request.quantity}
-                            </p>
-
-                          </td>
-
-                          <td className="px-6 py-4 font-semibold text-gray-900">
-                            {formatCurrency(
-                              request.estimatedAmount
-                            )}
-                          </td>
-
-                          <td className="px-6 py-4">
-
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-xs font-medium ${getPriorityClass(
-                                request.priority
-                              )}`}
-                            >
-                              {request.priority}
-                            </span>
-
-                          </td>
-
-                          <td className="px-6 py-4">
-
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getStatusClass(
-                                request.status
-                              )}`}
-                            >
-                              {request.status}
-                            </span>
-
-                          </td>
-
-                          <td className="px-6 py-4">
-
-                            <div className="flex justify-end gap-2">
-
-                              {request.status ===
-                                "Draft" && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSubmitForApproval(
-                                      request.id
-                                    )
-                                  }
-                                  className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50"
-                                >
-                                  Submit
-                                </button>
-                              )}
-
-                              {request.status ===
-                                "Pending Approval" && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleReject(
-                                        request.id
-                                      )
-                                    }
-                                    className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                                  >
-                                    Reject
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleApprove(
-                                        request.id
-                                      )
-                                    }
-                                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
-                                  >
-                                    Approve
-                                  </button>
-                                </>
-                              )}
-
-                              {request.status ===
-                                "Approved" && (
-                                <span className="text-xs font-medium text-emerald-600">
-                                  Ready for PO
-                                </span>
-                              )}
-
-                              {request.status ===
-                                "Rejected" && (
-                                <span className="text-xs font-medium text-red-500">
-                                  Rejected
-                                </span>
-                              )}
-
-                            </div>
-
-                          </td>
-
-                        </tr>
-                      )
-                    )}
-
-                  </tbody>
-
-                </table>
-
-              </div>
-            )}
-
-          </div>
-
-          {/* FOOTER SUMMARY */}
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-
-            <div className="rounded-xl border bg-white p-5 shadow-sm">
-
-              <div className="flex items-center justify-between">
-
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Draft Requests
+                  <p className="mt-4 text-sm font-semibold text-gray-700">
+                    No purchase requests found
                   </p>
 
-                  <p className="mt-2 text-2xl font-bold text-gray-900">
-                    {draftCount}
+                  <p className="mt-1 text-xs text-gray-400">
+                    Try changing the search or status filter.
                   </p>
                 </div>
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-600">
-                  📝
-                </div>
-
-              </div>
-
-              <p className="mt-2 text-xs text-gray-500">
-                Requests that have not yet been submitted
-              </p>
-
+              )}
             </div>
 
-            <div className="rounded-xl border bg-white p-5 shadow-sm">
+            {/* TABLE FOOTER */}
 
-              <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 border-t bg-gray-50 px-5 py-3 text-[10px] text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Showing {filteredRequests.length} of{" "}
+                {requests.length} purchase requests
+              </span>
 
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Approval Progress
-                  </p>
+              <div className="flex gap-4">
+                <span>
+                  Draft: {draftCount}
+                </span>
 
-                  <p className="mt-2 text-2xl font-bold text-emerald-600">
-                    {requests.length > 0
-                      ? Math.round(
-                          (approvedCount /
-                            requests.length) *
-                            100
+                <span>
+                  Approved: {approvedCount}
+                </span>
+
+                <span>
+                  Converted: {convertedCount}
+                </span>
+
+                <span>
+                  Rejected: {rejectedCount}
+                </span>
+              </div>
+            </div>
+          </div>
+                    {/* CREATE REQUEST MODAL */}
+
+          {showForm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+
+                {/* MODAL HEADER */}
+
+                <div className="flex items-center justify-between border-b px-6 py-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">
+                      Create Purchase Request
+                    </h2>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      Create an internal request for purchasing.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(false)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {/* FORM */}
+
+                <div className="max-h-[70vh] overflow-y-auto p-6">
+
+                  <div className="grid gap-4 md:grid-cols-2">
+
+                    {/* PRODUCT */}
+
+                    <div className="md:col-span-2">
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Product *
+                      </label>
+
+                      <input
+                        type="text"
+                        value={newRequest.product}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            product: event.target.value,
+                          }))
+                        }
+                        placeholder="Enter product name"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    {/* SKU */}
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        SKU *
+                      </label>
+
+                      <input
+                        type="text"
+                        value={newRequest.sku}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            sku: event.target.value,
+                          }))
+                        }
+                        placeholder="SKU-001"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    {/* QUANTITY */}
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Quantity *
+                      </label>
+
+                      <input
+                        type="number"
+                        min="1"
+                        value={newRequest.quantity}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            quantity: Number(
+                              event.target.value
+                            ),
+                          }))
+                        }
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    {/* ESTIMATED VALUE */}
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Estimated Value (₹)
+                      </label>
+
+                      <input
+                        type="number"
+                        min="0"
+                        value={newRequest.estimatedValue}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            estimatedValue: Number(
+                              event.target.value
+                            ),
+                          }))
+                        }
+                        placeholder="0"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    {/* PRIORITY */}
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Priority
+                      </label>
+
+                      <select
+                        value={newRequest.priority}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            priority:
+                              event.target.value as RequestPriority,
+                          }))
+                        }
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="Low">
+                          Low
+                        </option>
+
+                        <option value="Medium">
+                          Medium
+                        </option>
+
+                        <option value="High">
+                          High
+                        </option>
+                      </select>
+                    </div>
+
+                    {/* REQUESTER */}
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Requester *
+                      </label>
+
+                      <input
+                        type="text"
+                        value={newRequest.requester}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            requester: event.target.value,
+                          }))
+                        }
+                        placeholder="Requester name/team"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    {/* DEPARTMENT */}
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Department *
+                      </label>
+
+                      <input
+                        type="text"
+                        value={newRequest.department}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            department: event.target.value,
+                          }))
+                        }
+                        placeholder="Operations"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    {/* WAREHOUSE */}
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Warehouse
+                      </label>
+
+                      <select
+                        value={newRequest.warehouse}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            warehouse: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="Hyderabad Central">
+                          Hyderabad Central
+                        </option>
+
+                        <option value="Bengaluru Warehouse">
+                          Bengaluru Warehouse
+                        </option>
+
+                        <option value="Chennai Warehouse">
+                          Chennai Warehouse
+                        </option>
+
+                        <option value="Mumbai Warehouse">
+                          Mumbai Warehouse
+                        </option>
+                      </select>
+                    </div>
+
+                    {/* SUPPLIER */}
+
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Preferred Supplier *
+                      </label>
+
+                      <input
+                        type="text"
+                        value={newRequest.supplier}
+                        onChange={(event) =>
+                          setNewRequest((current) => ({
+                            ...current,
+                            supplier: event.target.value,
+                          }))
+                        }
+                        placeholder="Supplier name"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                  </div>
+
+                  {/* SUMMARY */}
+
+                  <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                          Request Summary
+                        </p>
+
+                        <p className="mt-1 text-xs text-blue-800">
+                          New requests are created as Draft.
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-[9px] uppercase tracking-wide text-blue-500">
+                          Estimated Value
+                        </p>
+
+                        <p className="mt-1 text-lg font-bold text-blue-700">
+                          {formatCurrency(
+                            newRequest.estimatedValue
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* MODAL FOOTER */}
+
+                <div className="flex justify-end gap-2 border-t bg-gray-50 px-6 py-4">
+
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(false)}
+                    className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCreateRequest}
+                    className="rounded-lg bg-[#12213a] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1c3152]"
+                  >
+                    Create Request
+                  </button>
+
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* REQUEST DETAILS MODAL */}
+
+          {selectedRequest && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+              <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+
+                {/* HEADER */}
+
+                <div className="flex items-start justify-between border-b px-6 py-5">
+
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                      Purchase Request
+                    </p>
+
+                    <h2 className="mt-1 text-xl font-bold text-gray-900">
+                      {selectedRequest.requestNumber}
+                    </h2>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      Created on {selectedRequest.date}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedRequest(null)
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  >
+                    ×
+                  </button>
+
+                </div>
+
+                {/* DETAILS */}
+
+                <div className="p-6">
+
+                  <div className="mb-5 flex items-center justify-between">
+
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">
+                        {selectedRequest.product}
+                      </p>
+
+                      <p className="mt-1 text-[10px] text-gray-400">
+                        SKU: {selectedRequest.sku}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`rounded-full px-3 py-1.5 text-[10px] font-semibold ${getStatusClass(
+                        selectedRequest.status
+                      )}`}
+                    >
+                      {selectedRequest.status}
+                    </span>
+
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+
+                    <div className="rounded-lg bg-gray-50 p-4">
+                      <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                        Quantity
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-gray-900">
+                        {selectedRequest.quantity}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 p-4">
+                      <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                        Estimated Value
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-gray-900">
+                        {formatCurrency(
+                          selectedRequest.estimatedValue
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 p-4">
+                      <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                        Priority
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-gray-900">
+                        {selectedRequest.priority}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 p-4">
+                      <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                        Warehouse
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-gray-900">
+                        {selectedRequest.warehouse}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 p-4">
+                      <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                        Requester
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-gray-900">
+                        {selectedRequest.requester}
+                      </p>
+
+                      <p className="mt-1 text-[10px] text-gray-400">
+                        {selectedRequest.department}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 p-4">
+                      <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                        Supplier
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-gray-900">
+                        {selectedRequest.supplier}
+                      </p>
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* ACTIONS */}
+
+                <div className="flex flex-wrap justify-end gap-2 border-t bg-gray-50 px-6 py-4">
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedRequest(null)
+                    }
+                    className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+
+                  {selectedRequest.status ===
+                    "Draft" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSubmit(
+                          selectedRequest.id
+                        );
+                        setSelectedRequest(null);
+                      }}
+                      className="rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700"
+                    >
+                      Submit for Approval
+                    </button>
+                  )}
+
+                  {selectedRequest.status ===
+                    "Pending Approval" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleReject(
+                            selectedRequest.id
+                          )
+                        }
+                        className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        Reject
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleApprove(
+                            selectedRequest.id
+                          )
+                        }
+                        className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                      >
+                        Approve
+                      </button>
+                    </>
+                  )}
+
+                  {selectedRequest.status ===
+                    "Approved" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleConvert(
+                          selectedRequest.id
                         )
-                      : 0}
-                    %
-                  </p>
-                </div>
+                      }
+                      className="rounded-lg bg-[#12213a] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1c3152]"
+                    >
+                      Convert to Purchase Order
+                    </button>
+                  )}
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                  ✓
                 </div>
 
               </div>
 
-              <p className="mt-2 text-xs text-gray-500">
-                Percentage of requests currently approved
-              </p>
-
             </div>
-
-          </div>
+          )}
 
         </div>
       </div>
-
-      {/* ================================================== */}
-      {/* NEW PURCHASE REQUEST MODAL */}
-      {/* ================================================== */}
-
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl">
-
-            {/* MODAL HEADER */}
-
-            <div className="flex items-center justify-between border-b px-6 py-5">
-
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">
-                  New Purchase Request
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Create a request for approval
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
-              >
-                ✕
-              </button>
-
-            </div>
-
-            {/* FORM */}
-
-            <div className="space-y-5 p-6">
-
-              <div className="grid gap-5 md:grid-cols-2">
-
-                {/* REQUESTED BY */}
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Requested By *
-                  </label>
-
-                  <input
-                    type="text"
-                    value={
-                      newRequest.requestedBy
-                    }
-                    onChange={(event) =>
-                      setNewRequest(
-                        (current) => ({
-                          ...current,
-                          requestedBy:
-                            event.target.value,
-                        })
-                      )
-                    }
-                    placeholder="Enter employee name"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {/* DEPARTMENT */}
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Department
-                  </label>
-
-                  <select
-                    value={
-                      newRequest.department
-                    }
-                    onChange={(event) =>
-                      setNewRequest(
-                        (current) => ({
-                          ...current,
-                          department:
-                            event.target.value,
-                        })
-                      )
-                    }
-                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-                  >
-                    <option value="Inventory">
-                      Inventory
-                    </option>
-
-                    <option value="IT">
-                      IT
-                    </option>
-
-                    <option value="Sales">
-                      Sales
-                    </option>
-
-                    <option value="Warehouse">
-                      Warehouse
-                    </option>
-
-                    <option value="Finance">
-                      Finance
-                    </option>
-
-                    <option value="HR">
-                      HR
-                    </option>
-                  </select>
-                </div>
-
-                {/* SUPPLIER */}
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Supplier *
-                  </label>
-
-                  <input
-                    type="text"
-                    value={
-                      newRequest.supplier
-                    }
-                    onChange={(event) =>
-                      setNewRequest(
-                        (current) => ({
-                          ...current,
-                          supplier:
-                            event.target.value,
-                        })
-                      )
-                    }
-                    placeholder="Enter supplier name"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {/* ITEM */}
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Item *
-                  </label>
-
-                  <input
-                    type="text"
-                    value={newRequest.item}
-                    onChange={(event) =>
-                      setNewRequest(
-                        (current) => ({
-                          ...current,
-                          item: event.target.value,
-                        })
-                      )
-                    }
-                    placeholder="Product or item name"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {/* QUANTITY */}
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Quantity *
-                  </label>
-
-                  <input
-                    type="number"
-                    min="1"
-                    value={
-                      newRequest.quantity
-                    }
-                    onChange={(event) =>
-                      setNewRequest(
-                        (current) => ({
-                          ...current,
-                          quantity: Number(
-                            event.target.value
-                          ),
-                        })
-                      )
-                    }
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {/* AMOUNT */}
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Estimated Amount
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0"
-                    value={
-                      newRequest.estimatedAmount
-                    }
-                    onChange={(event) =>
-                      setNewRequest(
-                        (current) => ({
-                          ...current,
-                          estimatedAmount:
-                            Number(
-                              event.target.value
-                            ),
-                        })
-                      )
-                    }
-                    placeholder="₹0"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-              </div>
-
-              {/* PRIORITY */}
-
-              <div>
-
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Priority
-                </label>
-
-                <div className="flex gap-2">
-
-                  {(
-                    [
-                      "Low",
-                      "Medium",
-                      "High",
-                    ] as const
-                  ).map((priority) => (
-                    <button
-                      key={priority}
-                      type="button"
-                      onClick={() =>
-                        setNewRequest(
-                          (current) => ({
-                            ...current,
-                            priority,
-                          })
-                        )
-                      }
-                      className={`rounded-lg border px-4 py-2 text-sm font-medium ${
-                        newRequest.priority ===
-                        priority
-                          ? priority === "High"
-                            ? "border-red-500 bg-red-50 text-red-700"
-                            : priority ===
-                              "Medium"
-                            ? "border-amber-500 bg-amber-50 text-amber-700"
-                            : "border-emerald-500 bg-emerald-50 text-emerald-700"
-                          : "border-gray-300 text-gray-600 hover:bg-gray-50"
-                      }`}
-                    >
-                      {priority}
-                    </button>
-                  ))}
-
-                </div>
-
-              </div>
-
-              {/* INFORMATION */}
-
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-
-                <p className="text-sm font-medium text-blue-800">
-                  Approval workflow
-                </p>
-
-                <p className="mt-1 text-xs leading-5 text-blue-700">
-                  New requests are created as drafts.
-                  Submit the request when it is ready,
-                  then an authorized user can approve or
-                  reject it from the approval inbox.
-                </p>
-
-              </div>
-
-            </div>
-
-            {/* MODAL FOOTER */}
-
-            <div className="flex flex-col-reverse gap-3 border-t px-6 py-4 sm:flex-row sm:justify-end">
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowForm(false)
-                }
-                className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  handleCreateRequest
-                }
-                className="rounded-lg bg-[#12213a] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1c3152]"
-              >
-                Create Request
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-      )}
-
     </PageLayout>
   );
 }

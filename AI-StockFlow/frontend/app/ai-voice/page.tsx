@@ -285,7 +285,7 @@ export default function AIVoicePage() {
     }
   };
 
-  const processVoiceCommand = (
+    const processVoiceCommand = (
     text: string
   ) => {
     const normalized =
@@ -455,7 +455,7 @@ export default function AIVoicePage() {
       : "";
   };
 
-  const useSampleCommand = (
+  const handleSampleCommand = (
     sample: string
   ) => {
     setTranscript(
@@ -581,9 +581,11 @@ export default function AIVoicePage() {
               <option>
                 English
               </option>
+
               <option>
                 Hindi
               </option>
+
               <option>
                 Telugu
               </option>
@@ -651,6 +653,7 @@ export default function AIVoicePage() {
                   length: 31,
                 }).map(
                   (_, index) => {
+
                     const base =
                       isListening
                         ? 18 +
@@ -709,7 +712,6 @@ export default function AIVoicePage() {
                     : "bg-blue-600 hover:bg-blue-700"
                 }`}
               >
-
                 {isListening
                   ? "■"
                   : "🎤"}
@@ -717,10 +719,10 @@ export default function AIVoicePage() {
                 {isListening && (
                   <>
                     <span className="absolute inset-[-10px] animate-ping rounded-full border border-red-400/50" />
+
                     <span className="absolute inset-[-20px] rounded-full border border-red-400/20" />
                   </>
                 )}
-
               </button>
 
               <p className="mt-6 text-sm text-gray-400">
@@ -960,7 +962,7 @@ export default function AIVoicePage() {
 
         </div>
 
-        {/* SAMPLE COMMANDS */}
+                {/* SAMPLE COMMANDS */}
 
         <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
 
@@ -985,7 +987,7 @@ export default function AIVoicePage() {
                   key={sample}
                   type="button"
                   onClick={() =>
-                    useSampleCommand(
+                    handleSampleCommand(
                       sample
                     )
                   }

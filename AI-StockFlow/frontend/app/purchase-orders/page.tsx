@@ -262,8 +262,9 @@ function getStatusClass(status: POStatus) {
 
 export default function PurchaseOrdersPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(
-    initialPurchaseOrders
-  );
+  initialPurchaseOrders
+);
+
 
   const [search, setSearch] = useState("");
 
@@ -287,6 +288,29 @@ export default function PurchaseOrdersPage() {
     quantity: 1,
     unitPrice: 0,
   });
+
+useEffect(() => {
+  const savedOrders = localStorage.getItem(
+    "stockflow-purchase-orders"
+  );
+
+  if (!savedOrders) {
+    return;
+  }
+
+  try {
+    const parsedOrders =
+      JSON.parse(savedOrders);
+
+    if (Array.isArray(parsedOrders)) {
+      setPurchaseOrders(parsedOrders);
+    }
+  } catch {
+    localStorage.removeItem(
+      "stockflow-purchase-orders"
+    );
+  }
+}, []);
 
   useEffect(() => {
   const savedOrders = localStorage.getItem(

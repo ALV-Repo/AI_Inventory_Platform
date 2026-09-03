@@ -418,10 +418,24 @@ function getBinUtilization(bin: Bin) {
 }
 
 export default function WarehousePage() {
+  const [warehouseList, setWarehouseList] =
+    useState<Warehouse[]>(warehouses);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [selectedWarehouseId, setSelectedWarehouseId] =
     useState("WH-001");
+
+  const [showAddWarehouse, setShowAddWarehouse] =
+    useState(false);
+
+  const [newWarehouse, setNewWarehouse] = useState({
+    name: "",
+    location: "",
+    manager: "",
+    capacity: "",
+    status: "Operational" as WarehouseStatus,
+  });
 
   const [expandedZones, setExpandedZones] = useState<string[]>([
     "Z-A",
@@ -436,26 +450,79 @@ export default function WarehousePage() {
 
   const [selectedBin, setSelectedBin] = useState<Bin | null>(null);
 
-  const totalCapacity = warehouses.reduce(
+    function handleAddWarehouse(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    const name = newWarehouse.name.trim();
+    const location = newWarehouse.location.trim();
+    const manager = newWarehouse.manager.trim();
+    const capacity = Number(newWarehouse.capacity);
+
+    if (!name || !location || !manager || capacity <= 0) {
+      alert("Please enter all warehouse details correctly.");
+      return;
+    }
+
+    const nextNumber =
+      warehouseList.length + 1;
+
+    const warehouseId =
+      `WH-${String(nextNumber).padStart(3, "0")}`;
+
+    const createdWarehouse: Warehouse = {
+      id: warehouseId,
+      name,
+      location,
+      manager,
+      capacity,
+      used: 0,
+      products: 0,
+      status: newWarehouse.status,
+      zones: [],
+    };
+
+    setWarehouseList((current) => [
+      ...current,
+      createdWarehouse,
+    ]);
+
+    setSelectedWarehouseId(warehouseId);
+
+    setNewWarehouse({
+      name: "",
+      location: "",
+      manager: "",
+      capacity: "",
+      status: "Operational",
+    });
+
+    setShowAddWarehouse(false);
+
+    alert(`${name} added successfully.`);
+  }
+
+  const totalCapacity = warehouseList.reduce(
     (sum, warehouse) => sum + warehouse.capacity,
     0
   );
 
-  const totalUsed = warehouses.reduce(
+  const totalUsed = warehouseList.reduce(
     (sum, warehouse) => sum + warehouse.used,
     0
   );
 
-  const totalProducts = warehouses.reduce(
+  const totalProducts = warehouseList.reduce(
     (sum, warehouse) => sum + warehouse.products,
     0
   );
 
-  const operationalWarehouses = warehouses.filter(
+  const operationalWarehouses = warehouseList.filter(
     (warehouse) => warehouse.status === "Operational"
   ).length;
 
-  const maintenanceWarehouses = warehouses.filter(
+  const maintenanceWarehouses = warehouseList.filter(
     (warehouse) => warehouse.status === "Maintenance"
   ).length;
 
@@ -466,7 +533,7 @@ export default function WarehousePage() {
   const availableCapacity = totalCapacity - totalUsed;
 
   const filteredWarehouses = useMemo(() => {
-    return warehouses.filter((warehouse) => {
+    return warehouseList.filter((warehouse) => {
       const text = search.toLowerCase().trim();
 
       const matchesSearch =
@@ -482,12 +549,11 @@ export default function WarehousePage() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [warehouseList, search, statusFilter]);
 
-  const selectedWarehouse =
-    warehouses.find(
+  const selectedWarehouse = warehouseList.find(
       (warehouse) => warehouse.id === selectedWarehouseId
-    ) ?? warehouses[0];
+    ) ?? warehouseList[0]
 
   const allBins = selectedWarehouse.zones.flatMap((zone) =>
     zone.aisles.flatMap((aisle) =>
@@ -552,15 +618,20 @@ export default function WarehousePage() {
                 Refresh
               </button>
 
-              <button
-                type="button"
-                onClick={() =>
-                  alert("Add Warehouse feature is ready for integration.")
-                }
-                className="rounded-md bg-[#10233f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#183557]"
-              >
-                + Add Warehouse
-              </button>
+              <a
+  href="/warehouse/pick-list"
+  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+>
+  Pick List
+</a>
+
+<button
+  type="button"
+  onClick={() => setShowAddWarehouse(true)}
+  className="rounded-md bg-[#10233f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#183557]"
+>
+  + Add Warehouse
+</button>
             </div>
           </div>
 
@@ -570,7 +641,7 @@ export default function WarehousePage() {
 
             <KpiCard
               title="Total Warehouses"
-              value={warehouses.length.toString()}
+              value={warehouseList.length.toString()}
               subtitle="Registered locations"
               color="green"
             />
@@ -628,7 +699,7 @@ export default function WarehousePage() {
                 }}
                 className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500"
               >
-                {warehouses.map((warehouse) => (
+                {warehouseList.map((warehouse) => (
                   <option
                     key={warehouse.id}
                     value={warehouse.id}
@@ -1408,7 +1479,7 @@ export default function WarehousePage() {
 
               <p className="text-[10px] text-slate-500">
                 Showing {filteredWarehouses.length} of{" "}
-                {warehouses.length} warehouses
+                {warehouseList.length} warehouses
               </p>
 
             </div>
@@ -1421,7 +1492,7 @@ export default function WarehousePage() {
 
             <InsightCard
               title="Warehouse Health"
-              value={`${operationalWarehouses} of ${warehouses.length}`}
+              value={`${operationalWarehouses} of ${warehouseList.length}`}
               description="Warehouses are currently operational."
               tone="green"
             />
@@ -1476,6 +1547,211 @@ export default function WarehousePage() {
             </div>
 
           </section>
+
+                {/* =================================================
+          ADD WAREHOUSE MODAL
+      ================================================= */}
+
+      {showAddWarehouse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+
+            {/* HEADER */}
+
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+
+              <div>
+                <h2 className="text-lg font-bold text-[#12213a]">
+                  Add Warehouse
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Create a new warehouse location.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddWarehouse(false)}
+                className="text-xl text-gray-400 hover:text-gray-700"
+              >
+                ×
+              </button>
+
+            </div>
+
+            {/* FORM */}
+
+            <form
+              onSubmit={handleAddWarehouse}
+              className="space-y-4 p-5"
+            >
+
+              {/* WAREHOUSE NAME */}
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Warehouse Name
+                </label>
+
+                <input
+                  type="text"
+                  value={newWarehouse.name}
+                  onChange={(e) =>
+                    setNewWarehouse({
+                      ...newWarehouse,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="e.g. Jaipur Distribution Center"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              {/* WAREHOUSE CODE */}
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Warehouse Code
+                </label>
+
+                <input
+                  type="text"
+                  value={`WH-${String(
+                    warehouseList.length + 1
+                  ).padStart(3, "0")}`}
+                  readOnly
+                  className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-600 outline-none"
+                />
+              </div>
+
+              {/* LOCATION */}
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Location
+                </label>
+
+                <input
+                  type="text"
+                  value={newWarehouse.location}
+                  onChange={(e) =>
+                    setNewWarehouse({
+                      ...newWarehouse,
+                      location: e.target.value,
+                    })
+                  }
+                  placeholder="e.g. Jaipur"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              {/* MANAGER */}
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Manager
+                </label>
+
+                <input
+                  type="text"
+                  value={newWarehouse.manager}
+                  onChange={(e) =>
+                    setNewWarehouse({
+                      ...newWarehouse,
+                      manager: e.target.value,
+                    })
+                  }
+                  placeholder="Enter manager name"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              {/* CAPACITY */}
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Capacity (Units)
+                </label>
+
+                <input
+                  type="number"
+                  min="1"
+                  value={newWarehouse.capacity}
+                  onChange={(e) =>
+                    setNewWarehouse({
+                      ...newWarehouse,
+                      capacity: e.target.value,
+                    })
+                  }
+                  placeholder="e.g. 10000"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              {/* STATUS */}
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Status
+                </label>
+
+                <select
+                  value={newWarehouse.status}
+                  onChange={(e) =>
+                    setNewWarehouse({
+                      ...newWarehouse,
+                      status: e.target.value as WarehouseStatus,
+                    })
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                >
+                  <option value="Operational">
+                    Operational
+                  </option>
+
+                  <option value="Maintenance">
+                    Maintenance
+                  </option>
+
+                  <option value="Blocked">
+                    Blocked
+                  </option>
+                </select>
+              </div>
+
+              {/* BUTTONS */}
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddWarehouse(false)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                >
+                  Add Warehouse
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+      )}
 
           {/* FOOTER */}
 

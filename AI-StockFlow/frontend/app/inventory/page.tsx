@@ -16,6 +16,18 @@ type StockStatus =
   | "Low Stock"
   | "Out of Stock";
 
+type ProductVariant = {
+  id: string;
+  name: string;
+  sku: string;
+  size?: string;
+  color?: string;
+  onHand: number;
+  reserved: number;
+  reorderPoint: number;
+  unitCost: number;
+};
+
 type Product = {
   id: number;
   name: string;
@@ -26,6 +38,10 @@ type Product = {
   reserved: number;
   reorderPoint: number;
   unitCost: number;
+
+  productType?: "Simple" | "Variable";
+  parentId?: number | null;
+  variants?: ProductVariant[];
 };
 
 const categories = [
@@ -144,6 +160,7 @@ export default function InventoryPage() {
    *       ↓
    * /inventory/products
    */
+
   const {
     products: inventoryProducts,
     loading,
@@ -156,6 +173,7 @@ export default function InventoryPage() {
    * such as Add, Edit, Adjust, Transfer and
    * Cycle Count.
    */
+
   const [products, setProducts] =
     useState<Product[]>([]);
 
@@ -163,6 +181,7 @@ export default function InventoryPage() {
    * Convert API products into the Product shape
    * used by the existing UI.
    */
+
   useEffect(() => {
     const mappedProducts =
       inventoryProducts.map(
@@ -199,12 +218,19 @@ export default function InventoryPage() {
     useState({
       name: "",
       sku: "",
+      productType:
+        "Simple" as
+          | "Simple"
+          | "Variable",
       category: "Electronics",
       warehouse: "Main Store",
       quantity: "",
       reorderPoint: "10",
       unitCost: "",
     });
+
+  const [newVariants, setNewVariants] =
+    useState<ProductVariant[]>([]);
 
   // --------------------------------------------------
   // EDIT PRODUCT
@@ -227,9 +253,9 @@ export default function InventoryPage() {
     useState<Product | null>(null);
 
   const [adjustmentType, setAdjustmentType] =
-    useState<"increase" | "decrease">(
-      "increase"
-    );
+    useState<
+      "increase" | "decrease"
+    >("increase");
 
   const [
     adjustmentQuantity,
@@ -326,7 +352,8 @@ export default function InventoryPage() {
 
       const matchesStatus =
         stockStatus === "All" ||
-        getStatus(product) === stockStatus;
+        getStatus(product) ===
+          stockStatus;
 
       return (
         matchesSearch &&
@@ -418,9 +445,11 @@ export default function InventoryPage() {
       return;
     }
 
-    const quantity = Number(
-      newProduct.quantity
-    );
+    const quantity =
+      newProduct.productType ===
+      "Simple"
+        ? Number(newProduct.quantity)
+        : 0;
 
     const reorderPoint = Number(
       newProduct.reorderPoint
@@ -431,7 +460,9 @@ export default function InventoryPage() {
     );
 
     if (
-      Number.isNaN(quantity) ||
+      (newProduct.productType ===
+        "Simple" &&
+        Number.isNaN(quantity)) ||
       Number.isNaN(reorderPoint) ||
       Number.isNaN(unitCost)
     ) {
@@ -441,43 +472,133 @@ export default function InventoryPage() {
       return;
     }
 
+    if (
+      newProduct.productType ===
+      "Variable"
+    ) {
+      if (newVariants.length === 0) {
+        alert(
+          "Please add at least one product variant."
+        );
+        return;
+      }
+
+      const invalidVariant =
+        newVariants.find(
+          (variant) =>
+            !variant.sku.trim()
+        );
+
+      if (invalidVariant) {
+        alert(
+          "Please enter a SKU for every product variant."
+        );
+        return;
+      }
+
+      const variantSkus =
+        newVariants.map(
+          (variant) =>
+            variant.sku
+              .trim()
+              .toUpperCase()
+        );
+
+      const hasDuplicateVariantSku =
+        new Set(
+          variantSkus
+        ).size !==
+        variantSkus.length;
+
+      if (hasDuplicateVariantSku) {
+        alert(
+          "Each product variant must have a unique SKU."
+        );
+        return;
+      }
+    }
+
     const product: Product = {
       id: Date.now(),
-      name: newProduct.name.trim(),
-      sku: newProduct.sku
-        .trim()
-        .toUpperCase(),
-      category: newProduct.category,
-      warehouse: newProduct.warehouse,
-      onHand: Math.max(
-        quantity,
-        0
-      ),
+
+      name:
+        newProduct.name.trim(),
+
+      sku:
+        newProduct.sku
+          .trim()
+          .toUpperCase(),
+
+      productType:
+        newProduct.productType,
+
+      category:
+        newProduct.category,
+
+      warehouse:
+        newProduct.warehouse,
+
+      onHand:
+        newProduct.productType ===
+        "Variable"
+          ? newVariants.reduce(
+              (
+                total,
+                variant
+              ) =>
+                total +
+                variant.onHand,
+              0
+            )
+          : Math.max(
+              quantity,
+              0
+            ),
+
       reserved: 0,
-      reorderPoint: Math.max(
-        reorderPoint,
-        0
-      ),
-      unitCost: Math.max(
-        unitCost,
-        0
-      ),
+
+      reorderPoint:
+        Math.max(
+          reorderPoint,
+          0
+        ),
+
+      unitCost:
+        Math.max(
+          unitCost,
+          0
+        ),
+
+      variants:
+        newProduct.productType ===
+        "Variable"
+          ? newVariants
+          : [],
     };
 
-    setProducts((current) => [
-      ...current,
-      product,
-    ]);
+    setProducts(
+      (current) => [
+        ...current,
+        product,
+      ]
+    );
 
     setNewProduct({
       name: "",
       sku: "",
-      category: "Electronics",
-      warehouse: "Main Store",
+      productType:
+        "Simple",
+      category:
+        "Electronics",
+      warehouse:
+        "Main Store",
       quantity: "",
-      reorderPoint: "10",
+      reorderPoint:
+        "10",
       unitCost: "",
     });
+
+    setNewVariants([]);
 
     setShowAddProduct(false);
 
@@ -555,24 +676,27 @@ export default function InventoryPage() {
       return;
     }
 
-    setProducts((current) =>
-      current.map((product) =>
-        product.id ===
-        editingProduct.id
-          ? {
-              ...editingProduct,
-              name:
-                editingProduct.name.trim(),
-              sku:
-                editingProduct.sku
-                  .trim()
-                  .toUpperCase(),
-            }
-          : product
-      )
+    setProducts(
+      (current) =>
+        current.map(
+          (product) =>
+            product.id ===
+            editingProduct.id
+              ? {
+                  ...editingProduct,
+                  name:
+                    editingProduct.name.trim(),
+                  sku:
+                    editingProduct.sku
+                      .trim()
+                      .toUpperCase(),
+                }
+              : product
+        )
     );
 
     setShowEditProduct(false);
+
     setEditingProduct(null);
 
     alert(
@@ -588,9 +712,15 @@ export default function InventoryPage() {
     product: Product
   ) {
     setSelectedProduct(product);
-    setAdjustmentType("increase");
+
+    setAdjustmentType(
+      "increase"
+    );
+
     setAdjustmentQuantity("");
+
     setAdjustmentReason("");
+
     setShowAdjustment(true);
   }
 
@@ -618,7 +748,8 @@ export default function InventoryPage() {
     }
 
     if (
-      adjustmentType === "decrease" &&
+      adjustmentType ===
+        "decrease" &&
       quantity >
         selectedProduct.onHand
     ) {
@@ -628,34 +759,39 @@ export default function InventoryPage() {
       return;
     }
 
-    setProducts((current) =>
-      current.map((product) => {
-        if (
-          product.id !==
-          selectedProduct.id
-        ) {
-          return product;
-        }
+    setProducts(
+      (current) =>
+        current.map(
+          (product) => {
+            if (
+              product.id !==
+              selectedProduct.id
+            ) {
+              return product;
+            }
 
-        const newOnHand =
-          adjustmentType ===
-          "increase"
-            ? product.onHand +
-              quantity
-            : Math.max(
-                product.onHand -
-                  quantity,
-                0
-              );
+            const newOnHand =
+              adjustmentType ===
+              "increase"
+                ? product.onHand +
+                  quantity
+                : Math.max(
+                    product.onHand -
+                      quantity,
+                    0
+                  );
 
-        return {
-          ...product,
-          onHand: newOnHand,
-        };
-      })
+            return {
+              ...product,
+              onHand:
+                newOnHand,
+            };
+          }
+        )
     );
 
     setShowAdjustment(false);
+
     setSelectedProduct(null);
 
     alert(
@@ -663,7 +799,7 @@ export default function InventoryPage() {
     );
   }
 
-    // --------------------------------------------------
+  // --------------------------------------------------
   // TRANSFER STOCK
   // --------------------------------------------------
 
@@ -671,6 +807,7 @@ export default function InventoryPage() {
     product: Product
   ) {
     setTransferProduct(product);
+
     setTransferFrom(
       product.warehouse
     );
@@ -678,7 +815,8 @@ export default function InventoryPage() {
     const defaultDestination =
       warehouses.find(
         (item) =>
-          item !== product.warehouse
+          item !==
+          product.warehouse
       ) || "";
 
     setTransferTo(
@@ -686,7 +824,9 @@ export default function InventoryPage() {
     );
 
     setTransferQuantity("");
+
     setTransferReason("");
+
     setShowTransfer(true);
   }
 
@@ -724,7 +864,8 @@ export default function InventoryPage() {
     }
 
     if (
-      transferFrom === transferTo
+      transferFrom ===
+      transferTo
     ) {
       alert(
         "Source and destination warehouses must be different."
@@ -754,28 +895,34 @@ export default function InventoryPage() {
      * to the backend API.
      */
 
-    setProducts((current) =>
-      current.map((product) => {
-        if (
-          product.id !==
-          transferProduct.id
-        ) {
-          return product;
-        }
+    setProducts(
+      (current) =>
+        current.map(
+          (product) => {
+            if (
+              product.id !==
+              transferProduct.id
+            ) {
+              return product;
+            }
 
-        return {
-          ...product,
-          warehouse: transferTo,
-          onHand: Math.max(
-            product.onHand -
-              quantity,
-            0
-          ),
-        };
-      })
+            return {
+              ...product,
+              warehouse:
+                transferTo,
+              onHand:
+                Math.max(
+                  product.onHand -
+                    quantity,
+                  0
+                ),
+            };
+          }
+        )
     );
 
     setShowTransfer(false);
+
     setTransferProduct(null);
 
     alert(
@@ -815,7 +962,9 @@ export default function InventoryPage() {
     );
 
     if (
-      !Number.isFinite(physical) ||
+      !Number.isFinite(
+        physical
+      ) ||
       physical < 0
     ) {
       alert(
@@ -824,57 +973,55 @@ export default function InventoryPage() {
       return;
     }
 
-    const variance =
-      physical -
-      cycleProduct.onHand;
-
-    setProducts((current) =>
-      current.map((product) =>
-        product.id ===
-        cycleProduct.id
-          ? {
-              ...product,
-              onHand: physical,
-            }
-          : product
-      )
+    setProducts(
+      (current) =>
+        current.map(
+          (product) =>
+            product.id ===
+            cycleProduct.id
+              ? {
+                  ...product,
+                  onHand:
+                    physical,
+                }
+              : product
+        )
     );
 
     setShowCycleCount(false);
+
     setCycleProduct(null);
 
     alert(
-      `Cycle count completed.\n\nVariance: ${
-        variance > 0 ? "+" : ""
-      }${variance} units.`
+      "Cycle count completed successfully."
     );
   }
 
   // --------------------------------------------------
-  // BARCODE SEARCH
+  // BARCODE SCANNER
   // --------------------------------------------------
 
   function handleBarcodeSearch() {
-    const value = barcodeValue
-      .trim()
-      .toLowerCase();
+    const value =
+      barcodeValue
+        .trim()
+        .toLowerCase();
 
     if (!value) {
-      alert(
-        "Please enter or scan a barcode/SKU."
-      );
+      setBarcodeProduct(null);
       return;
     }
 
-    const found = products.find(
-      (product) =>
-        product.sku
-          .toLowerCase() ===
-          value ||
-        product.name
-          .toLowerCase()
-          .includes(value)
-    );
+    const found =
+      products.find(
+        (product) =>
+          product.sku
+            .toLowerCase() ===
+            value ||
+          product.name
+            .toLowerCase()
+            .includes(value)
+      );
 
     if (!found) {
       setBarcodeProduct(null);
@@ -890,6 +1037,50 @@ export default function InventoryPage() {
   }
 
   // --------------------------------------------------
+  // LOADING / ERROR
+  // --------------------------------------------------
+
+  if (loading) {
+    return (
+      <PageLayout>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="text-sm font-medium text-gray-500">
+            Loading inventory...
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <PageLayout>
+        <div className="p-6">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-5">
+            <h2 className="text-sm font-bold text-red-800">
+              Unable to load inventory
+            </h2>
+
+            <p className="mt-2 text-sm text-red-700">
+              {error}
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                window.location.reload()
+              }
+              className="mt-4 rounded-lg bg-red-700 px-4 py-2 text-xs font-semibold text-white hover:bg-red-800"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+    // --------------------------------------------------
   // CLEAR FILTERS
   // --------------------------------------------------
 
@@ -901,7 +1092,7 @@ export default function InventoryPage() {
   }
 
   // --------------------------------------------------
-  // PAGE
+  // PAGE UI
   // --------------------------------------------------
 
   return (
@@ -917,6 +1108,7 @@ export default function InventoryPage() {
           <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
             <div>
+
               <h1 className="text-2xl font-bold tracking-tight text-[#12213a]">
                 Inventory
               </h1>
@@ -925,6 +1117,7 @@ export default function InventoryPage() {
                 Manage products, stock levels, warehouses
                 and inventory operations.
               </p>
+
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -967,6 +1160,7 @@ export default function InventoryPage() {
               </button>
 
             </div>
+
           </div>
 
           {/* =================================================
@@ -1063,6 +1257,7 @@ export default function InventoryPage() {
             <div className="mb-3 flex items-center justify-between">
 
               <div>
+
                 <h2 className="text-sm font-semibold text-[#12213a]">
                   Product Search & Filters
                 </h2>
@@ -1071,6 +1266,7 @@ export default function InventoryPage() {
                   Search products and filter inventory
                   by category, warehouse or stock status.
                 </p>
+
               </div>
 
               <button
@@ -1218,23 +1414,8 @@ export default function InventoryPage() {
               </div>
 
             </div>
+
           </section>
-
-          {/* =================================================
-              LOADING / ERROR
-          ================================================= */}
-
-          {loading && (
-            <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-              Loading inventory...
-            </div>
-          )}
-
-          {error && (
-            <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
 
           {/* =================================================
               PRODUCT TABLE
@@ -1280,7 +1461,7 @@ export default function InventoryPage() {
 
             <div className="overflow-x-auto">
 
-              <table className="w-full min-w-[1000px] border-collapse text-xs">
+              <table className="w-full min-w-[1100px] border-collapse text-xs">
 
                 <thead>
 
@@ -1288,6 +1469,10 @@ export default function InventoryPage() {
 
                     <th className="px-4 py-3 font-semibold text-gray-600">
                       Product
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold text-gray-600">
+                      Type
                     </th>
 
                     <th className="px-4 py-3 font-semibold text-gray-600">
@@ -1330,6 +1515,7 @@ export default function InventoryPage() {
 
                   {filteredProducts.map(
                     (product) => {
+
                       const status =
                         getStatus(
                           product
@@ -1358,6 +1544,19 @@ export default function InventoryPage() {
                                 product.sku
                               }
                             </p>
+
+                          </td>
+
+                          {/* TYPE */}
+
+                          <td className="px-4 py-3">
+
+                            <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">
+                              {
+                                product.productType ??
+                                "Simple"
+                              }
+                            </span>
 
                           </td>
 
@@ -1458,7 +1657,7 @@ export default function InventoryPage() {
                                     product
                                   )
                                 }
-                                className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100"
+                                className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-medium text-blue-700 hover:bg-blue-100"
                               >
                                 Edit
                               </button>
@@ -1470,7 +1669,7 @@ export default function InventoryPage() {
                                     product
                                   )
                                 }
-                                className="rounded-md bg-[#12213a] px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-[#1d3055]"
+                                className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100"
                               >
                                 Adjust
                               </button>
@@ -1482,7 +1681,7 @@ export default function InventoryPage() {
                                     product
                                   )
                                 }
-                                className="rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100"
+                                className="rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-[10px] font-medium text-purple-700 hover:bg-purple-100"
                               >
                                 Transfer
                               </button>
@@ -1494,9 +1693,9 @@ export default function InventoryPage() {
                                     product
                                   )
                                 }
-                                className="rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-[10px] font-semibold text-teal-700 hover:bg-teal-100"
+                                className="rounded-md border border-green-200 bg-green-50 px-2.5 py-1.5 text-[10px] font-medium text-green-700 hover:bg-green-100"
                               >
-                                Count
+                                Cycle Count
                               </button>
 
                             </div>
@@ -1508,268 +1707,772 @@ export default function InventoryPage() {
                     }
                   )}
 
+                  {filteredProducts.length ===
+                    0 && (
+                    <tr>
+
+                      <td
+                        colSpan={10}
+                        className="px-4 py-12 text-center"
+                      >
+
+                        <p className="text-sm font-semibold text-gray-600">
+                          No products found
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-400">
+                          Try changing your search
+                          or filters.
+                        </p>
+
+                      </td>
+
+                    </tr>
+                  )}
+
                 </tbody>
 
               </table>
 
             </div>
 
-            {/* EMPTY STATE */}
+          </section>
 
-            {filteredProducts.length ===
-              0 && (
-              <div className="px-6 py-14 text-center">
+        </div>
 
-                <p className="text-sm font-semibold text-gray-700">
-                  No products found
+      </main>
+
+            {/* =================================================
+          ADD PRODUCT MODAL
+      ================================================= */}
+
+      {showAddProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+
+            {/* HEADER */}
+
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+
+              <div>
+                <h2 className="text-lg font-bold text-[#12213a]">
+                  Add Product
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Create a new product and add it to inventory.
                 </p>
+              </div>
 
-                <p className="mt-1 text-xs text-gray-400">
-                  Try changing your search or
-                  filters.
-                </p>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowAddProduct(false)
+                }
+                className="text-xl text-gray-400 hover:text-gray-700"
+              >
+                ×
+              </button>
 
-                <button
-                  type="button"
-                  onClick={
-                    clearFilters
+            </div>
+
+            {/* FORM */}
+
+            <form
+              onSubmit={handleAddProduct}
+              className="max-h-[75vh] space-y-4 overflow-y-auto p-5"
+            >
+
+              {/* PRODUCT NAME */}
+
+              <div>
+
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Product Name
+                </label>
+
+                <input
+                  type="text"
+                  value={newProduct.name}
+                  onChange={(e) =>
+                    setNewProduct(
+                      (current) => ({
+                        ...current,
+                        name: e.target.value,
+                      })
+                    )
                   }
-                  className="mt-4 rounded-lg bg-[#12213a] px-4 py-2 text-xs font-semibold text-white"
-                >
-                  Clear Filters
-                </button>
+                  placeholder="Enter product name"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  required
+                />
 
               </div>
-            )}
 
-          </section>
+              {/* SKU */}
 
-          {/* =================================================
-              INVENTORY SUMMARY
-          ================================================= */}
+              <div>
 
-          <section className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  SKU
+                </label>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <input
+                  type="text"
+                  value={newProduct.sku}
+                  onChange={(e) =>
+                    setNewProduct(
+                      (current) => ({
+                        ...current,
+                        sku: e.target.value,
+                      })
+                    )
+                  }
+                  placeholder="e.g. PROD-001"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
+                  required
+                />
 
-              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                Low Stock Products
-              </p>
+              </div>
 
-              <p className="mt-2 text-2xl font-bold text-orange-600">
-                {lowStockCount}
-              </p>
+              {/* PRODUCT TYPE */}
 
-              <p className="mt-1 text-[10px] text-gray-500">
-                Products approaching reorder point
-              </p>
+              <div>
 
-            </div>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Product Type
+                </label>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <select
+                  value={
+                    newProduct.productType
+                  }
+                  onChange={(e) =>
+                    setNewProduct(
+                      (current) => ({
+                        ...current,
+                        productType:
+                          e.target.value as
+                            | "Simple"
+                            | "Variable",
+                      })
+                    )
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                >
 
-              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                Out of Stock
-              </p>
+                  <option value="Simple">
+                    Simple Product
+                  </option>
 
-              <p className="mt-2 text-2xl font-bold text-red-600">
-                {outOfStockCount}
-              </p>
+                  <option value="Variable">
+                    Variable Product
+                  </option>
 
-              <p className="mt-1 text-[10px] text-gray-500">
-                Products requiring replenishment
-              </p>
+                </select>
 
-            </div>
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Choose Variable Product if this product has different sizes, colors, or other variants.
+                </p>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              </div>
 
-              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                Inventory Value
-              </p>
+              {/* PRODUCT VARIANTS */}
 
-              <p className="mt-2 text-2xl font-bold text-green-600">
-                {formatCurrency(
-                  stockValue
-                )}
-              </p>
+              {newProduct.productType ===
+                "Variable" && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
 
-              <p className="mt-1 text-[10px] text-gray-500">
-                Total value of on-hand stock
-              </p>
+                  <div className="mb-3">
 
-            </div>
+                    <h3 className="text-sm font-semibold text-[#12213a]">
+                      Product Variants
+                    </h3>
 
-          </section>
-
-                    {/* =================================================
-              ADD PRODUCT MODAL
-          ================================================= */}
-
-          {showAddProduct && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-              <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-
-                {/* Header */}
-
-                <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-
-                  <div>
-                    <h2 className="text-lg font-bold text-[#12213a]">
-                      Add Product
-                    </h2>
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      Add a new product to your inventory.
+                    <p className="mt-1 text-[11px] text-gray-500">
+                      Add individual variants with their own SKU, size, color and stock.
                     </p>
+
                   </div>
+
+                  {newVariants.map(
+                    (variant, index) => (
+                      <div
+                        key={
+                          variant.id
+                        }
+                        className="mb-3 rounded-lg border border-gray-200 bg-white p-3"
+                      >
+
+                        <div className="mb-2 flex items-center justify-between">
+
+                          <span className="text-xs font-semibold text-gray-600">
+                            Variant{" "}
+                            {index + 1}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewVariants(
+                                (current) =>
+                                  current.filter(
+                                    (item) =>
+                                      item.id !==
+                                      variant.id
+                                  )
+                              )
+                            }
+                            className="text-xs font-medium text-red-600 hover:text-red-700"
+                          >
+                            Remove
+                          </button>
+
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                          {/* SIZE */}
+
+                          <div>
+
+                            <label className="mb-1 block text-[11px] font-semibold text-gray-700">
+                              Size
+                            </label>
+
+                            <input
+                              type="text"
+                              value={
+                                variant.size ??
+                                ""
+                              }
+                              onChange={(e) =>
+                                setNewVariants(
+                                  (current) =>
+                                    current.map(
+                                      (item) =>
+                                        item.id ===
+                                        variant.id
+                                          ? {
+                                              ...item,
+                                              size: e.target.value,
+                                            }
+                                          : item
+                                    )
+                                )
+                              }
+                              placeholder="e.g. Small"
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                            />
+
+                          </div>
+
+                          {/* COLOR */}
+
+                          <div>
+
+                            <label className="mb-1 block text-[11px] font-semibold text-gray-700">
+                              Color
+                            </label>
+
+                            <input
+                              type="text"
+                              value={
+                                variant.color ??
+                                ""
+                              }
+                              onChange={(e) =>
+                                setNewVariants(
+                                  (current) =>
+                                    current.map(
+                                      (item) =>
+                                        item.id ===
+                                        variant.id
+                                          ? {
+                                              ...item,
+                                              color: e.target.value,
+                                            }
+                                          : item
+                                    )
+                                )
+                              }
+                              placeholder="e.g. Red"
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                            />
+
+                          </div>
+
+                          {/* VARIANT SKU */}
+
+                          <div>
+
+                            <label className="mb-1 block text-[11px] font-semibold text-gray-700">
+                              Variant SKU
+                            </label>
+
+                            <input
+                              type="text"
+                              value={
+                                variant.sku
+                              }
+                              onChange={(e) =>
+                                setNewVariants(
+                                  (current) =>
+                                    current.map(
+                                      (item) =>
+                                        item.id ===
+                                        variant.id
+                                          ? {
+                                              ...item,
+                                              sku: e.target.value,
+                                            }
+                                          : item
+                                    )
+                                )
+                              }
+                              placeholder="e.g. SHIRT-S-RED"
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm outline-none focus:border-blue-500"
+                            />
+
+                          </div>
+
+                          {/* STOCK */}
+
+                          <div>
+
+                            <label className="mb-1 block text-[11px] font-semibold text-gray-700">
+                              Stock
+                            </label>
+
+                            <input
+                              type="number"
+                              min="0"
+                              value={
+                                variant.onHand
+                              }
+                              onChange={(e) =>
+                                setNewVariants(
+                                  (current) =>
+                                    current.map(
+                                      (item) =>
+                                        item.id ===
+                                        variant.id
+                                          ? {
+                                              ...item,
+                                              onHand:
+                                                Math.max(
+                                                  Number(
+                                                    e.target.value
+                                                  ),
+                                                  0
+                                                ),
+                                            }
+                                          : item
+                                    )
+                                )
+                              }
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                            />
+
+                          </div>
+
+                        </div>
+
+                      </div>
+                    )
+                  )}
 
                   <button
                     type="button"
                     onClick={() =>
-                      setShowAddProduct(false)
+                      setNewVariants(
+                        (current) => [
+                          ...current,
+                          {
+                            id: `${Date.now()}-${current.length}`,
+                            name: "",
+                            sku: "",
+                            size: "",
+                            color: "",
+                            onHand: 0,
+                            reserved: 0,
+                            reorderPoint: 0,
+                            unitCost: 0,
+                          },
+                        ]
+                      )
                     }
-                    className="text-xl text-gray-400 hover:text-gray-700"
+                    className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
                   >
-                    ×
+                    + Add Variant
                   </button>
 
                 </div>
+              )}
 
-                {/* Form */}
+              {/* CATEGORY / WAREHOUSE */}
 
-                <form
-                  onSubmit={
-                    handleAddProduct
-                  }
-                  className="space-y-4 p-5"
-                >
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
-                  {/* Product Name */}
+                {/* CATEGORY */}
 
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Category
+                  </label>
+
+                  <select
+                    value={
+                      newProduct.category
+                    }
+                    onChange={(e) =>
+                      setNewProduct(
+                        (current) => ({
+                          ...current,
+                          category:
+                            e.target.value,
+                        })
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+
+                    {categories
+                      .filter(
+                        (item) =>
+                          item !== "All"
+                      )
+                      .map((item) => (
+                        <option
+                          key={item}
+                          value={item}
+                        >
+                          {item}
+                        </option>
+                      ))}
+
+                  </select>
+
+                </div>
+
+                {/* WAREHOUSE */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Warehouse
+                  </label>
+
+                  <select
+                    value={
+                      newProduct.warehouse
+                    }
+                    onChange={(e) =>
+                      setNewProduct(
+                        (current) => ({
+                          ...current,
+                          warehouse:
+                            e.target.value,
+                        })
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+
+                    {warehouses.map(
+                      (item) => (
+                        <option
+                          key={item}
+                          value={item}
+                        >
+                          {item}
+                        </option>
+                      )
+                    )}
+
+                  </select>
+
+                </div>
+
+              </div>
+
+              {/* QUANTITY / REORDER POINT */}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                {/* INITIAL QUANTITY — SIMPLE ONLY */}
+
+                {newProduct.productType ===
+                  "Simple" && (
                   <div>
 
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Product Name
+                      Initial Quantity
                     </label>
 
                     <input
-                      type="text"
+                      type="number"
+                      min="0"
                       value={
-                        newProduct.name
+                        newProduct.quantity
                       }
                       onChange={(e) =>
                         setNewProduct(
                           (current) => ({
                             ...current,
-                            name:
+                            quantity:
                               e.target.value,
                           })
                         )
                       }
-                      placeholder="Enter product name"
+                      placeholder="0"
                       className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       required
                     />
 
                   </div>
+                )}
 
-                  {/* SKU */}
+                {/* REORDER POINT */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Reorder Point
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    value={
+                      newProduct.reorderPoint
+                    }
+                    onChange={(e) =>
+                      setNewProduct(
+                        (current) => ({
+                          ...current,
+                          reorderPoint:
+                            e.target.value,
+                        })
+                      )
+                    }
+                    placeholder="10"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+              </div>
+
+              {/* UNIT COST */}
+
+              <div>
+
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Unit Cost
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={
+                    newProduct.unitCost
+                  }
+                  onChange={(e) =>
+                    setNewProduct(
+                      (current) => ({
+                        ...current,
+                        unitCost:
+                          e.target.value,
+                      })
+                    )
+                  }
+                  placeholder="0.00"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  required
+                />
+
+              </div>
+
+              {/* BUTTONS */}
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowAddProduct(false)
+                  }
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                >
+                  Add Product
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+      )}
+
+            {/* =================================================
+          EDIT PRODUCT MODAL
+      ================================================= */}
+
+      {showEditProduct &&
+        editingProduct && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+            <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+
+              {/* HEADER */}
+
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+
+                <div>
+
+                  <h2 className="text-lg font-bold text-[#12213a]">
+                    Edit Product
+                  </h2>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Update product and inventory details.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditProduct(false);
+                    setEditingProduct(null);
+                  }}
+                  className="text-xl text-gray-400 hover:text-gray-700"
+                >
+                  ×
+                </button>
+
+              </div>
+
+              {/* FORM */}
+
+              <form
+                onSubmit={handleEditProduct}
+                className="space-y-4 p-5"
+              >
+
+                {/* PRODUCT NAME */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Product Name
+                  </label>
+
+                  <input
+                    type="text"
+                    value={
+                      editingProduct.name
+                    }
+                    onChange={(e) =>
+                      setEditingProduct(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                name:
+                                  e.target.value,
+                              }
+                            : current
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* SKU */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    SKU
+                  </label>
+
+                  <input
+                    type="text"
+                    value={
+                      editingProduct.sku
+                    }
+                    onChange={(e) =>
+                      setEditingProduct(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                sku:
+                                  e.target.value,
+                              }
+                            : current
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* CATEGORY / WAREHOUSE */}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                  {/* CATEGORY */}
 
                   <div>
 
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      SKU
+                      Category
                     </label>
 
-                    <input
-                      type="text"
+                    <select
                       value={
-                        newProduct.sku
+                        editingProduct.category
                       }
                       onChange={(e) =>
-                        setNewProduct(
-                          (current) => ({
-                            ...current,
-                            sku:
-                              e.target.value,
-                          })
+                        setEditingProduct(
+                          (current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  category:
+                                    e.target.value,
+                                }
+                              : current
                         )
                       }
-                      placeholder="Enter SKU"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
-                      required
-                    />
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    >
 
-                  </div>
-
-                  {/* Category / Warehouse */}
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Category
-                      </label>
-
-                      <select
-                        value={
-                          newProduct.category
-                        }
-                        onChange={(e) =>
-                          setNewProduct(
-                            (current) => ({
-                              ...current,
-                              category:
-                                e.target.value,
-                            })
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      >
-                        {categories
-                          .filter(
-                            (item) =>
-                              item !== "All"
-                          )
-                          .map(
-                            (item) => (
-                              <option
-                                key={item}
-                                value={item}
-                              >
-                                {item}
-                              </option>
-                            )
-                          )}
-                      </select>
-
-                    </div>
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Warehouse
-                      </label>
-
-                      <select
-                        value={
-                          newProduct.warehouse
-                        }
-                        onChange={(e) =>
-                          setNewProduct(
-                            (current) => ({
-                              ...current,
-                              warehouse:
-                                e.target.value,
-                            })
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      >
-                        {warehouses.map(
+                      {categories
+                        .filter(
+                          (item) =>
+                            item !== "All"
+                        )
+                        .map(
                           (item) => (
                             <option
                               key={item}
@@ -1779,898 +2482,45 @@ export default function InventoryPage() {
                             </option>
                           )
                         )}
-                      </select>
 
-                    </div>
-
-                  </div>
-
-                  {/* Quantity / Reorder Point */}
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Initial Quantity
-                      </label>
-
-                      <input
-                        type="number"
-                        min="0"
-                        value={
-                          newProduct.quantity
-                        }
-                        onChange={(e) =>
-                          setNewProduct(
-                            (current) => ({
-                              ...current,
-                              quantity:
-                                e.target.value,
-                            })
-                          )
-                        }
-                        placeholder="0"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                        required
-                      />
-
-                    </div>
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Reorder Point
-                      </label>
-
-                      <input
-                        type="number"
-                        min="0"
-                        value={
-                          newProduct.reorderPoint
-                        }
-                        onChange={(e) =>
-                          setNewProduct(
-                            (current) => ({
-                              ...current,
-                              reorderPoint:
-                                e.target.value,
-                            })
-                          )
-                        }
-                        placeholder="10"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                        required
-                      />
-
-                    </div>
+                    </select>
 
                   </div>
 
-                  {/* Unit Cost */}
+                  {/* WAREHOUSE */}
 
                   <div>
 
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Unit Cost
-                    </label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        newProduct.unitCost
-                      }
-                      onChange={(e) =>
-                        setNewProduct(
-                          (current) => ({
-                            ...current,
-                            unitCost:
-                              e.target.value,
-                          })
-                        )
-                      }
-                      placeholder="0.00"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      required
-                    />
-
-                  </div>
-
-                  {/* Buttons */}
-
-                  <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowAddProduct(false)
-                      }
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
-                    >
-                      Add Product
-                    </button>
-
-                  </div>
-
-                </form>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* =================================================
-              EDIT PRODUCT MODAL
-          ================================================= */}
-
-          {showEditProduct &&
-            editingProduct && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-                <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-
-                  {/* Header */}
-
-                  <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-
-                    <div>
-                      <h2 className="text-lg font-bold text-[#12213a]">
-                        Edit Product
-                      </h2>
-
-                      <p className="mt-1 text-xs text-gray-500">
-                        Update product and inventory details.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowEditProduct(
-                          false
-                        );
-                        setEditingProduct(
-                          null
-                        );
-                      }}
-                      className="text-xl text-gray-400 hover:text-gray-700"
-                    >
-                      ×
-                    </button>
-
-                  </div>
-
-                  {/* Form */}
-
-                  <form
-                    onSubmit={
-                      handleEditProduct
-                    }
-                    className="space-y-4 p-5"
-                  >
-
-                    {/* Product Name */}
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Product Name
-                      </label>
-
-                      <input
-                        type="text"
-                        value={
-                          editingProduct.name
-                        }
-                        onChange={(e) =>
-                          setEditingProduct(
-                            (current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    name:
-                                      e.target
-                                        .value,
-                                  }
-                                : current
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                        required
-                      />
-
-                    </div>
-
-                    {/* SKU */}
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        SKU
-                      </label>
-
-                      <input
-                        type="text"
-                        value={
-                          editingProduct.sku
-                        }
-                        onChange={(e) =>
-                          setEditingProduct(
-                            (current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    sku:
-                                      e.target
-                                        .value,
-                                  }
-                                : current
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
-                        required
-                      />
-
-                    </div>
-
-                    {/* Category / Warehouse */}
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-
-                      <div>
-
-                        <label className="mb-1 block text-xs font-semibold text-gray-700">
-                          Category
-                        </label>
-
-                        <select
-                          value={
-                            editingProduct.category
-                          }
-                          onChange={(e) =>
-                            setEditingProduct(
-                              (current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      category:
-                                        e.target
-                                          .value,
-                                    }
-                                  : current
-                            )
-                          }
-                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                        >
-
-                          {categories
-                            .filter(
-                              (item) =>
-                                item !==
-                                "All"
-                            )
-                            .map(
-                              (item) => (
-                                <option
-                                  key={
-                                    item
-                                  }
-                                  value={
-                                    item
-                                  }
-                                >
-                                  {item}
-                                </option>
-                              )
-                            )}
-
-                        </select>
-
-                      </div>
-
-                      <div>
-
-                        <label className="mb-1 block text-xs font-semibold text-gray-700">
-                          Warehouse
-                        </label>
-
-                        <select
-                          value={
-                            editingProduct.warehouse
-                          }
-                          onChange={(e) =>
-                            setEditingProduct(
-                              (current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      warehouse:
-                                        e.target
-                                          .value,
-                                    }
-                                  : current
-                            )
-                          }
-                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                        >
-
-                          {warehouses.map(
-                            (item) => (
-                              <option
-                                key={
-                                  item
-                                }
-                                value={
-                                  item
-                                }
-                              >
-                                {item}
-                              </option>
-                            )
-                          )}
-
-                        </select>
-
-                      </div>
-
-                    </div>
-
-                    {/* Stock / Reorder Point */}
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-
-                      <div>
-
-                        <label className="mb-1 block text-xs font-semibold text-gray-700">
-                          Current Stock
-                        </label>
-
-                        <input
-                          type="number"
-                          min="0"
-                          value={
-                            editingProduct.onHand
-                          }
-                          onChange={(e) =>
-                            setEditingProduct(
-                              (current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      onHand:
-                                        Number(
-                                          e.target
-                                            .value
-                                        ),
-                                    }
-                                  : current
-                            )
-                          }
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                          required
-                        />
-
-                      </div>
-
-                      <div>
-
-                        <label className="mb-1 block text-xs font-semibold text-gray-700">
-                          Reorder Point
-                        </label>
-
-                        <input
-                          type="number"
-                          min="0"
-                          value={
-                            editingProduct.reorderPoint
-                          }
-                          onChange={(e) =>
-                            setEditingProduct(
-                              (current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      reorderPoint:
-                                        Number(
-                                          e.target
-                                            .value
-                                        ),
-                                    }
-                                  : current
-                            )
-                          }
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                          required
-                        />
-
-                      </div>
-
-                    </div>
-
-                    {/* Unit Cost */}
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Unit Cost
-                      </label>
-
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={
-                          editingProduct.unitCost
-                        }
-                        onChange={(e) =>
-                          setEditingProduct(
-                            (current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    unitCost:
-                                      Number(
-                                        e.target
-                                          .value
-                                      ),
-                                  }
-                                : current
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                        required
-                      />
-
-                    </div>
-
-                    {/* Reserved */}
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Reserved Quantity
-                      </label>
-
-                      <input
-                        type="number"
-                        min="0"
-                        value={
-                          editingProduct.reserved
-                        }
-                        onChange={(e) =>
-                          setEditingProduct(
-                            (current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    reserved:
-                                      Number(
-                                        e.target
-                                          .value
-                                      ),
-                                  }
-                                : current
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      />
-
-                    </div>
-
-                    {/* Buttons */}
-
-                    <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowEditProduct(
-                            false
-                          );
-                          setEditingProduct(
-                            null
-                          );
-                        }}
-                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-
-                      <button
-                        type="submit"
-                        className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
-                      >
-                        Save Changes
-                      </button>
-
-                    </div>
-
-                  </form>
-
-                </div>
-
-              </div>
-            )}
-
-          {/* =================================================
-              STOCK ADJUSTMENT MODAL
-          ================================================= */}
-
-          {showAdjustment &&
-            selectedProduct && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-                <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-
-                  {/* Header */}
-
-                  <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-
-                    <div>
-
-                      <h2 className="text-lg font-bold text-[#12213a]">
-                        Stock Adjustment
-                      </h2>
-
-                      <p className="mt-1 text-xs text-gray-500">
-                        Adjust inventory quantity for this product.
-                      </p>
-
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAdjustment(
-                          false
-                        );
-                        setSelectedProduct(
-                          null
-                        );
-                      }}
-                      className="text-xl text-gray-400 hover:text-gray-700"
-                    >
-                      ×
-                    </button>
-
-                  </div>
-
-                  {/* Product Summary */}
-
-                  <div className="border-b border-gray-200 bg-gray-50 px-5 py-4">
-
-                    <div className="flex items-center justify-between">
-
-                      <div>
-
-                        <p className="text-sm font-semibold text-[#12213a]">
-                          {
-                            selectedProduct.name
-                          }
-                        </p>
-
-                        <p className="mt-1 font-mono text-[10px] text-gray-400">
-                          {
-                            selectedProduct.sku
-                          }
-                        </p>
-
-                      </div>
-
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-600">
-                        {
-                          selectedProduct.warehouse
-                        }
-                      </span>
-
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between">
-
-                      <span className="text-xs text-gray-500">
-                        Current Stock
-                      </span>
-
-                      <span className="text-lg font-bold text-[#12213a]">
-                        {
-                          selectedProduct.onHand
-                        }
-                      </span>
-
-                    </div>
-
-                    <div className="mt-1 flex items-center justify-between">
-
-                      <span className="text-xs text-gray-500">
-                        Available
-                      </span>
-
-                      <span className="text-xs font-semibold text-gray-700">
-                        {getAvailable(
-                          selectedProduct
-                        )}
-                      </span>
-
-                    </div>
-
-                  </div>
-
-                  {/* Form */}
-
-                  <form
-                    onSubmit={
-                      handleAdjustment
-                    }
-                    className="space-y-4 p-5"
-                  >
-
-                    {/* Adjustment Type */}
-
-                    <div>
-
-                      <label className="mb-2 block text-xs font-semibold text-gray-700">
-                        Adjustment Type
-                      </label>
-
-                      <div className="grid grid-cols-2 gap-2">
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAdjustmentType(
-                              "increase"
-                            )
-                          }
-                          className={`rounded-lg border px-3 py-2.5 text-xs font-semibold ${
-                            adjustmentType ===
-                            "increase"
-                              ? "border-green-500 bg-green-50 text-green-700"
-                              : "border-gray-300 text-gray-600"
-                          }`}
-                        >
-                          + Increase
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAdjustmentType(
-                              "decrease"
-                            )
-                          }
-                          className={`rounded-lg border px-3 py-2.5 text-xs font-semibold ${
-                            adjustmentType ===
-                            "decrease"
-                              ? "border-red-500 bg-red-50 text-red-700"
-                              : "border-gray-300 text-gray-600"
-                          }`}
-                        >
-                          − Decrease
-                        </button>
-
-                      </div>
-
-                    </div>
-
-                    {/* Quantity */}
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Quantity
-                      </label>
-
-                      <input
-                        type="number"
-                        min="1"
-                        value={
-                          adjustmentQuantity
-                        }
-                        onChange={(e) =>
-                          setAdjustmentQuantity(
-                            e.target.value
-                          )
-                        }
-                        placeholder="Enter quantity"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                        required
-                      />
-
-                    </div>
-
-                    {/* Reason Code */}
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Reason Code
-                      </label>
-
-                      <select
-                        value={
-                          adjustmentReason
-                        }
-                        onChange={(e) =>
-                          setAdjustmentReason(
-                            e.target.value
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                        required
-                      >
-
-                        <option value="">
-                          Select reason
-                        </option>
-
-                        <option value="Damage">
-                          Damage
-                        </option>
-
-                        <option value="Lost">
-                          Lost
-                        </option>
-
-                        <option value="Found">
-                          Found
-                        </option>
-
-                        <option value="Counting Error">
-                          Counting Error
-                        </option>
-
-                        <option value="Expired">
-                          Expired
-                        </option>
-
-                        <option value="Manual Correction">
-                          Manual Correction
-                        </option>
-
-                        <option value="Other">
-                          Other
-                        </option>
-
-                      </select>
-
-                    </div>
-
-                    {/* Buttons */}
-
-                    <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAdjustment(
-                            false
-                          );
-                          setSelectedProduct(
-                            null
-                          );
-                        }}
-                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-
-                      <button
-                        type="submit"
-                        className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
-                      >
-                        Save Adjustment
-                      </button>
-
-                    </div>
-
-                  </form>
-
-                </div>
-
-              </div>
-            )}
-
-                      {/* =================================================
-              TRANSFER STOCK MODAL
-          ================================================= */}
-
-          {showTransfer && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-              <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-
-                {/* Header */}
-
-                <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-
-                  <div>
-                    <h2 className="text-lg font-bold text-[#12213a]">
-                      Transfer Stock
-                    </h2>
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      Create a stock transfer between warehouses.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTransfer(false);
-                      setTransferProduct(null);
-                    }}
-                    className="text-xl text-gray-400 hover:text-gray-700"
-                  >
-                    ×
-                  </button>
-
-                </div>
-
-                {/* Transfer Form */}
-
-                <form
-                  onSubmit={handleTransfer}
-                  className="space-y-4 p-5"
-                >
-
-                  {/* Product */}
-
-                  <div>
-
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Product
+                      Warehouse
                     </label>
 
                     <select
                       value={
-                        transferProduct?.id ?? ""
+                        editingProduct.warehouse
                       }
-                      onChange={(e) => {
-
-                        const product =
-                          products.find(
-                            (item) =>
-                              item.id ===
-                              Number(
-                                e.target.value
-                              )
-                          );
-
-                        if (product) {
-                          setTransferProduct(
-                            product
-                          );
-
-                          setTransferFrom(
-                            product.warehouse
-                          );
-                        }
-
-                      }}
+                      onChange={(e) =>
+                        setEditingProduct(
+                          (current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  warehouse:
+                                    e.target.value,
+                                }
+                              : current
+                        )
+                      }
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                     >
 
-                      <option value="">
-                        Select product
-                      </option>
-
-                      {products.map(
-                        (product) => (
+                      {warehouses.map(
+                        (item) => (
                           <option
-                            key={product.id}
-                            value={product.id}
+                            key={item}
+                            value={item}
                           >
-                            {product.name} —{" "}
-                            {product.sku}
+                            {item}
                           </option>
                         )
                       )}
@@ -2679,155 +2529,928 @@ export default function InventoryPage() {
 
                   </div>
 
-                  {/* Current Stock */}
+                </div>
 
-                  {transferProduct && (
-                    <div className="rounded-lg bg-blue-50 p-3">
+                {/* STOCK / REORDER POINT */}
 
-                      <div className="flex items-center justify-between">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
-                        <span className="text-xs text-blue-700">
-                          Current Stock
-                        </span>
-
-                        <span className="font-bold text-blue-900">
-                          {
-                            transferProduct.onHand
-                          }
-                        </span>
-
-                      </div>
-
-                      <div className="mt-1 text-[10px] text-blue-600">
-                        Current warehouse:{" "}
-                        {
-                          transferProduct.warehouse
-                        }
-                      </div>
-
-                    </div>
-                  )}
-
-                  {/* From / To */}
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        From Warehouse
-                      </label>
-
-                      <select
-                        value={
-                          transferFrom
-                        }
-                        onChange={(e) =>
-                          setTransferFrom(
-                            e.target.value
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      >
-
-                        <option value="">
-                          Select source
-                        </option>
-
-                        {warehouses.map(
-                          (item) => (
-                            <option
-                              key={item}
-                              value={item}
-                            >
-                              {item}
-                            </option>
-                          )
-                        )}
-
-                      </select>
-
-                    </div>
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        To Warehouse
-                      </label>
-
-                      <select
-                        value={
-                          transferTo
-                        }
-                        onChange={(e) =>
-                          setTransferTo(
-                            e.target.value
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      >
-
-                        <option value="">
-                          Select destination
-                        </option>
-
-                        {warehouses.map(
-                          (item) => (
-                            <option
-                              key={item}
-                              value={item}
-                            >
-                              {item}
-                            </option>
-                          )
-                        )}
-
-                      </select>
-
-                    </div>
-
-                  </div>
-
-                  {/* Quantity */}
+                  {/* CURRENT STOCK */}
 
                   <div>
 
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Transfer Quantity
+                      Current Stock
                     </label>
 
                     <input
                       type="number"
-                      min="1"
+                      min="0"
                       value={
-                        transferQuantity
+                        editingProduct.onHand
                       }
                       onChange={(e) =>
-                        setTransferQuantity(
-                          e.target.value
+                        setEditingProduct(
+                          (current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  onHand:
+                                    Number(
+                                      e.target.value
+                                    ),
+                                }
+                              : current
                         )
                       }
-                      placeholder="Enter quantity"
                       className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                       required
                     />
 
                   </div>
 
-                  {/* Reason */}
+                  {/* REORDER POINT */}
 
                   <div>
 
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Transfer Reason
+                      Reorder Point
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={
+                        editingProduct.reorderPoint
+                      }
+                      onChange={(e) =>
+                        setEditingProduct(
+                          (current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  reorderPoint:
+                                    Number(
+                                      e.target.value
+                                    ),
+                                }
+                              : current
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      required
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* UNIT COST */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Unit Cost
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={
+                      editingProduct.unitCost
+                    }
+                    onChange={(e) =>
+                      setEditingProduct(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                unitCost:
+                                  Number(
+                                    e.target.value
+                                  ),
+                              }
+                            : current
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* VARIABLE PRODUCT INFO */}
+
+                {editingProduct.productType ===
+                  "Variable" && (
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+
+                    <p className="text-xs font-semibold text-blue-800">
+                      Variable Product
+                    </p>
+
+                    <p className="mt-1 text-[11px] text-blue-700">
+                      This product contains individual variants.
+                      Variant-level editing can be connected
+                      to the backend variant API later.
+                    </p>
+
+                    {editingProduct.variants &&
+                      editingProduct.variants.length >
+                        0 && (
+                        <div className="mt-3 space-y-2">
+
+                          {editingProduct.variants.map(
+                            (
+                              variant,
+                              index
+                            ) => (
+                              <div
+                                key={
+                                  variant.id
+                                }
+                                className="rounded-md border border-blue-100 bg-white p-2"
+                              >
+
+                                <div className="flex items-center justify-between">
+
+                                  <span className="text-[11px] font-semibold text-gray-700">
+                                    Variant{" "}
+                                    {index +
+                                      1}
+                                  </span>
+
+                                  <span className="font-mono text-[10px] text-gray-500">
+                                    {
+                                      variant.sku
+                                    }
+                                  </span>
+
+                                </div>
+
+                                <p className="mt-1 text-[10px] text-gray-500">
+
+                                  {variant.size
+                                    ? `Size: ${variant.size}`
+                                    : ""}
+
+                                  {variant.size &&
+                                  variant.color
+                                    ? " · "
+                                    : ""}
+
+                                  {variant.color
+                                    ? `Color: ${variant.color}`
+                                    : ""}
+
+                                  {" · Stock: "}
+                                  {
+                                    variant.onHand
+                                  }
+
+                                </p>
+
+                              </div>
+                            )
+                          )}
+
+                        </div>
+                      )}
+
+                  </div>
+                )}
+
+                {/* BUTTONS */}
+
+                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditProduct(false);
+                      setEditingProduct(null);
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                  >
+                    Save Changes
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+        )}
+
+              {/* =================================================
+          EDIT PRODUCT MODAL
+      ================================================= */}
+
+      {showEditProduct &&
+        editingProduct && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+            <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+
+              {/* HEADER */}
+
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+
+                <div>
+
+                  <h2 className="text-lg font-bold text-[#12213a]">
+                    Edit Product
+                  </h2>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Update product and inventory details.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditProduct(false);
+                    setEditingProduct(null);
+                  }}
+                  className="text-xl text-gray-400 hover:text-gray-700"
+                >
+                  ×
+                </button>
+
+              </div>
+
+              {/* FORM */}
+
+              <form
+                onSubmit={handleEditProduct}
+                className="space-y-4 p-5"
+              >
+
+                {/* PRODUCT NAME */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Product Name
+                  </label>
+
+                  <input
+                    type="text"
+                    value={
+                      editingProduct.name
+                    }
+                    onChange={(e) =>
+                      setEditingProduct(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                name:
+                                  e.target.value,
+                              }
+                            : current
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* SKU */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    SKU
+                  </label>
+
+                  <input
+                    type="text"
+                    value={
+                      editingProduct.sku
+                    }
+                    onChange={(e) =>
+                      setEditingProduct(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                sku:
+                                  e.target.value,
+                              }
+                            : current
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* CATEGORY / WAREHOUSE */}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                  {/* CATEGORY */}
+
+                  <div>
+
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Category
                     </label>
 
                     <select
                       value={
-                        transferReason
+                        editingProduct.category
                       }
                       onChange={(e) =>
-                        setTransferReason(
+                        setEditingProduct(
+                          (current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  category:
+                                    e.target.value,
+                                }
+                              : current
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    >
+
+                      {categories
+                        .filter(
+                          (item) =>
+                            item !== "All"
+                        )
+                        .map(
+                          (item) => (
+                            <option
+                              key={item}
+                              value={item}
+                            >
+                              {item}
+                            </option>
+                          )
+                        )}
+
+                    </select>
+
+                  </div>
+
+                  {/* WAREHOUSE */}
+
+                  <div>
+
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Warehouse
+                    </label>
+
+                    <select
+                      value={
+                        editingProduct.warehouse
+                      }
+                      onChange={(e) =>
+                        setEditingProduct(
+                          (current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  warehouse:
+                                    e.target.value,
+                                }
+                              : current
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    >
+
+                      {warehouses.map(
+                        (item) => (
+                          <option
+                            key={item}
+                            value={item}
+                          >
+                            {item}
+                          </option>
+                        )
+                      )}
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+                {/* STOCK / REORDER POINT */}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                  {/* CURRENT STOCK */}
+
+                  <div>
+
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Current Stock
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={
+                        editingProduct.onHand
+                      }
+                      onChange={(e) =>
+                        setEditingProduct(
+                          (current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  onHand:
+                                    Number(
+                                      e.target.value
+                                    ),
+                                }
+                              : current
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      required
+                    />
+
+                  </div>
+
+                  {/* REORDER POINT */}
+
+                  <div>
+
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Reorder Point
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={
+                        editingProduct.reorderPoint
+                      }
+                      onChange={(e) =>
+                        setEditingProduct(
+                          (current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  reorderPoint:
+                                    Number(
+                                      e.target.value
+                                    ),
+                                }
+                              : current
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      required
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* UNIT COST */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Unit Cost
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={
+                      editingProduct.unitCost
+                    }
+                    onChange={(e) =>
+                      setEditingProduct(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                unitCost:
+                                  Number(
+                                    e.target.value
+                                  ),
+                              }
+                            : current
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* VARIABLE PRODUCT INFO */}
+
+                {editingProduct.productType ===
+                  "Variable" && (
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+
+                    <p className="text-xs font-semibold text-blue-800">
+                      Variable Product
+                    </p>
+
+                    <p className="mt-1 text-[11px] text-blue-700">
+                      This product contains individual variants.
+                      Variant-level editing can be connected
+                      to the backend variant API later.
+                    </p>
+
+                    {editingProduct.variants &&
+                      editingProduct.variants.length >
+                        0 && (
+                        <div className="mt-3 space-y-2">
+
+                          {editingProduct.variants.map(
+                            (
+                              variant,
+                              index
+                            ) => (
+                              <div
+                                key={
+                                  variant.id
+                                }
+                                className="rounded-md border border-blue-100 bg-white p-2"
+                              >
+
+                                <div className="flex items-center justify-between">
+
+                                  <span className="text-[11px] font-semibold text-gray-700">
+                                    Variant{" "}
+                                    {index +
+                                      1}
+                                  </span>
+
+                                  <span className="font-mono text-[10px] text-gray-500">
+                                    {
+                                      variant.sku
+                                    }
+                                  </span>
+
+                                </div>
+
+                                <p className="mt-1 text-[10px] text-gray-500">
+
+                                  {variant.size
+                                    ? `Size: ${variant.size}`
+                                    : ""}
+
+                                  {variant.size &&
+                                  variant.color
+                                    ? " · "
+                                    : ""}
+
+                                  {variant.color
+                                    ? `Color: ${variant.color}`
+                                    : ""}
+
+                                  {" · Stock: "}
+                                  {
+                                    variant.onHand
+                                  }
+
+                                </p>
+
+                              </div>
+                            )
+                          )}
+
+                        </div>
+                      )}
+
+                  </div>
+                )}
+
+                {/* BUTTONS */}
+
+                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditProduct(false);
+                      setEditingProduct(null);
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                  >
+                    Save Changes
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+        )}
+
+              {/* =================================================
+          STOCK ADJUSTMENT MODAL
+      ================================================= */}
+
+      {showAdjustment &&
+        selectedProduct && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+
+              {/* HEADER */}
+
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+
+                <div>
+
+                  <h2 className="text-lg font-bold text-[#12213a]">
+                    Adjust Stock
+                  </h2>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Update stock quantity for{" "}
+                    {selectedProduct.name}.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdjustment(false);
+                    setSelectedProduct(null);
+                  }}
+                  className="text-xl text-gray-400 hover:text-gray-700"
+                >
+                  ×
+                </button>
+
+              </div>
+
+              {/* FORM */}
+
+              <form
+                onSubmit={handleAdjustment}
+                className="space-y-4 p-5"
+              >
+
+                {/* PRODUCT */}
+
+                <div className="rounded-lg bg-gray-50 p-3">
+
+                  <p className="text-xs font-semibold text-gray-500">
+                    Product
+                  </p>
+
+                  <p className="mt-1 text-sm font-bold text-gray-900">
+                    {selectedProduct.name}
+                  </p>
+
+                  <p className="mt-1 font-mono text-xs text-gray-500">
+                    {selectedProduct.sku}
+                  </p>
+
+                  <p className="mt-2 text-xs text-gray-500">
+                    Current stock:{" "}
+                    <span className="font-semibold text-gray-900">
+                      {selectedProduct.onHand}
+                    </span>
+                  </p>
+
+                </div>
+
+                {/* ADJUSTMENT TYPE */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Adjustment Type
+                  </label>
+
+                  <select
+                    value={
+                      adjustmentType
+                    }
+                    onChange={(e) =>
+                      setAdjustmentType(
+                        e.target.value as
+                          | "increase"
+                          | "decrease"
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+
+                    <option value="increase">
+                      Increase Stock
+                    </option>
+
+                    <option value="decrease">
+                      Decrease Stock
+                    </option>
+
+                  </select>
+
+                </div>
+
+                {/* QUANTITY */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Quantity
+                  </label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={
+                      adjustmentQuantity
+                    }
+                    onChange={(e) =>
+                      setAdjustmentQuantity(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Enter quantity"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* REASON */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Reason
+                  </label>
+
+                  <textarea
+                    value={
+                      adjustmentReason
+                    }
+                    onChange={(e) =>
+                      setAdjustmentReason(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Enter reason for adjustment"
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* BUTTONS */}
+
+                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAdjustment(false);
+                      setSelectedProduct(null);
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                  >
+                    Save Adjustment
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+        )}
+
+              {/* =================================================
+          STOCK TRANSFER MODAL
+      ================================================= */}
+
+      {showTransfer &&
+        transferProduct && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+
+              {/* HEADER */}
+
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+
+                <div>
+
+                  <h2 className="text-lg font-bold text-[#12213a]">
+                    Transfer Stock
+                  </h2>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Transfer inventory to another warehouse.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTransfer(false);
+                    setTransferProduct(null);
+                  }}
+                  className="text-xl text-gray-400 hover:text-gray-700"
+                >
+                  ×
+                </button>
+
+              </div>
+
+              {/* FORM */}
+
+              <form
+                onSubmit={handleTransfer}
+                className="space-y-4 p-5"
+              >
+
+                {/* PRODUCT */}
+
+                <div className="rounded-lg bg-gray-50 p-3">
+
+                  <p className="text-xs font-semibold text-gray-500">
+                    Product
+                  </p>
+
+                  <p className="mt-1 text-sm font-bold text-gray-900">
+                    {transferProduct.name}
+                  </p>
+
+                  <p className="mt-1 font-mono text-xs text-gray-500">
+                    {transferProduct.sku}
+                  </p>
+
+                  <p className="mt-2 text-xs text-gray-500">
+                    Available stock:{" "}
+                    <span className="font-semibold text-gray-900">
+                      {transferProduct.onHand}
+                    </span>
+                  </p>
+
+                </div>
+
+                {/* FROM / TO */}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                  {/* FROM WAREHOUSE */}
+
+                  <div>
+
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      From Warehouse
+                    </label>
+
+                    <select
+                      value={transferFrom}
+                      onChange={(e) =>
+                        setTransferFrom(
                           e.target.value
                         )
                       }
@@ -2835,568 +3458,477 @@ export default function InventoryPage() {
                     >
 
                       <option value="">
-                        Select reason
+                        Select warehouse
                       </option>
 
-                      <option value="Replenishment">
-                        Replenishment
-                      </option>
-
-                      <option value="Demand Balancing">
-                        Demand Balancing
-                      </option>
-
-                      <option value="Warehouse Reallocation">
-                        Warehouse Reallocation
-                      </option>
-
-                      <option value="Emergency Transfer">
-                        Emergency Transfer
-                      </option>
-
-                      <option value="Other">
-                        Other
-                      </option>
+                      {warehouses.map(
+                        (item) => (
+                          <option
+                            key={item}
+                            value={item}
+                          >
+                            {item}
+                          </option>
+                        )
+                      )}
 
                     </select>
 
                   </div>
 
-                  {/* Workflow Status */}
-
-                  <div className="rounded-lg border border-dashed border-gray-300 p-3">
-
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                      Transfer Workflow
-                    </p>
-
-                    <div className="flex items-center justify-between text-[10px]">
-
-                      <span className="rounded-full bg-blue-100 px-2 py-1 font-semibold text-blue-700">
-                        Create
-                      </span>
-
-                      <span className="text-gray-300">
-                        →
-                      </span>
-
-                      <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-500">
-                        Approve
-                      </span>
-
-                      <span className="text-gray-300">
-                        →
-                      </span>
-
-                      <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-500">
-                        Dispatch
-                      </span>
-
-                      <span className="text-gray-300">
-                        →
-                      </span>
-
-                      <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-500">
-                        Receive
-                      </span>
-
-                    </div>
-
-                  </div>
-
-                  {/* Buttons */}
-
-                  <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowTransfer(false);
-                        setTransferProduct(null);
-                      }}
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
-                    >
-                      Create Transfer
-                    </button>
-
-                  </div>
-
-                </form>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* =================================================
-              CYCLE COUNT MODAL
-          ================================================= */}
-
-          {showCycleCount &&
-            cycleProduct && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-                <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-
-                  {/* Header */}
-
-                  <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-
-                    <div>
-
-                      <h2 className="text-lg font-bold text-[#12213a]">
-                        Cycle Count
-                      </h2>
-
-                      <p className="mt-1 text-xs text-gray-500">
-                        Verify physical stock and calculate variance.
-                      </p>
-
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowCycleCount(
-                          false
-                        );
-                        setCycleProduct(
-                          null
-                        );
-                      }}
-                      className="text-xl text-gray-400 hover:text-gray-700"
-                    >
-                      ×
-                    </button>
-
-                  </div>
-
-                  <form
-                    onSubmit={
-                      handleCycleCount
-                    }
-                    className="space-y-4 p-5"
-                  >
-
-                    {/* Product */}
-
-                    <div className="rounded-lg bg-gray-50 p-4">
-
-                      <p className="text-sm font-semibold text-[#12213a]">
-                        {
-                          cycleProduct.name
-                        }
-                      </p>
-
-                      <p className="mt-1 font-mono text-[10px] text-gray-400">
-                        {
-                          cycleProduct.sku
-                        }
-                      </p>
-
-                    </div>
-
-                    {/* System / Physical */}
-
-                    <div className="grid grid-cols-2 gap-3">
-
-                      <div className="rounded-lg border border-gray-200 p-3">
-
-                        <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                          System Quantity
-                        </p>
-
-                        <p className="mt-2 text-xl font-bold text-[#12213a]">
-                          {
-                            cycleProduct.onHand
-                          }
-                        </p>
-
-                      </div>
-
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-
-                        <p className="text-[10px] uppercase tracking-wide text-blue-500">
-                          Physical Quantity
-                        </p>
-
-                        <input
-                          type="number"
-                          min="0"
-                          value={
-                            physicalQuantity
-                          }
-                          onChange={(e) =>
-                            setPhysicalQuantity(
-                              e.target.value
-                            )
-                          }
-                          className="mt-1 w-full bg-transparent text-xl font-bold text-blue-900 outline-none"
-                        />
-
-                      </div>
-
-                    </div>
-
-                    {/* Variance Preview */}
-
-                    <div className="rounded-lg border border-dashed border-gray-300 p-3">
-
-                      <div className="flex items-center justify-between">
-
-                        <span className="text-xs text-gray-500">
-                          Expected Variance
-                        </span>
-
-                        <span
-                          className={`text-sm font-bold ${
-                            Number(
-                              physicalQuantity ||
-                                0
-                            ) -
-                              cycleProduct.onHand >
-                            0
-                              ? "text-green-600"
-                              : Number(
-                                    physicalQuantity ||
-                                      0
-                                  ) -
-                                    cycleProduct.onHand <
-                                0
-                              ? "text-red-600"
-                              : "text-gray-600"
-                          }`}
-                        >
-
-                          {Number(
-                            physicalQuantity ||
-                              0
-                          ) -
-                            cycleProduct.onHand >
-                          0
-                            ? "+"
-                            : ""}
-
-                          {Number(
-                            physicalQuantity ||
-                              0
-                          ) -
-                            cycleProduct.onHand}
-
-                        </span>
-
-                      </div>
-
-                    </div>
-
-                    {/* Reason */}
-
-                    <div>
-
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">
-                        Count Reason
-                      </label>
-
-                      <select
-                        value={
-                          cycleReason
-                        }
-                        onChange={(e) =>
-                          setCycleReason(
-                            e.target.value
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      >
-
-                        <option value="">
-                          Select reason
-                        </option>
-
-                        <option value="Routine Cycle Count">
-                          Routine Cycle Count
-                        </option>
-
-                        <option value="Annual Stock Count">
-                          Annual Stock Count
-                        </option>
-
-                        <option value="Variance Investigation">
-                          Variance Investigation
-                        </option>
-
-                        <option value="Audit">
-                          Audit
-                        </option>
-
-                        <option value="Other">
-                          Other
-                        </option>
-
-                      </select>
-
-                    </div>
-
-                    {/* Buttons */}
-
-                    <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowCycleCount(
-                            false
-                          );
-                          setCycleProduct(
-                            null
-                          );
-                        }}
-                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-
-                      <button
-                        type="submit"
-                        className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
-                      >
-                        Complete Count
-                      </button>
-
-                    </div>
-
-                  </form>
-
-                </div>
-
-              </div>
-            )}
-
-          {/* =================================================
-              BARCODE SCANNER MODAL
-          ================================================= */}
-
-          {showBarcode && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-              <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-
-                {/* Header */}
-
-                <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                  {/* TO WAREHOUSE */}
 
                   <div>
 
-                    <h2 className="text-lg font-bold text-[#12213a]">
-                      Barcode Scanner
-                    </h2>
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      To Warehouse
+                    </label>
 
-                    <p className="mt-1 text-xs text-gray-500">
-                      Scan a barcode or enter a product SKU.
-                    </p>
+                    <select
+                      value={transferTo}
+                      onChange={(e) =>
+                        setTransferTo(
+                          e.target.value
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    >
+
+                      <option value="">
+                        Select warehouse
+                      </option>
+
+                      {warehouses.map(
+                        (item) => (
+                          <option
+                            key={item}
+                            value={item}
+                          >
+                            {item}
+                          </option>
+                        )
+                      )}
+
+                    </select>
 
                   </div>
 
+                </div>
+
+                {/* QUANTITY */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Quantity
+                  </label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    max={
+                      transferProduct.onHand
+                    }
+                    value={
+                      transferQuantity
+                    }
+                    onChange={(e) =>
+                      setTransferQuantity(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Enter quantity"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* REASON */}
+
+                <div>
+
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Reason
+                  </label>
+
+                  <textarea
+                    value={
+                      transferReason
+                    }
+                    onChange={(e) =>
+                      setTransferReason(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Enter transfer reason"
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
+
+                </div>
+
+                {/* BUTTONS */}
+
+                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowBarcode(false)
-                    }
-                    className="text-xl text-gray-400 hover:text-gray-700"
+                    onClick={() => {
+                      setShowTransfer(false);
+                      setTransferProduct(null);
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    ×
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                  >
+                    Transfer Stock
                   </button>
 
                 </div>
 
-                {/* Scanner Area */}
+              </form>
 
-                <div className="p-5">
+            </div>
 
-                  <div className="mb-4 flex h-36 items-center justify-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50">
+          </div>
+        )}
 
-                    <div className="text-center">
+                   {/* =================================================
+          CYCLE COUNT MODAL
+      ================================================= */}
 
-                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-white text-2xl shadow-sm">
-                        ▦
-                      </div>
+      {showCycleCount &&
+        cycleProduct && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
 
-                      <p className="mt-3 text-xs font-semibold text-blue-800">
-                        Scanner Input Ready
-                      </p>
+            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
 
-                      <p className="mt-1 text-[10px] text-blue-500">
-                        Connect a barcode scanner or type the SKU below.
-                      </p>
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
 
-                    </div>
+                <div>
+                  <h2 className="text-lg font-bold text-[#12213a]">
+                    Cycle Count
+                  </h2>
 
-                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Record the physically counted stock.
+                  </p>
+                </div>
 
-                  {/* Input */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCycleCount(false);
+                    setCycleProduct(null);
+                  }}
+                  className="text-xl text-gray-400 hover:text-gray-700"
+                >
+                  ×
+                </button>
+
+              </div>
+
+              <form
+                onSubmit={handleCycleCount}
+                className="space-y-4 p-5"
+              >
+
+                <div className="rounded-lg bg-gray-50 p-3">
+
+                  <p className="text-xs font-semibold text-gray-500">
+                    Product
+                  </p>
+
+                  <p className="mt-1 text-sm font-bold text-gray-900">
+                    {cycleProduct.name}
+                  </p>
+
+                  <p className="mt-1 font-mono text-xs text-gray-500">
+                    {cycleProduct.sku}
+                  </p>
+
+                  <p className="mt-2 text-xs text-gray-500">
+                    System stock:{" "}
+                    <span className="font-semibold text-gray-900">
+                      {cycleProduct.onHand}
+                    </span>
+                  </p>
+
+                </div>
+
+                <div>
 
                   <label className="mb-1 block text-xs font-semibold text-gray-700">
-                    Barcode / SKU
+                    Counted Quantity
                   </label>
 
-                  <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={physicalQuantity}
+                    onChange={(e) =>
+                      setPhysicalQuantity(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Enter physically counted quantity"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    required
+                  />
 
-                    <input
-                      autoFocus
-                      type="text"
-                      value={
-                        barcodeValue
-                      }
-                      onChange={(e) =>
-                        setBarcodeValue(
-                          e.target.value
-                        )
-                      }
-                      onKeyDown={(e) => {
+                </div>
 
-                        if (
-                          e.key ===
-                          "Enter"
-                        ) {
-                          e.preventDefault();
-                          handleBarcodeSearch();
-                        }
+                <div>
 
-                      }}
-                      placeholder="Scan or enter SKU..."
-                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
-                    />
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Reason / Notes
+                  </label>
 
-                    <button
-                      type="button"
-                      onClick={
-                        handleBarcodeSearch
-                      }
-                      className="rounded-lg bg-[#12213a] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
-                    >
-                      Search
-                    </button>
+                  <textarea
+                    value={cycleReason}
+                    onChange={(e) =>
+                      setCycleReason(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Enter count notes"
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
 
+                </div>
+
+                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCycleCount(false);
+                      setCycleProduct(null);
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                  >
+                    Save Count
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+        )}
+
+
+      {/* =================================================
+          BARCODE SCANNER MODAL
+      ================================================= */}
+
+      {showBarcode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+
+              <div>
+                <h2 className="text-lg font-bold text-[#12213a]">
+                  Barcode Scanner
+                </h2>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Scan or enter a product barcode.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBarcode(false);
+                  setBarcodeValue("");
+                  setBarcodeProduct(null);
+                }}
+                className="text-xl text-gray-400 hover:text-gray-700"
+              >
+                ×
+              </button>
+
+            </div>
+
+            <div className="space-y-5 p-5">
+
+              <div className="flex h-44 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50">
+
+                <div className="text-center">
+
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
+                    ▣
                   </div>
 
-                  {/* Result */}
+                  <p className="mt-3 text-sm font-semibold text-gray-700">
+                    Ready to scan
+                  </p>
 
-                  {barcodeProduct && (
-                    <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
-
-                      <div className="flex items-start justify-between">
-
-                        <div>
-
-                          <p className="text-sm font-bold text-green-900">
-                            {
-                              barcodeProduct.name
-                            }
-                          </p>
-
-                          <p className="mt-1 font-mono text-[10px] text-green-700">
-                            {
-                              barcodeProduct.sku
-                            }
-                          </p>
-
-                        </div>
-
-                        <span className="rounded-full bg-green-100 px-2 py-1 text-[10px] font-semibold text-green-700">
-                          Product Found
-                        </span>
-
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-3 gap-2">
-
-                        <div className="rounded-lg bg-white p-2">
-
-                          <p className="text-[9px] text-gray-400">
-                            On Hand
-                          </p>
-
-                          <p className="mt-1 text-sm font-bold text-gray-800">
-                            {
-                              barcodeProduct.onHand
-                            }
-                          </p>
-
-                        </div>
-
-                        <div className="rounded-lg bg-white p-2">
-
-                          <p className="text-[9px] text-gray-400">
-                            Available
-                          </p>
-
-                          <p className="mt-1 text-sm font-bold text-gray-800">
-                            {getAvailable(
-                              barcodeProduct
-                            )}
-                          </p>
-
-                        </div>
-
-                        <div className="rounded-lg bg-white p-2">
-
-                          <p className="text-[9px] text-gray-400">
-                            Warehouse
-                          </p>
-
-                          <p className="mt-1 truncate text-xs font-bold text-gray-800">
-                            {
-                              barcodeProduct.warehouse
-                            }
-                          </p>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-                  )}
-
-                  {/* Footer */}
-
-                  <div className="mt-5 flex justify-end">
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowBarcode(false)
-                      }
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Close
-                    </button>
-
-                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Enter the barcode manually below.
+                  </p>
 
                 </div>
 
               </div>
 
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleBarcodeSearch();
+                }}
+                className="flex gap-2"
+              >
+
+                <input
+                  type="text"
+                  value={barcodeValue}
+                  onChange={(e) =>
+                    setBarcodeValue(
+                      e.target.value
+                    )
+                  }
+                  placeholder="Enter barcode / SKU"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  autoFocus
+                />
+
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#12213a] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                >
+                  Search
+                </button>
+
+              </form>
+
+              {barcodeProduct && (
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+
+                  <div className="flex items-start justify-between gap-4">
+
+                    <div>
+
+                      <p className="text-sm font-bold text-gray-900">
+                        {barcodeProduct.name}
+                      </p>
+
+                      <p className="mt-1 font-mono text-xs text-gray-500">
+                        {barcodeProduct.sku}
+                      </p>
+
+                    </div>
+
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                        getStatus(barcodeProduct) ===
+                        "Healthy"
+                          ? "bg-green-100 text-green-700"
+                          : getStatus(barcodeProduct) ===
+                            "Low Stock"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {getStatus(barcodeProduct)}
+                    </span>
+
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-3">
+
+                    <div className="rounded-lg bg-gray-50 p-3">
+
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+                        On Hand
+                      </p>
+
+                      <p className="mt-1 text-lg font-bold text-gray-900">
+                        {barcodeProduct.onHand}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 p-3">
+
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+                        Available
+                      </p>
+
+                      <p className="mt-1 text-lg font-bold text-gray-900">
+                        {getAvailable(barcodeProduct)}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 p-3">
+
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+                        Warehouse
+                      </p>
+
+                      <p className="mt-1 truncate text-sm font-bold text-gray-900">
+                        {barcodeProduct.warehouse}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+              )}
+
+              <div className="flex justify-end border-t border-gray-200 pt-4">
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBarcode(false);
+                    setBarcodeValue("");
+                    setBarcodeProduct(null);
+                  }}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Close
+                </button>
+
+              </div>
+
             </div>
-          )}
 
-          {/* =================================================
-              PAGE FOOTER
-          ================================================= */}
-
-          <div className="py-8 text-center text-[10px] text-gray-400">
-            AI StockFlow • Inventory Management
           </div>
 
         </div>
-      </main>
+      )}
+
+            {/* =================================================
+          FOOTER
+      ================================================= */}
+
+      <div className="py-8 text-center text-[10px] text-gray-400">
+        AI StockFlow • Inventory Management
+      </div>
+
     </PageLayout>
   );
 }
