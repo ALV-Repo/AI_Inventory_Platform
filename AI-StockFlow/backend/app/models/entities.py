@@ -195,7 +195,11 @@ class SalesOrder(Base, TenantMixin):
     total = Column(Float, default=0.0)
     cogs = Column(Float, default=0.0)                     # for gross profit (FR-RPT-01)
     payment_mode = Column(String(24), default="cash")
-    idempotency_key = Column(String(64))                  # NFR-05 offline POS sync
+    idempotency_key = Column(String(64))   
+    irn = Column(String(64), nullable=True)
+    irn_status = Column(String(24), default="not_required")
+    irn = Column(String(64), nullable=True)
+    irn_status = Column(String(24), default="not_required")               # NFR-05 offline POS sync
     created_at = Column(DateTime, default=utcnow)
 
     lines = relationship("SalesOrderLine", back_populates="order", cascade="all, delete-orphan")
