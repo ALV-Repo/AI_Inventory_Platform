@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -613,3 +613,58 @@ class TestCustomers:
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
+    def test_create_and_revise_quotation(
+        self,
+        client,
+        auth_headers,
+        sales_data,
+    ):
+        create_response = client.post(
+            "/api/v1/sales/quotations",
+            headers=auth_headers,
+            json={
+                "lines": [
+                    {
+                        "product_id": sales_data["product_id"],
+                        "quantity": 2,
+                        "unit_price": 150,
+                        "discount": 0,
+                    }
+                ],
+                "valid_until": "2026-09-30",
+            },
+        )
+
+        assert create_response.status_code == 201, create_response.text
+        quotation = create_response.json()
+
+        assert quotation["revision"] == 1
+        assert quotation["status"] == "draft"
+        assert quotation["total"] > 0
+
+        revision_response = client.post(
+            f"/api/v1/sales/quotations/{quotation['id']}/revisions",
+            headers=auth_headers,
+            json={
+                "lines": [
+                    {
+                        "product_id": sales_data["product_id"],
+                        "quantity": 3,
+                        "unit_price": 140,
+                        "discount": 0,
+                    }
+                ],
+                "valid_until": "2026-10-15",
+            },
+        )
+
+        assert revision_response.status_code == 200, revision_response.text
+        revised = revision_response.json()
+
+        assert revised["id"] == quotation["id"]
+        assert revised["quote_number"] == quotation["quote_number"]
+        assert revised["revision"] == 2
+        assert revised["status"] == "draft"
+        assert revised["valid_until"] == "2026-10-15"
+        assert revised["total"] > 0
+        assert revised["total"] != quotation["total"]

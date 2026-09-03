@@ -1,5 +1,5 @@
-﻿"""Sales and POS endpoints (SRS Â§3.3)."""
-from datetime import datetime, timezone
+"""Sales and POS endpoints (SRS §3.3)."""
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, scoped
 from app.core.security import require
 from app.models.entities import (
-    AuditLog, Customer, Product, ProductBOM, SalesOrder, SalesOrderLine, StockItem, StockMovement, StockSerial, User,
+    AuditLog, Customer, Product, ProductBOM, Quotation, QuotationLine, SalesOrder, SalesOrderLine, StockItem, StockMovement, StockSerial, User,
 )
 from app.services.logic import compute_gst
 
@@ -38,12 +38,29 @@ class SaleIn(BaseModel):
     )
 
 
+class QuotationLineIn(BaseModel):
+    product_id: int
+    quantity: float = Field(gt=0)
+    unit_price: float | None = None
+    discount: float = Field(default=0, ge=0)
+
+
+class QuotationIn(BaseModel):
+    customer_id: int | None = None
+    lines: list[QuotationLineIn] = Field(min_length=1)
+    valid_until: date | None = None
+
+
+class QuotationRevisionIn(BaseModel):
+    lines: list[QuotationLineIn] = Field(min_length=1)
+    valid_until: date | None = None
+
 def _next_number(db: Session, tenant_id: int, attempt: int = 0) -> str:
     """Next invoice number for this tenant.
 
     Derived from the highest existing id rather than a row count, so deletions
     can never cause a reuse. A concurrent insert can still race to the same
-    number â€” the unique index on (tenant_id, order_number) catches that, and
+    number — the unique index on (tenant_id, order_number) catches that, and
     create_sale retries with a bumped sequence (NFR-05: atomic, no lost bills).
     """
     last_id = (
@@ -69,7 +86,7 @@ def create_sale(
             db.rollback()
             constraint = str(exc.orig).lower()
             if "idem" in constraint and body.idempotency_key:
-                # A concurrent replay of the same offline bill won the race â€”
+                # A concurrent replay of the same offline bill won the race —
                 # return the bill it created rather than erroring (NFR-05).
                 existing = (
                     scoped(db, SalesOrder, user.tenant_id)
@@ -84,7 +101,7 @@ def create_sale(
             # Otherwise it was an order-number collision; retry with a bumped sequence.
     raise HTTPException(
         status.HTTP_503_SERVICE_UNAVAILABLE,
-        "The store is very busy right now. The bill was not saved â€” try again.",
+        "The store is very busy right now. The bill was not saved — try again.",
     )
 
 
@@ -291,4 +308,292 @@ def list_customers(
 
 
 
+
+
+@router.post("/quotations", status_code=status.HTTP_201_CREATED)
+def create_quotation(
+    body: QuotationIn,
+    user: User = Depends(require("sales:write")),
+    db: Session = Depends(get_db),
+):
+    """Create a sales quotation with revision 1."""
+    if body.customer_id is not None:
+        customer = (
+            scoped(db, Customer, user.tenant_id)
+            .filter(Customer.id == body.customer_id)
+            .first()
+        )
+        if not customer:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"Customer {body.customer_id} not found.",
+            )
+
+    last_quote_id = (
+        scoped(db, Quotation, user.tenant_id)
+        .with_entities(func.max(Quotation.id))
+        .scalar()
+        or 0
+    )
+    quote_number = (
+        f"QUO-{datetime.now(timezone.utc).strftime('%Y%m')}-{last_quote_id + 1:05d}"
+    )
+
+    quotation = Quotation(
+        tenant_id=user.tenant_id,
+        quote_number=quote_number,
+        customer_id=body.customer_id,
+        status="draft",
+        valid_until=body.valid_until,
+        revision=1,
+    )
+    db.add(quotation)
+    db.flush()
+
+    subtotal = 0.0
+    tax_total = 0.0
+
+    for line in body.lines:
+        product = (
+            scoped(db, Product, user.tenant_id)
+            .filter(Product.id == line.product_id)
+            .first()
+        )
+        if not product:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"Product {line.product_id} not found.",
+            )
+
+        price = (
+            line.unit_price
+            if line.unit_price is not None
+            else product.selling_price
+        )
+
+        tax = compute_gst(
+            unit_price=price,
+            quantity=line.quantity,
+            gst_rate=product.gst_rate,
+            discount=line.discount,
+            interstate=False,
+        )
+
+        db.add(
+            QuotationLine(
+                tenant_id=user.tenant_id,
+                quotation_id=quotation.id,
+                product_id=product.id,
+                quantity=line.quantity,
+                unit_price=price,
+                discount=line.discount,
+                gst_rate=product.gst_rate,
+                tax_amount=tax.total_tax,
+                line_total=tax.grand_total,
+            )
+        )
+
+        subtotal += tax.taxable_value
+        tax_total += tax.total_tax
+
+    quotation.subtotal = round(subtotal, 2)
+    quotation.tax_amount = round(tax_total, 2)
+    quotation.total = round(subtotal + tax_total, 2)
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="sales.quotation.create",
+            entity_type="quotation",
+            entity_id=quotation.id,
+            details={"quote_number": quotation.quote_number},
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": quotation.id,
+        "quote_number": quotation.quote_number,
+        "customer_id": quotation.customer_id,
+        "status": quotation.status,
+        "valid_until": quotation.valid_until,
+        "revision": quotation.revision,
+        "subtotal": quotation.subtotal,
+        "tax_amount": quotation.tax_amount,
+        "total": quotation.total,
+    }
+
+
+@router.get("/quotations")
+def get_quotations(
+    user: User = Depends(require("sales:read")),
+    db: Session = Depends(get_db),
+):
+    """List tenant quotations."""
+    quotations = (
+        scoped(db, Quotation, user.tenant_id)
+        .order_by(Quotation.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": q.id,
+            "quote_number": q.quote_number,
+            "customer_id": q.customer_id,
+            "status": q.status,
+            "valid_until": q.valid_until,
+            "revision": q.revision,
+            "subtotal": q.subtotal,
+            "tax_amount": q.tax_amount,
+            "total": q.total,
+        }
+        for q in quotations
+    ]
+
+
+@router.get("/quotations/{quotation_id}")
+def get_quotation(
+    quotation_id: int,
+    user: User = Depends(require("sales:read")),
+    db: Session = Depends(get_db),
+):
+    """Get quotation details including lines."""
+    quotation = (
+        scoped(db, Quotation, user.tenant_id)
+        .filter(Quotation.id == quotation_id)
+        .first()
+    )
+
+    if not quotation:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Quotation {quotation_id} not found.",
+        )
+
+    return {
+        "id": quotation.id,
+        "quote_number": quotation.quote_number,
+        "customer_id": quotation.customer_id,
+        "status": quotation.status,
+        "valid_until": quotation.valid_until,
+        "revision": quotation.revision,
+        "subtotal": quotation.subtotal,
+        "tax_amount": quotation.tax_amount,
+        "total": quotation.total,
+        "lines": [
+            {
+                "id": line.id,
+                "product_id": line.product_id,
+                "quantity": line.quantity,
+                "unit_price": line.unit_price,
+                "discount": line.discount,
+                "gst_rate": line.gst_rate,
+                "tax_amount": line.tax_amount,
+                "line_total": line.line_total,
+            }
+            for line in quotation.lines
+        ],
+    }
+
+@router.post("/quotations/{quotation_id}/revisions")
+def revise_quotation(
+    quotation_id: int,
+    body: QuotationRevisionIn,
+    user: User = Depends(require("sales:write")),
+    db: Session = Depends(get_db),
+):
+    """Create a new revision of an existing quotation."""
+    quotation = (
+        scoped(db, Quotation, user.tenant_id)
+        .filter(Quotation.id == quotation_id)
+        .first()
+    )
+
+    if not quotation:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Quotation {quotation_id} not found.",
+        )
+
+    quotation.lines.clear()
+    quotation.revision = (quotation.revision or 1) + 1
+    quotation.valid_until = body.valid_until
+    quotation.status = "draft"
+
+    subtotal = 0.0
+    tax_total = 0.0
+
+    for line in body.lines:
+        product = (
+            scoped(db, Product, user.tenant_id)
+            .filter(Product.id == line.product_id)
+            .first()
+        )
+
+        if not product:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"Product {line.product_id} not found.",
+            )
+
+        price = (
+            line.unit_price
+            if line.unit_price is not None
+            else product.selling_price
+        )
+
+        tax = compute_gst(
+            unit_price=price,
+            quantity=line.quantity,
+            gst_rate=product.gst_rate,
+            discount=line.discount,
+            interstate=False,
+        )
+
+        quotation.lines.append(
+            QuotationLine(
+                tenant_id=user.tenant_id,
+                product_id=product.id,
+                quantity=line.quantity,
+                unit_price=price,
+                discount=line.discount,
+                gst_rate=product.gst_rate,
+                tax_amount=tax.total_tax,
+                line_total=tax.grand_total,
+            )
+        )
+
+        subtotal += tax.taxable_value
+        tax_total += tax.total_tax
+
+    quotation.subtotal = round(subtotal, 2)
+    quotation.tax_amount = round(tax_total, 2)
+    quotation.total = round(subtotal + tax_total, 2)
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="sales.quotation.revise",
+            entity_type="quotation",
+            entity_id=quotation.id,
+            details={"revision": quotation.revision},
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": quotation.id,
+        "quote_number": quotation.quote_number,
+        "revision": quotation.revision,
+        "status": quotation.status,
+        "valid_until": quotation.valid_until,
+        "subtotal": quotation.subtotal,
+        "tax_amount": quotation.tax_amount,
+        "total": quotation.total,
+    }
 
