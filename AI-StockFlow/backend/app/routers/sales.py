@@ -1,4 +1,4 @@
-"""Sales and POS endpoints (SRS §3.3)."""
+﻿"""Sales and POS endpoints (SRS Â§3.3)."""
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,8 +9,21 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db, scoped
 from app.core.security import require
+
 from app.models.entities import (
-    AuditLog, Customer, Product, ProductBOM, Quotation, QuotationLine, SalesOrder, SalesOrderLine, StockItem, StockMovement, StockSerial, User,
+    AuditLog,
+    Customer,
+    Product,
+    ProductBOM,
+    Quotation,
+    QuotationLine,
+    SalesOrder,
+    SalesOrderLine,
+    StockItem,
+    StockMovement,
+    StockSerial,
+    User,
+    Warehouse,
 )
 from app.services.logic import compute_gst
 
@@ -60,7 +73,7 @@ def _next_number(db: Session, tenant_id: int, attempt: int = 0) -> str:
 
     Derived from the highest existing id rather than a row count, so deletions
     can never cause a reuse. A concurrent insert can still race to the same
-    number — the unique index on (tenant_id, order_number) catches that, and
+    number â€” the unique index on (tenant_id, order_number) catches that, and
     create_sale retries with a bumped sequence (NFR-05: atomic, no lost bills).
     """
     last_id = (
@@ -86,7 +99,7 @@ def create_sale(
             db.rollback()
             constraint = str(exc.orig).lower()
             if "idem" in constraint and body.idempotency_key:
-                # A concurrent replay of the same offline bill won the race —
+                # A concurrent replay of the same offline bill won the race â€”
                 # return the bill it created rather than erroring (NFR-05).
                 existing = (
                     scoped(db, SalesOrder, user.tenant_id)
@@ -101,7 +114,7 @@ def create_sale(
             # Otherwise it was an order-number collision; retry with a bumped sequence.
     raise HTTPException(
         status.HTTP_503_SERVICE_UNAVAILABLE,
-        "The store is very busy right now. The bill was not saved — try again.",
+        "The store is very busy right now. The bill was not saved â€” try again.",
     )
 
 
@@ -596,4 +609,161 @@ def revise_quotation(
         "tax_amount": quotation.tax_amount,
         "total": quotation.total,
     }
+
+
+class QuotationConvertIn(BaseModel):
+    warehouse_id: int
+
+
+@router.post("/quotations/{quotation_id}/convert", status_code=status.HTTP_201_CREATED)
+def convert_quotation(
+    quotation_id: int,
+    body: QuotationConvertIn,
+    user: User = Depends(require("sales:write")),
+    db: Session = Depends(get_db),
+):
+    """Convert a quotation into a sales order and reserve its stock (FR-SAL-01/02)."""
+
+    quotation = (
+        scoped(db, Quotation, user.tenant_id)
+        .filter(Quotation.id == quotation_id)
+        .first()
+    )
+    if not quotation:
+        raise HTTPException(404, "Quotation not found.")
+
+    if quotation.status == "converted":
+        raise HTTPException(409, "Quotation has already been converted.")
+
+    if quotation.valid_until and quotation.valid_until < date.today():
+        raise HTTPException(400, "Quotation has expired.")
+
+    warehouse = (
+        scoped(db, Warehouse, user.tenant_id)
+        .filter(Warehouse.id == body.warehouse_id)
+        .first()
+    )
+    if not warehouse:
+        raise HTTPException(404, "Warehouse not found.")
+
+    # Validate every product and stock availability BEFORE changing anything.
+    stock_rows = {}
+    for line in quotation.lines:
+        product = (
+            scoped(db, Product, user.tenant_id)
+            .filter(Product.id == line.product_id)
+            .first()
+        )
+        if not product:
+            raise HTTPException(400, f"Product {line.product_id} not found.")
+
+        stock = (
+            scoped(db, StockItem, user.tenant_id)
+            .filter(
+                StockItem.product_id == line.product_id,
+                StockItem.warehouse_id == body.warehouse_id,
+            )
+            .first()
+        )
+        if not stock:
+            raise HTTPException(
+                400,
+                f"No stock record exists for product {line.product_id}.",
+            )
+
+        if stock.available < line.quantity:
+            raise HTTPException(
+                400,
+                f"Only {stock.available} units are available for product {line.product_id}.",
+            )
+
+        stock_rows[line.product_id] = stock
+
+    order = SalesOrder(
+        tenant_id=user.tenant_id,
+        order_number=_next_number(db, user.tenant_id),
+        customer_id=quotation.customer_id,
+        warehouse_id=body.warehouse_id,
+        channel="order",
+        status="confirmed",
+        subtotal=quotation.subtotal,
+        tax_amount=quotation.tax_amount,
+        total=quotation.total,
+        discount=sum(
+            float(line.discount or 0) * float(line.quantity)
+            for line in quotation.lines
+        ),
+        payment_mode="pending",
+    )
+    db.add(order)
+    db.flush()
+
+    for line in quotation.lines:
+        db.add(
+            SalesOrderLine(
+                tenant_id=user.tenant_id,
+                order_id=order.id,
+                product_id=line.product_id,
+                quantity=line.quantity,
+                unit_price=line.unit_price or 0,
+                discount=line.discount or 0,
+                gst_rate=line.gst_rate or 18,
+                tax_amount=line.tax_amount or 0,
+                line_total=line.line_total or 0,
+            )
+        )
+
+        stock = stock_rows[line.product_id]
+        stock.reserved_qty = (stock.reserved_qty or 0) + line.quantity
+
+        db.add(
+            StockMovement(
+                tenant_id=user.tenant_id,
+                product_id=line.product_id,
+                warehouse_id=body.warehouse_id,
+                movement_type="reserve",
+                quantity=line.quantity,
+                reason_code="quotation_conversion",
+                reference_type="sales_order",
+                reference_id=order.id,
+                user_id=user.id,
+            )
+        )
+
+    quotation.status = "converted"
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="sales.quotation.convert",
+            entity_type="quotation",
+            entity_id=quotation.id,
+            details={
+                "quote_number": quotation.quote_number,
+                "sales_order_id": order.id,
+                "order_number": order.order_number,
+                "warehouse_id": body.warehouse_id,
+            },
+        )
+    )
+
+    db.commit()
+
+    return {
+        "quotation_id": quotation.id,
+        "quote_number": quotation.quote_number,
+        "sales_order_id": order.id,
+        "order_number": order.order_number,
+        "status": order.status,
+        "reservation": "created",
+        "total": order.total,
+    }
+
+
+
+
+
+
+
 

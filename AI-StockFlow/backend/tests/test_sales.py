@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -668,3 +668,55 @@ class TestCustomers:
         assert revised["valid_until"] == "2026-10-15"
         assert revised["total"] > 0
         assert revised["total"] != quotation["total"]
+def test_convert_quotation_to_sales_order(
+    client,
+    auth_headers,
+    sales_data,
+    db,
+):
+    add_stock(db, sales_data, 10)
+
+    response = client.post(
+        "/api/v1/sales/quotations",
+        headers=auth_headers,
+        json={
+            "lines": [
+                {
+                    "product_id": sales_data["product_id"],
+                    "quantity": 2,
+                    "unit_price": 150,
+                    "discount": 0,
+                }
+            ],
+            "valid_until": "2026-12-31",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    quotation = response.json()
+
+    response = client.post(
+        f"/api/v1/sales/quotations/{quotation['id']}/convert",
+        headers=auth_headers,
+        json={
+            "warehouse_id": sales_data["warehouse_id"],
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    converted = response.json()
+
+    assert converted["quotation_id"] == quotation["id"]
+    assert converted["sales_order_id"] > 0
+    assert converted["order_number"].startswith("INV-")
+    assert converted["status"] == "confirmed"
+    assert converted["reservation"] == "created"
+
+    quotation_response = client.get(
+        f"/api/v1/sales/quotations/{quotation['id']}",
+        headers=auth_headers,
+    )
+
+    assert quotation_response.status_code == 200
+    assert quotation_response.json()["status"] == "converted"
+
