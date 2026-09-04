@@ -74,7 +74,47 @@ class Customer(Base, TenantMixin):
     email = Column(String(180))
     credit_limit = Column(Float, default=0.0)
     outstanding = Column(Float, default=0.0)
+class Quotation(Base, TenantMixin):
+    """Sales quotation (FR-SAL-01)."""
+    __tablename__ = "quotations"
 
+    id = Column(Integer, primary_key=True)
+    quote_number = Column(String(40), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    status = Column(String(24), default="draft")
+    valid_until = Column(Date)
+    revision = Column(Integer, default=1)
+    subtotal = Column(Float, default=0.0)
+    tax_amount = Column(Float, default=0.0)
+    total = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=utcnow)
+
+    lines = relationship(
+        "QuotationLine",
+        back_populates="quotation",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("ix_quotations_tenant_number", "tenant_id", "quote_number", unique=True),
+    )
+
+
+class QuotationLine(Base, TenantMixin):
+    """Quotation line item (FR-SAL-01)."""
+    __tablename__ = "quotation_lines"
+
+    id = Column(Integer, primary_key=True)
+    quotation_id = Column(Integer, ForeignKey("quotations.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    quantity = Column(Float, nullable=False)
+    unit_price = Column(Float, default=0.0)
+    discount = Column(Float, default=0.0)
+    gst_rate = Column(Float, default=18.0)
+    tax_amount = Column(Float, default=0.0)
+    line_total = Column(Float, default=0.0)
+
+    quotation = relationship("Quotation", back_populates="lines")
 
 class Product(Base, TenantMixin):
     """FR-INV-01 / FR-INV-02."""
@@ -198,8 +238,7 @@ class SalesOrder(Base, TenantMixin):
     idempotency_key = Column(String(64))   
     irn = Column(String(64), nullable=True)
     irn_status = Column(String(24), default="not_required")
-    irn = Column(String(64), nullable=True)
-    irn_status = Column(String(24), default="not_required")               # NFR-05 offline POS sync
+                   # NFR-05 offline POS sync
     created_at = Column(DateTime, default=utcnow)
 
     lines = relationship("SalesOrderLine", back_populates="order", cascade="all, delete-orphan")
