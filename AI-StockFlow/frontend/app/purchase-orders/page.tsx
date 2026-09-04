@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import PageLayout from "../../components/layout/PageLayout";
 
 /* =========================================================
@@ -261,6 +262,17 @@ function getStatusClass(status: POStatus) {
 ========================================================= */
 
 export default function PurchaseOrdersPage() {
+    const searchParams = useSearchParams();
+
+  const draftMode = searchParams.get("draft") === "1";
+  const draftProductName =
+    searchParams.get("product_name") ?? "";
+  const draftSku =
+    searchParams.get("sku") ?? "";
+  const draftQuantity = Math.max(
+    1,
+    Number(searchParams.get("quantity") ?? 1)
+  );
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(
   initialPurchaseOrders
 );
@@ -288,6 +300,28 @@ export default function PurchaseOrdersPage() {
     quantity: 1,
     unitPrice: 0,
   });
+
+    useEffect(() => {
+    if (!draftMode) {
+      return;
+    }
+
+    setNewPO((current) => ({
+      ...current,
+      product: draftProductName,
+      sku: draftSku,
+      quantity: draftQuantity,
+      notes:
+        "Draft PO created from AI Auto Purchase recommendation.",
+    }));
+
+    setShowCreatePO(true);
+  }, [
+    draftMode,
+    draftProductName,
+    draftSku,
+    draftQuantity,
+  ]);
 
 useEffect(() => {
   const savedOrders = localStorage.getItem(

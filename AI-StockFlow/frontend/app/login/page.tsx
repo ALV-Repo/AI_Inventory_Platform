@@ -28,35 +28,7 @@ export default function LoginPage() {
       setLoading(true);
 
       const data = await login(email.trim(), password);
-
-      // Store authentication data in localStorage
-      localStorage.setItem("access_token", data.access_token);
-
-      if (data.refresh_token) {
-        localStorage.setItem(
-          "refresh_token",
-          data.refresh_token
-        );
-      }
-
-      if (data.user_id !== undefined) {
-        localStorage.setItem(
-          "user_id",
-          String(data.user_id)
-        );
-      }
-
-      if (data.tenant_id !== undefined) {
-        localStorage.setItem(
-          "tenant_id",
-          String(data.tenant_id)
-        );
-      }
-
-      if (data.role) {
-        localStorage.setItem("role", data.role);
-      }
-
+      
       router.push("/dashboard");
     } catch (err) {
       console.error("LOGIN ERROR:", err);

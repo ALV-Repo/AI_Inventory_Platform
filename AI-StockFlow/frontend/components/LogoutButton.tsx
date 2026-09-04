@@ -6,11 +6,8 @@ export default function LogoutButton() {
   const router = useRouter();
 
   const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("tenant_id");
-    localStorage.removeItem("role");
+    sessionStorage.removeItem("sf_access");
+sessionStorage.removeItem("sf_refresh");
 
     router.replace("/login");
   };

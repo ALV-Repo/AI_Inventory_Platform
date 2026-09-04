@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import AuthGuard from "../components/auth/AuthGuard";
 
 export const metadata: Metadata = {
   title: "AI StockFlow",
@@ -13,7 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthGuard>
+          {children}
+        </AuthGuard>
+      </body>
     </html>
   );
 }

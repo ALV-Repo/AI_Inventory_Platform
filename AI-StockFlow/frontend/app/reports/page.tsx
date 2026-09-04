@@ -1319,7 +1319,7 @@ function CashierSummary() {
     <div className="rounded-xl border border-slate-200 bg-white">
       <div className="border-b border-slate-200 px-5 py-4">
         <h2 className="text-sm font-semibold">
-          Today's Payment Summary
+          Today&apos;s Payment Summary
         </h2>
 
         <p className="mt-1 text-[10px] text-slate-500">

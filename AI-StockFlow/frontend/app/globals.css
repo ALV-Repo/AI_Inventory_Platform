@@ -2,8 +2,344 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   GLOBAL BASE STYLES
+============================================================ */
+
+html,
 body {
   margin: 0;
   padding: 0;
+  min-height: 100%;
   font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  background: #f8fafc;
+  color: #12213a;
+}
+
+/* ============================================================
+   DARK MODE - GLOBAL
+   Keeps text readable on dark backgrounds across ALL pages.
+============================================================ */
+
+html.stockflow-dark body {
+  background: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+/* ------------------------------------------------------------
+   Headings / strong text
+------------------------------------------------------------ */
+
+html.stockflow-dark h1,
+html.stockflow-dark h2,
+html.stockflow-dark h3,
+html.stockflow-dark h4,
+html.stockflow-dark h5,
+html.stockflow-dark h6,
+html.stockflow-dark strong,
+html.stockflow-dark b {
+  color: #f8fafc;
+}
+
+/* ------------------------------------------------------------
+   Common Tailwind dark text classes
+------------------------------------------------------------ */
+
+html.stockflow-dark .text-gray-900 {
+  color: #f8fafc !important;
+}
+
+html.stockflow-dark .text-gray-800 {
+  color: #f1f5f9 !important;
+}
+
+html.stockflow-dark .text-gray-700 {
+  color: #e2e8f0 !important;
+}
+
+html.stockflow-dark .text-gray-600 {
+  color: #cbd5e1 !important;
+}
+
+html.stockflow-dark .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+html.stockflow-dark .text-gray-400 {
+  color: #94a3b8 !important;
+}
+
+html.stockflow-dark .text-gray-300 {
+  color: #cbd5e1 !important;
+}
+
+/* ------------------------------------------------------------
+   AI StockFlow primary dark text
+   Many existing pages use #12213a directly.
+------------------------------------------------------------ */
+
+html.stockflow-dark [class*="text-[#12213a]"] {
+  color: #f8fafc !important;
+}
+
+/* ------------------------------------------------------------
+   Slate text classes
+------------------------------------------------------------ */
+
+html.stockflow-dark .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+html.stockflow-dark .text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
+html.stockflow-dark .text-slate-700 {
+  color: #e2e8f0 !important;
+}
+
+html.stockflow-dark .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+html.stockflow-dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.stockflow-dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+/* ============================================================
+   DARK MODE - CARDS / PANELS
+============================================================ */
+
+html.stockflow-dark .bg-white {
+  background-color: #1e293b !important;
+}
+
+html.stockflow-dark .bg-gray-50 {
+  background-color: #0f172a !important;
+}
+
+html.stockflow-dark .bg-gray-100 {
+  background-color: #1e293b !important;
+}
+
+html.stockflow-dark .bg-gray-200 {
+  background-color: #334155 !important;
+}
+
+/* ------------------------------------------------------------
+   Cards that already use dark backgrounds
+------------------------------------------------------------ */
+
+html.stockflow-dark .bg-\[\#12213a\] {
+  background-color: #172033 !important;
+}
+
+/* ============================================================
+   DARK MODE - BORDERS
+============================================================ */
+
+html.stockflow-dark .border-gray-100 {
+  border-color: #334155 !important;
+}
+
+html.stockflow-dark .border-gray-200 {
+  border-color: #475569 !important;
+}
+
+html.stockflow-dark .border-gray-300 {
+  border-color: #64748b !important;
+}
+
+html.stockflow-dark .border-gray-400 {
+  border-color: #64748b !important;
+}
+
+/* Generic borders used by cards/tables */
+
+html.stockflow-dark .border {
+  border-color: #475569;
+}
+
+/* ============================================================
+   DARK MODE - INPUTS / SELECTS / TEXTAREAS
+============================================================ */
+
+html.stockflow-dark input,
+html.stockflow-dark select,
+html.stockflow-dark textarea {
+  background-color: #1f2937 !important;
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+
+html.stockflow-dark input::placeholder,
+html.stockflow-dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.stockflow-dark input:focus,
+html.stockflow-dark select:focus,
+html.stockflow-dark textarea:focus {
+  border-color: #60a5fa !important;
+  outline: none;
+}
+
+/* Disabled fields */
+
+html.stockflow-dark input:disabled,
+html.stockflow-dark select:disabled,
+html.stockflow-dark textarea:disabled {
+  background-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+/* ============================================================
+   DARK MODE - TABLES
+============================================================ */
+
+html.stockflow-dark table {
+  color: #f8fafc;
+}
+
+html.stockflow-dark th {
+  color: #e2e8f0 !important;
+  background-color: #111827 !important;
+}
+
+html.stockflow-dark td {
+  color: #e2e8f0 !important;
+  border-color: #475569 !important;
+}
+
+html.stockflow-dark tr {
+  border-color: #475569 !important;
+}
+
+/* ============================================================
+   DARK MODE - LABELS / SMALL TEXT
+============================================================ */
+
+html.stockflow-dark label {
+  color: #e2e8f0;
+}
+
+html.stockflow-dark p {
+  color: inherit;
+}
+
+/* ============================================================
+   DARK MODE - LINKS
+============================================================ */
+
+html.stockflow-dark a {
+  color: #60a5fa;
+}
+
+html.stockflow-dark a:hover {
+  color: #93c5fd;
+}
+
+/* Keep navigation text readable */
+
+html.stockflow-dark nav a {
+  color: #e2e8f0;
+}
+
+html.stockflow-dark nav a:hover {
+  color: #ffffff;
+}
+
+/* ============================================================
+   DARK MODE - BUTTONS
+============================================================ */
+
+html.stockflow-dark button {
+  color: inherit;
+}
+
+html.stockflow-dark button:disabled {
+  opacity: 0.55;
+}
+
+/* ============================================================
+   DARK MODE - DIVIDERS
+============================================================ */
+
+html.stockflow-dark .divide-y > :not([hidden]) ~ :not([hidden]) {
+  border-color: #475569 !important;
+}
+
+/* ============================================================
+   DARK MODE - MODALS
+============================================================ */
+
+html.stockflow-dark [role="dialog"] {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+/* ============================================================
+   DARK MODE - COMMON WHITE TEXT
+============================================================ */
+
+html.stockflow-dark .text-white {
+  color: #ffffff !important;
+}
+
+/* ============================================================
+   DARK MODE - PRESERVE STATUS COLORS
+============================================================ */
+
+html.stockflow-dark .text-green-600,
+html.stockflow-dark .text-green-700 {
+  color: #4ade80 !important;
+}
+
+html.stockflow-dark .text-red-600,
+html.stockflow-dark .text-red-700 {
+  color: #f87171 !important;
+}
+
+html.stockflow-dark .text-orange-600,
+html.stockflow-dark .text-orange-700 {
+  color: #fb923c !important;
+}
+
+html.stockflow-dark .text-blue-600,
+html.stockflow-dark .text-blue-700 {
+  color: #60a5fa !important;
+}
+
+html.stockflow-dark .text-purple-600,
+html.stockflow-dark .text-purple-700 {
+  color: #c084fc !important;
+}
+
+/* ============================================================
+   DARK MODE - SCROLLBAR
+============================================================ */
+
+html.stockflow-dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+html.stockflow-dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+html.stockflow-dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 8px;
+}
+
+html.stockflow-dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }

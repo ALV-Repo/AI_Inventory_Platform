@@ -1,12 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PageLayout from "../../components/layout/PageLayout";
 
 export default function SettingsPage() {
   const [notifications, setNotifications] = useState(true);
   const [emailAlerts, setEmailAlerts] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+
+useEffect(() => {
+  const savedDarkMode =
+    localStorage.getItem("stockflow-dark-mode") === "true";
+
+  setDarkMode(savedDarkMode);
+
+  document.documentElement.classList.toggle(
+    "stockflow-dark",
+    savedDarkMode
+  );
+}, []);
+
+const handleDarkModeToggle = () => {
+  const nextDarkMode = !darkMode;
+
+  setDarkMode(nextDarkMode);
+
+  localStorage.setItem(
+    "stockflow-dark-mode",
+    String(nextDarkMode)
+  );
+
+  document.documentElement.classList.toggle(
+    "stockflow-dark",
+    nextDarkMode
+  );
+};
   const [mfa, setMfa] = useState(false);
 
   const handleLogout = () => {
@@ -162,9 +190,7 @@ localStorage.removeItem("refresh_token");
                 title="Dark Mode"
                 description="Use dark theme for the application"
                 enabled={darkMode}
-                onToggle={() =>
-                  setDarkMode(!darkMode)
-                }
+                onToggle={handleDarkModeToggle}
               />
 
               {/* MFA */}

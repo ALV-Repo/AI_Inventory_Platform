@@ -473,7 +473,7 @@ function CreditWarningModal({
             }}
           >
             The requested sales order cannot be completed within the
-            customer's current credit availability.
+            customer&apos;s current credit availability.
           </p>
         </div>
 

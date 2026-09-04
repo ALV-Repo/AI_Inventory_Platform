@@ -16,6 +16,7 @@ const intelligenceItems = [
   { label: "Demand forecast", href: "/demand-forecast" },
   { label: "Dead stock", href: "/dead-stock" },
   { label: "Price review", href: "/price-review" },
+  { label: "AI Auto Purchase", href: "/ai-auto-purchase" },
 ];
 
 const recordsItems = [

@@ -859,7 +859,7 @@ export default function SalesPage() {
           </div>
 
           <div className="mt-1">
-            Inventory and today's sales have
+            Inventory and today&apos;s sales have
             been updated.
           </div>
         </div>
@@ -870,7 +870,7 @@ export default function SalesPage() {
       return (
         <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700">
           <div className="font-semibold">
-            Today's sales summary could not
+            Today&apos;s sales summary could not
             be loaded.
           </div>
 
@@ -961,7 +961,7 @@ export default function SalesPage() {
             <div className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm">
 
               <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                Today's Sales
+                Today&apos;s Sales
               </div>
 
               <div className="mt-2 text-xl font-semibold text-slate-900">
