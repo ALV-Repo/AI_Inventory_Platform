@@ -57,6 +57,8 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+class MFAToggleRequest(BaseModel):
+    enabled: bool
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -117,6 +119,26 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
         tenant_id=user.tenant_id,
         full_name=user.full_name,
     )
+@router.patch("/mfa")
+def toggle_mfa(
+    body: MFAToggleRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.mfa_enabled = body.enabled
+
+    db.add(AuditLog(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        action="auth.mfa.toggle",
+        entity_type="user",
+        entity_id=user.id,
+        details={"enabled": body.enabled},
+    ))
+
+    db.commit()
+
+    return {"mfa_enabled": user.mfa_enabled}
 
 
 @router.get("/me")

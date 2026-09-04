@@ -60,11 +60,11 @@ def seed_demo_tenant() -> None:
         db.flush()
 
         users = [
-            ("owner@irobox.in", "Priya Nair", "owner"),
-            ("manager@irobox.in", "Rahul Menon", "store_manager"),
-            ("cashier@irobox.in", "Anita Rao", "cashier"),
-            ("accounts@irobox.in", "Suresh Kumar", "accountant"),
-        ]
+    ("owner@irobox.in", "Lekhana", "owner"),
+    ("manager@irobox.in", "Rahul Menon", "store_manager"),
+    ("cashier@irobox.in", "Anita Rao", "cashier"),
+    ("accounts@irobox.in", "Suresh Kumar", "accountant"),
+]
         for email, name, role in users:
             db.add(User(
                 tenant_id=tenant.id, email=email, full_name=name, role=role,

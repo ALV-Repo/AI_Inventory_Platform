@@ -74,7 +74,47 @@ class Customer(Base, TenantMixin):
     email = Column(String(180))
     credit_limit = Column(Float, default=0.0)
     outstanding = Column(Float, default=0.0)
+class Quotation(Base, TenantMixin):
+    """Sales quotation (FR-SAL-01)."""
+    __tablename__ = "quotations"
 
+    id = Column(Integer, primary_key=True)
+    quote_number = Column(String(40), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    status = Column(String(24), default="draft")
+    valid_until = Column(Date)
+    revision = Column(Integer, default=1)
+    subtotal = Column(Float, default=0.0)
+    tax_amount = Column(Float, default=0.0)
+    total = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=utcnow)
+
+    lines = relationship(
+        "QuotationLine",
+        back_populates="quotation",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("ix_quotations_tenant_number", "tenant_id", "quote_number", unique=True),
+    )
+
+
+class QuotationLine(Base, TenantMixin):
+    """Quotation line item (FR-SAL-01)."""
+    __tablename__ = "quotation_lines"
+
+    id = Column(Integer, primary_key=True)
+    quotation_id = Column(Integer, ForeignKey("quotations.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    quantity = Column(Float, nullable=False)
+    unit_price = Column(Float, default=0.0)
+    discount = Column(Float, default=0.0)
+    gst_rate = Column(Float, default=18.0)
+    tax_amount = Column(Float, default=0.0)
+    line_total = Column(Float, default=0.0)
+
+    quotation = relationship("Quotation", back_populates="lines")
 
 class Product(Base, TenantMixin):
     """FR-INV-01 / FR-INV-02."""
@@ -99,11 +139,17 @@ class Product(Base, TenantMixin):
     attributes = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utcnow)
-
     stock_items = relationship("StockItem", back_populates="product")
 
-    __table_args__ = (Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),)
+    parent = relationship(
+        "Product",
+        remote_side=[id],
+        backref="variants",
+    )
 
+__table_args__ = (
+    Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),
+)
 
 class StockItem(Base, TenantMixin):
     """Current stock position per product per warehouse (FR-INV-05, FR-INV-09)."""
@@ -189,7 +235,10 @@ class SalesOrder(Base, TenantMixin):
     total = Column(Float, default=0.0)
     cogs = Column(Float, default=0.0)                     # for gross profit (FR-RPT-01)
     payment_mode = Column(String(24), default="cash")
-    idempotency_key = Column(String(64))                  # NFR-05 offline POS sync
+    idempotency_key = Column(String(64))   
+    irn = Column(String(64), nullable=True)
+    irn_status = Column(String(24), default="not_required")
+                   # NFR-05 offline POS sync
     created_at = Column(DateTime, default=utcnow)
 
     lines = relationship("SalesOrderLine", back_populates="order", cascade="all, delete-orphan")
@@ -249,6 +298,51 @@ class AIRecommendation(Base, TenantMixin):
     acted_at = Column(DateTime)
     created_at = Column(DateTime, default=utcnow, index=True)
 
+class StockTransfer(Base, TenantMixin):
+    """FR-INV-06 — warehouse transfer workflow."""
+
+    __tablename__ = "stock_transfers"
+
+    id = Column(Integer, primary_key=True)
+
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    from_warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+    )
+
+    to_warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+    )
+
+    quantity = Column(Float, nullable=False)
+
+    status = Column(
+        String(20),
+        default="pending",
+        nullable=False,
+        index=True,
+    )  # pending|approved|in_transit|received
+
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    approved_by = Column(Integer, ForeignKey("users.id"))
+    dispatched_by = Column(Integer, ForeignKey("users.id"))
+    received_by = Column(Integer, ForeignKey("users.id"))
+
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    approved_at = Column(DateTime)
+    dispatched_at = Column(DateTime)
+    received_at = Column(DateTime)
+
 
 class AuditLog(Base, TenantMixin):
     """NFR-08 — immutable."""
@@ -261,3 +355,139 @@ class AuditLog(Base, TenantMixin):
     details = Column(JSON)
     ip_address = Column(String(64))
     created_at = Column(DateTime, default=utcnow, index=True)
+class CycleCountSession(Base, TenantMixin):
+    """FR-INV-07 — physical stock cycle-count session."""
+    __tablename__ = "cycle_count_sessions"
+
+    id = Column(Integer, primary_key=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    status = Column(String(20), default="open", nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    closed_at = Column(DateTime)
+
+
+class CycleCountEntry(Base, TenantMixin):
+    """Physical count entry belonging to a cycle-count session."""
+    __tablename__ = "cycle_count_entries"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(
+        Integer,
+        ForeignKey("cycle_count_sessions.id"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    system_quantity = Column(Float, nullable=False)
+    counted_quantity = Column(Float)
+    variance = Column(Float)
+
+    counted_by = Column(Integer, ForeignKey("users.id"))
+    counted_at = Column(DateTime)
+class StockSerial(Base, TenantMixin):
+    """Individual serial-number tracking for serialized inventory."""
+    __tablename__ = "stock_serials"
+
+    id = Column(Integer, primary_key=True)
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+    warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+        index=True,
+    )
+    serial_number = Column(String(128), nullable=False, index=True)
+    batch_no = Column(String(64))
+    status = Column(
+        String(24),
+        default="available",
+        nullable=False,
+    )  # available|reserved|sold|transferred
+
+    created_at = Column(DateTime, default=utcnow)
+
+    __table_args__ = (
+        Index(
+            "uq_stock_serial_tenant_serial",
+            "tenant_id",
+            "serial_number",
+            unique=True,
+        ),
+    )
+class ProductBOM(Base, TenantMixin):
+    """Bill of materials / bundle definition (FR-INV-10)."""
+    __tablename__ = "product_boms"
+
+    id = Column(Integer, primary_key=True)
+
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    is_active = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=utcnow,
+        nullable=True,
+    )
+
+    product = relationship("Product")
+
+    lines = relationship(
+        "ProductBOMLine",
+        back_populates="bom",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProductBOMLine(Base, TenantMixin):
+    """Component required by a bundle/BOM."""
+    __tablename__ = "product_bom_lines"
+
+    id = Column(Integer, primary_key=True)
+
+    bom_id = Column(
+        Integer,
+        ForeignKey("product_boms.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    component_product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    quantity = Column(
+        Float,
+        nullable=False,
+    )
+
+    bom = relationship(
+        "ProductBOM",
+        back_populates="lines",
+    )
+
+    component_product = relationship("Product")
