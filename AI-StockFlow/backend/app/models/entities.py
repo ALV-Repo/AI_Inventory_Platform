@@ -147,9 +147,10 @@ class Product(Base, TenantMixin):
         backref="variants",
     )
 
-__table_args__ = (
-    Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),
-)
+    __table_args__ = (
+        Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),
+    )
+
 
 class StockItem(Base, TenantMixin):
     """Current stock position per product per warehouse (FR-INV-05, FR-INV-09)."""
@@ -491,3 +492,50 @@ class ProductBOMLine(Base, TenantMixin):
     )
 
     component_product = relationship("Product")
+class Expense(Base, TenantMixin):
+    """Finance expense record (FR-FIN-02)."""
+    __tablename__ = "expenses"
+
+    id = Column(Integer, primary_key=True)
+    category = Column(String(80), nullable=False)
+    amount = Column(Float, nullable=False)
+    payment_mode = Column(String(24), default="cash")
+    description = Column(Text)
+    attachment_url = Column(String(500))
+    expense_date = Column(Date, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow)
+
+
+class FinanceTransaction(Base, TenantMixin):
+    """Cash/bank transaction (FR-FIN-04, FR-FIN-06)."""
+    __tablename__ = "finance_transactions"
+
+    id = Column(Integer, primary_key=True)
+    transaction_type = Column(String(24), nullable=False)
+    amount = Column(Float, nullable=False)
+    payment_mode = Column(String(24), default="cash")
+    reference_type = Column(String(40))
+    reference_id = Column(Integer)
+    party_id = Column(Integer)
+    notes = Column(Text)
+    transaction_date = Column(Date, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow)
+
+
+class FinanceAllocation(Base, TenantMixin):
+    """Allocation of receipts/payments against invoices/bills (FR-FIN-06)."""
+    __tablename__ = "finance_allocations"
+
+    id = Column(Integer, primary_key=True)
+    transaction_id = Column(
+        Integer,
+        ForeignKey("finance_transactions.id"),
+        nullable=False,
+        index=True,
+    )
+    document_type = Column(String(40), nullable=False)
+    document_id = Column(Integer, nullable=False)
+    allocated_amount = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=utcnow)

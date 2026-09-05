@@ -22,8 +22,9 @@ from app.models.entities import (
     StockItem,
     StockMovement,
     StockSerial,
-    User,
-    Warehouse,
+        User,
+        Warehouse,
+Warehouse,
 )
 from app.services.logic import compute_gst
 
@@ -94,7 +95,10 @@ def create_sale(
     """Record a POS sale or sales order: prices it, taxes it, and posts stock atomically."""
     for attempt in range(3):
         try:
-            return _create_sale_once(body, user, db, attempt)
+            return _create_sale_once(body,
+        User,
+        Warehouse,
+db, attempt)
         except IntegrityError as exc:
             db.rollback()
             constraint = str(exc.orig).lower()
@@ -118,7 +122,10 @@ def create_sale(
     )
 
 
-def _create_sale_once(body: SaleIn, user: User, db: Session, attempt: int):
+def _create_sale_once(body: SaleIn, user:
+        User,
+        Warehouse,
+db: Session, attempt: int):
     # NFR-05: a replayed offline bill must not create a second invoice.
     if body.idempotency_key:
         existing = (
@@ -759,6 +766,7 @@ def convert_quotation(
         "reservation": "created",
         "total": order.total,
     }
+
 
 
 
