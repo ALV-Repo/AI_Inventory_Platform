@@ -35,6 +35,14 @@ type SalesSummary = {
   orders: number;
 };
 
+type SalePayload = Parameters<typeof createSale>[0];
+
+type OfflineSale = {
+  id: string;
+  payload: SalePayload;
+  queuedAt: string;
+};
+
 /* =========================================================
    CONFIG
    ========================================================= */
@@ -253,6 +261,17 @@ export default function SalesPage() {
     setProductsError,
   ] = useState<string | null>(null);
 
+  const [isOnline, setIsOnline] = useState(true);
+
+const [offlineQueue, setOfflineQueue] =
+  useState<OfflineSale[]>([]);
+
+const [queueLoaded, setQueueLoaded] =
+  useState(false);
+
+const [syncingQueue, setSyncingQueue] =
+  useState(false);
+
   /* =========================================================
      SEARCH
      ========================================================= */
@@ -273,6 +292,9 @@ export default function SalesPage() {
 
   const [customer, setCustomer] =
     useState("");
+
+    const [discount, setDiscount] =
+  useState(0);
 
   /* =========================================================
      PAYMENT
@@ -323,6 +345,117 @@ export default function SalesPage() {
     summaryError,
     setSummaryError,
   ] = useState<string | null>(null);
+
+  /* =========================================================
+   OFFLINE QUEUE
+   ========================================================= */
+
+useEffect(() => {
+  setIsOnline(navigator.onLine);
+
+  const savedQueue =
+    localStorage.getItem("stockflow-offline-sales");
+
+  if (savedQueue) {
+    try {
+      const parsed =
+        JSON.parse(savedQueue);
+
+      if (Array.isArray(parsed)) {
+        setOfflineQueue(parsed);
+      }
+    } catch {
+      localStorage.removeItem(
+        "stockflow-offline-sales"
+      );
+    }
+  }
+
+  setQueueLoaded(true);
+
+  const handleOnline = () => {
+    setIsOnline(true);
+  };
+
+  const handleOffline = () => {
+    setIsOnline(false);
+  };
+
+  window.addEventListener(
+    "online",
+    handleOnline
+  );
+
+  window.addEventListener(
+    "offline",
+    handleOffline
+  );
+
+  return () => {
+    window.removeEventListener(
+      "online",
+      handleOnline
+    );
+
+    window.removeEventListener(
+      "offline",
+      handleOffline
+    );
+  };
+}, []);
+
+useEffect(() => {
+  if (!queueLoaded) {
+    return;
+  }
+
+  localStorage.setItem(
+    "stockflow-offline-sales",
+    JSON.stringify(offlineQueue)
+  );
+}, [offlineQueue, queueLoaded]);
+
+async function syncOfflineSales() {
+  if (
+    !navigator.onLine ||
+    offlineQueue.length === 0 ||
+    syncingQueue
+  ) {
+    return;
+  }
+
+  setSyncingQueue(true);
+
+  const remaining: OfflineSale[] = [];
+
+  for (const queuedSale of offlineQueue) {
+    try {
+      await createSale(queuedSale.payload);
+
+      console.log(
+        "Offline sale synced successfully:",
+        queuedSale.id
+      );
+    } catch (error) {
+      console.error(
+        "Offline sale sync failed:",
+        queuedSale.id,
+        error
+      );
+
+      remaining.push(queuedSale);
+    }
+  }
+
+  setOfflineQueue(remaining);
+  setSyncingQueue(false);
+
+  if (remaining.length === 0) {
+    setShowSuccess(true);
+    await loadProducts();
+    await loadTodaySales();
+  }
+}
 
   /* =========================================================
      LOAD INVENTORY PRODUCTS
@@ -453,9 +586,15 @@ export default function SalesPage() {
      ========================================================= */
 
   useEffect(() => {
-    loadProducts();
-    loadTodaySales();
-  }, []);
+  loadProducts();
+  loadTodaySales();
+}, []);
+
+useEffect(() => {
+  if (isOnline && queueLoaded) {
+    syncOfflineSales();
+  }
+}, [isOnline, queueLoaded]);
 
   /* =========================================================
      FILTER PRODUCTS
@@ -500,9 +639,16 @@ export default function SalesPage() {
     );
   }, [subtotal]);
 
-  const total = useMemo(() => {
-    return subtotal + taxAmount;
-  }, [subtotal, taxAmount]);
+  const discountAmount = useMemo(() => {
+  return Math.min(
+    Math.max(0, Number(discount) || 0),
+    subtotal
+  );
+}, [discount, subtotal]);
+
+const total = useMemo(() => {
+  return subtotal - discountAmount + taxAmount;
+}, [subtotal, discountAmount, taxAmount]);
 
   const cartItemCount = useMemo(() => {
     return cart.reduce(
@@ -725,7 +871,45 @@ export default function SalesPage() {
 
     setProcessing(true);
 
-    try {
+try {
+  /*
+   * If the browser is offline, save the sale
+   * locally and sync it automatically later.
+   */
+  if (!navigator.onLine) {
+    const offlineSale: OfflineSale = {
+      id: `offline-${Date.now()}`,
+      payload: {
+        customer_id: null,
+        warehouse_id:
+          DEFAULT_WAREHOUSE_ID,
+        channel: "POS",
+        payment_mode:
+          paymentMethod,
+        lines: cart.map(
+          (item) => ({
+            product_id: item.id,
+            quantity: item.quantity,
+            unit_price: item.price,
+            tax_rate: TAX_RATE,
+          })
+        ),
+      },
+      queuedAt: new Date().toISOString(),
+    };
+
+    setOfflineQueue((currentQueue) => [
+      ...currentQueue,
+      offlineSale,
+    ]);
+
+    setCart([]);
+    setCustomer("");
+    setPaymentMethod("Cash");
+    setShowSuccess(true);
+
+    return;
+  }
       /*
        * Backend expects:
        *
@@ -924,6 +1108,16 @@ export default function SalesPage() {
             </div>
 
             <div className="flex items-center gap-2">
+
+            <div
+  className={`rounded-md border px-3 py-2 text-xs font-medium ${
+    isOnline
+      ? "border-green-200 bg-green-50 text-green-700"
+      : "border-orange-200 bg-orange-50 text-orange-700"
+  }`}
+>
+  {isOnline ? "Online" : "Offline"}
+</div>
 
               <div className="rounded-md border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600 shadow-sm">
                 Store:{" "}
@@ -1430,6 +1624,29 @@ export default function SalesPage() {
                   <label className="mb-1 block text-[9px] font-medium text-slate-600">
                     Payment Method
                   </label>
+
+                  <div className="mt-3">
+  <label className="mb-1 block text-[9px] font-medium text-slate-600">
+    Discount
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    max={subtotal}
+    value={discount}
+    onChange={(event) =>
+      setDiscount(
+        Math.min(
+          Math.max(0, Number(event.target.value) || 0),
+          subtotal
+        )
+      )
+    }
+    placeholder="0"
+    className="h-9 w-full rounded-md border border-slate-200 px-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+  />
+</div>
 
                   <select
                     value={paymentMethod}
