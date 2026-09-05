@@ -183,13 +183,36 @@ export default function InventoryPage() {
    */
 
   useEffect(() => {
-    const mappedProducts =
-      inventoryProducts.map(
-        mapInventoryProduct
-      );
+  const mappedProducts =
+    inventoryProducts.map(
+      mapInventoryProduct
+    );
 
+  try {
+    const storedProducts =
+      localStorage.getItem("inventory-products");
+
+    const localProducts: Product[] =
+      storedProducts
+        ? JSON.parse(storedProducts)
+        : [];
+
+    const mergedProducts = [
+      ...mappedProducts,
+      ...localProducts.filter(
+        (localProduct) =>
+          !mappedProducts.some(
+            (apiProduct) =>
+              apiProduct.id === localProduct.id
+          )
+      ),
+    ];
+
+    setProducts(mergedProducts);
+  } catch {
     setProducts(mappedProducts);
-  }, [inventoryProducts]);
+  }
+}, [inventoryProducts]);
 
   // --------------------------------------------------
   // FILTERS
@@ -418,13 +441,14 @@ export default function InventoryPage() {
   // VIEW PRODUCT
   // --------------------------------------------------
 
-  function handleView(
-    product: Product
-  ) {
-    router.push(
-      `/inventory/${product.id}`
-    );
-  }
+  function handleView(product: Product) {
+  localStorage.setItem(
+    "inventory-view-product",
+    JSON.stringify(product)
+  );
+
+  router.push(`/inventory/${product.id}`);
+}
 
   // --------------------------------------------------
   // ADD PRODUCT
@@ -576,12 +600,19 @@ export default function InventoryPage() {
           : [],
     };
 
-    setProducts(
-      (current) => [
-        ...current,
-        product,
-      ]
-    );
+    setProducts((current) => {
+  const updatedProducts = [
+    ...current,
+    product,
+  ];
+
+  localStorage.setItem(
+    "inventory-products",
+    JSON.stringify(updatedProducts)
+  );
+
+  return updatedProducts;
+});
 
     setNewProduct({
       name: "",

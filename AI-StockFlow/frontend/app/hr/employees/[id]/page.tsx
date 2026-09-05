@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 
 type Employee = {
@@ -189,7 +189,29 @@ export default function EmployeeProfilePage({
 }) {
   const { id } = use(params);
 
-  const employee = employeeData[id] || employeeData["1"];
+   const initialEmployee = employeeData[id] || employeeData["1"];
+
+const [employee, setEmployee] = useState(initialEmployee);
+const [showEdit, setShowEdit] = useState(false);
+
+const [editName, setEditName] = useState(employee.name);
+const [editDepartment, setEditDepartment] = useState(employee.department);
+const [editDesignation, setEditDesignation] = useState(employee.designation);
+const [editEmail, setEditEmail] = useState(employee.email);
+const [editPhone, setEditPhone] = useState(employee.phone);
+
+const handleSaveEmployee = () => {
+  setEmployee({
+    ...employee,
+    name: editName,
+    department: editDepartment,
+    designation: editDesignation,
+    email: editEmail,
+    phone: editPhone,
+  });
+
+  setShowEdit(false);
+};
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-6">
@@ -236,9 +258,7 @@ export default function EmployeeProfilePage({
 
             <div className="flex gap-3">
               <button
-                onClick={() =>
-                  alert("Edit employee form will be connected here.")
-                }
+                onClick={() => setShowEdit(true)}
                 className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Edit Employee
@@ -319,36 +339,32 @@ export default function EmployeeProfilePage({
         {/* Tabs */}
         <div className="mt-5 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           <div className="flex gap-1 overflow-x-auto">
+
             <button className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">
               Overview
             </button>
 
-            <button
-              onClick={() =>
-                alert("Attendance section will be connected here.")
-              }
+            <Link
+              href="/hr/attendance"
               className="rounded-lg px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
             >
               Attendance
-            </button>
+            </Link>
 
-            <button
-              onClick={() =>
-                alert("Leave history will be connected here.")
-              }
+            <Link
+              href="/hr/leave"
               className="rounded-lg px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
             >
               Leave History
-            </button>
+            </Link>
 
-            <button
-              onClick={() =>
-                alert("Payroll history will be connected here.")
-              }
+            <Link
+              href="/hr/payslips"
               className="rounded-lg px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
             >
               Payroll
-            </button>
+            </Link>
+
           </div>
         </div>
 
@@ -369,6 +385,7 @@ export default function EmployeeProfilePage({
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
               <InfoCard
                 label="Full Name"
                 value={employee.name}
@@ -418,6 +435,7 @@ export default function EmployeeProfilePage({
                 label="Reporting Manager"
                 value={employee.manager}
               />
+
             </div>
           </section>
 
@@ -548,27 +566,25 @@ export default function EmployeeProfilePage({
             <div className="flex flex-wrap gap-3">
 
               <Link
-  href="/hr/leave"
-  className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-100"
->
-  Manage Leave
-</Link>
+                href="/hr/leave"
+                className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-100"
+              >
+                Manage Leave
+              </Link>
 
               <Link
-  href="/hr/payslips"
-  className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-100"
->
-  View Payroll
-</Link>
+                href="/hr/payslips"
+                className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-100"
+              >
+                View Payroll
+              </Link>
 
-              <button
-                onClick={() =>
-                  alert("Attendance details will be opened here.")
-                }
+              <Link
+                href="/hr/attendance"
                 className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
               >
                 View Attendance
-              </button>
+              </Link>
 
             </div>
           </div>
@@ -580,6 +596,115 @@ export default function EmployeeProfilePage({
             Employee profile • {employee.id} • AI StockFlow HR
           </p>
         </div>
+
+        {/* Edit Employee Modal */}
+        {showEdit && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-slate-900">
+                  Edit Employee
+                </h2>
+
+                <button
+                  type="button"
+                  onClick={() => setShowEdit(false)}
+                  className="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-100"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Name
+                  </label>
+
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Department
+                  </label>
+
+                  <input
+                    value={editDepartment}
+                    onChange={(e) => setEditDepartment(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Designation
+                  </label>
+
+                  <input
+                    value={editDesignation}
+                    onChange={(e) => setEditDesignation(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Email
+                  </label>
+
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Phone
+                  </label>
+
+                  <input
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </div>
+
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+
+                <button
+                  type="button"
+                  onClick={() => setShowEdit(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveEmployee}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Save Changes
+                </button>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
     </main>
   );

@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import PageLayout from "../../../components/layout/PageLayout";
+import useInventory from "../../../hooks/useInventory";
 
 type Variant = {
   id: number;
@@ -28,6 +29,24 @@ type WarehouseStock = {
   onHand: number;
   reserved: number;
   available: number;
+};
+
+type Bin = {
+  id: number;
+  warehouse: string;
+  code: string;
+  name: string;
+  capacity: number;
+};
+
+type StockLedgerEntry = {
+  id: number;
+  date: string;
+  type: string;
+  warehouse: string;
+  reference: string;
+  quantity: number;
+  balance: number;
 };
 
 const products: Product[] = [
@@ -252,8 +271,8 @@ const warehouseStock: Record<number, WarehouseStock[]> = {
   ],
 };
 
-function formatCurrency(value: number) {
-  return `₹${value.toLocaleString("en-IN")}`;
+function formatCurrency(value: number | undefined) {
+  return `₹${(value ?? 0).toLocaleString("en-IN")}`;
 }
 
 export default function ProductDetailPage() {
@@ -262,9 +281,124 @@ export default function ProductDetailPage() {
 
   const productId = Number(params.id);
 
-  const product = products.find(
-    (item) => item.id === productId
+  const {
+    products: inventoryProducts,
+    loading: inventoryLoading,
+  } = useInventory();
+
+  const apiProduct = inventoryProducts.find(
+    (item) => Number(item.id) === productId
   );
+
+  const fallbackProduct = products.find(
+  (item) => item.id === productId
+);
+
+const storedProduct: Product | undefined =
+  typeof window !== "undefined"
+    ? (() => {
+        try {
+          const stored = localStorage.getItem(
+            "inventory-view-product"
+          );
+
+          if (!stored) {
+            return undefined;
+          }
+
+          const parsed = JSON.parse(stored);
+
+if (Number(parsed?.id) !== productId) {
+  return undefined;
+}
+
+return {
+  ...parsed,
+  variants: Array.isArray(parsed.variants)
+  ? parsed.variants.map(
+      (variant: any, index: number) => ({
+        id: index + 1,
+        name:
+          variant.name ||
+          parsed.name ||
+          "Variant",
+        sku: variant.sku || "",
+        color: variant.color || "Standard",
+        size: variant.size || "Standard",
+        stock: Number(
+          variant.onHand ??
+            variant.stock ??
+            0
+        ),
+        price: Number(
+          variant.unitCost ??
+            variant.price ??
+            parsed.unitCost ??
+            0
+        ),
+      })
+    )
+  : [],
+};
+        } catch {
+          return undefined;
+        }
+      })()
+    : undefined;
+
+const product: Product | undefined = apiProduct
+  ? {
+      id: Number(apiProduct.id),
+      name:
+        apiProduct.name ??
+        apiProduct.product_name ??
+        fallbackProduct?.name ??
+        "",
+      category:
+        apiProduct.category ??
+        apiProduct.category_name ??
+        fallbackProduct?.category ??
+        "",
+      warehouse:
+        apiProduct.warehouse ??
+        apiProduct.warehouse_name ??
+        fallbackProduct?.warehouse ??
+        "Main Store",
+      description:
+        fallbackProduct?.description ??
+        "Inventory product details and stock information.",
+      variants:
+        fallbackProduct?.variants ??
+        [
+          {
+            id: Number(apiProduct.id) * 1000,
+            name:
+              apiProduct.name ??
+              apiProduct.product_name ??
+              "Standard",
+            sku:
+              apiProduct.sku ??
+              apiProduct.code ??
+              `PROD-${apiProduct.id}`,
+            color: "Standard",
+            size: "Standard",
+            stock: Number(
+              apiProduct.current_stock ??
+                apiProduct.quantity ??
+                apiProduct.on_hand ??
+                apiProduct.available ??
+                0
+            ),
+            price: Number(
+              apiProduct.selling_price ??
+                apiProduct.purchase_price ??
+                apiProduct.unit_cost ??
+                0
+            ),
+          },
+        ],
+    }
+  : fallbackProduct ?? storedProduct;
 
   const [selectedVariantId, setSelectedVariantId] =
     useState<number | null>(
@@ -274,9 +408,87 @@ export default function ProductDetailPage() {
   const [selectedWarehouse, setSelectedWarehouse] =
     useState("Main Store");
 
-  const [showBarcode, setShowBarcode] = useState(false);
+  const [bins, setBins] = useState<Bin[]>([
+    {
+      id: 1,
+      warehouse: "Main Store",
+      code: "A-01",
+      name: "Main Store Bin A-01",
+      capacity: 100,
+    },
+    {
+      id: 2,
+      warehouse: "Main Store",
+      code: "A-02",
+      name: "Main Store Bin A-02",
+      capacity: 150,
+    },
+  ]);
 
-  const [scannerInput, setScannerInput] = useState("");
+  const [binCode, setBinCode] = useState("");
+  const [binName, setBinName] = useState("");
+  const [binCapacity, setBinCapacity] = useState("");
+
+  const [ledgerFromDate, setLedgerFromDate] =
+    useState("");
+
+  const [ledgerToDate, setLedgerToDate] =
+    useState("");
+
+  const [stockLedger] =
+    useState<StockLedgerEntry[]>([
+      {
+        id: 1,
+        date: "2026-09-04",
+        type: "Opening Stock",
+        warehouse: "Main Store",
+        reference: "OPEN-001",
+        quantity: 24,
+        balance: 24,
+      },
+      {
+        id: 2,
+        date: "2026-09-04",
+        type: "Stock In",
+        warehouse: "Main Store",
+        reference: "GRN-2026-0091",
+        quantity: 10,
+        balance: 34,
+      },
+      {
+        id: 3,
+        date: "2026-09-03",
+        type: "Sale",
+        warehouse: "Main Store",
+        reference: "SO-2026-0148",
+        quantity: -5,
+        balance: 29,
+      },
+      {
+        id: 4,
+        date: "2026-09-02",
+        type: "Stock Adjustment",
+        warehouse: "Main Store",
+        reference: "ADJ-2026-0012",
+        quantity: 2,
+        balance: 31,
+      },
+      {
+        id: 5,
+        date: "2026-09-01",
+        type: "Stock Transfer",
+        warehouse: "Main Store",
+        reference: "TRF-2026-0045",
+        quantity: -5,
+        balance: 26,
+      },
+    ]);
+
+  const [showBarcode, setShowBarcode] =
+    useState(false);
+
+  const [scannerInput, setScannerInput] =
+    useState("");
 
   const [scannerMessage, setScannerMessage] =
     useState("");
@@ -285,26 +497,63 @@ export default function ProductDetailPage() {
     useRef<HTMLInputElement>(null);
 
   const selectedVariant = useMemo(() => {
-    if (!product) {
-      return null;
-    }
+  if (!product) {
+    return undefined;
+  }
 
-    return (
-      product.variants.find(
-        (variant) =>
-          variant.id === selectedVariantId
-      ) ?? product.variants[0]
-    );
-  }, [product, selectedVariantId]);
+  return (
+    product.variants.find(
+      (variant) =>
+        variant.id === selectedVariantId
+    ) ?? product.variants[0]
+  );
+}, [product, selectedVariantId]);
 
   const warehouseStocks =
-    warehouseStock[product?.id ?? 0] ?? [];
+  warehouseStock[product?.id ?? 0] ??
+  (apiProduct
+    ? [
+        {
+          warehouse:
+            apiProduct.warehouse ??
+            apiProduct.warehouse_name ??
+            "Main Store",
+          onHand: Number(
+            apiProduct.current_stock ??
+              apiProduct.quantity ??
+              apiProduct.on_hand ??
+              0
+          ),
+          reserved: Number(apiProduct.reserved ?? 0),
+          available: Number(
+            apiProduct.available ??
+              apiProduct.current_stock ??
+              apiProduct.quantity ??
+              apiProduct.on_hand ??
+              0
+          ),
+        },
+      ]
+    : []);
 
   const selectedWarehouseStock =
     warehouseStocks.find(
       (item) =>
         item.warehouse === selectedWarehouse
     ) ?? warehouseStocks[0];
+
+  const filteredStockLedger =
+    stockLedger.filter((entry) => {
+      const matchesFromDate =
+        !ledgerFromDate ||
+        entry.date >= ledgerFromDate;
+
+      const matchesToDate =
+        !ledgerToDate ||
+        entry.date <= ledgerToDate;
+
+      return matchesFromDate && matchesToDate;
+    });
 
   const openBarcode = () => {
     setShowBarcode(true);
@@ -346,10 +595,12 @@ export default function ProductDetailPage() {
       return;
     }
 
-    const foundVariant = product?.variants.find(
-      (variant) =>
-        variant.sku.toUpperCase() === scannedSku
-    );
+    const foundVariant =
+      product?.variants.find(
+        (variant) =>
+          variant.sku.toUpperCase() ===
+          scannedSku
+      );
 
     if (foundVariant) {
       setSelectedVariantId(foundVariant.id);
@@ -368,6 +619,46 @@ export default function ProductDetailPage() {
 
   const printBarcode = () => {
     window.print();
+  };
+
+  const handleAddBin = () => {
+    const code = binCode.trim();
+    const name = binName.trim();
+    const capacity = Number(binCapacity);
+
+    if (!code || !name || capacity <= 0) {
+      alert("Please fill all bin fields.");
+      return;
+    }
+
+    const duplicate = bins.some(
+      (bin) =>
+        bin.warehouse === selectedWarehouse &&
+        bin.code.toLowerCase() ===
+          code.toLowerCase()
+    );
+
+    if (duplicate) {
+      alert(
+        "A bin with this code already exists in this warehouse."
+      );
+      return;
+    }
+
+    setBins((current) => [
+      ...current,
+      {
+        id: Date.now(),
+        warehouse: selectedWarehouse,
+        code,
+        name,
+        capacity,
+      },
+    ]);
+
+    setBinCode("");
+    setBinName("");
+    setBinCapacity("");
   };
 
   if (!product) {
@@ -419,10 +710,8 @@ export default function ProductDetailPage() {
           </button>
 
           <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-
             <div>
               <div className="mb-2 flex flex-wrap items-center gap-2">
-
                 <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-semibold text-blue-700">
                   {product.category}
                 </span>
@@ -430,7 +719,6 @@ export default function ProductDetailPage() {
                 <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-semibold text-gray-600">
                   {product.warehouse}
                 </span>
-
               </div>
 
               <h1 className="text-2xl font-bold text-[#12213a]">
@@ -443,7 +731,6 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="flex gap-2">
-
               <button
                 type="button"
                 onClick={() =>
@@ -455,13 +742,16 @@ export default function ProductDetailPage() {
               </button>
 
               <button
-  type="button"
-  onClick={() => router.push(`/inventory/${product.id}/edit`)}
-  className="rounded-lg bg-[#12213a] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
->
-  Edit Product
-</button>
-
+                type="button"
+                onClick={() =>
+                  router.push(
+                    `/inventory/${product.id}/edit`
+                  )
+                }
+                className="rounded-lg bg-[#12213a] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
+              >
+                Edit Product
+              </button>
             </div>
           </div>
 
@@ -469,12 +759,11 @@ export default function ProductDetailPage() {
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
+            {/* PRODUCT CARD */}
+
             <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
               <div className="flex h-56 items-center justify-center rounded-xl bg-gradient-to-br from-slate-100 to-blue-50">
-
                 <div className="text-center">
-
                   <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-white text-3xl font-bold text-[#12213a] shadow-sm">
                     {product.name
                       .charAt(0)
@@ -488,13 +777,10 @@ export default function ProductDetailPage() {
                   <p className="mt-1 font-mono text-[10px] text-gray-400">
                     Product #{product.id}
                   </p>
-
                 </div>
-
               </div>
 
               <div className="mt-5 space-y-3">
-
                 <div className="flex justify-between border-b border-gray-100 pb-3">
                   <span className="text-xs text-gray-500">
                     Category
@@ -524,30 +810,27 @@ export default function ProductDetailPage() {
                     {product.variants.length}
                   </span>
                 </div>
-
               </div>
             </section>
 
+            {/* VARIANT PICKER */}
+
             <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
-
               <div className="mb-5">
-
                 <h2 className="text-base font-bold text-[#12213a]">
                   Variant Picker
                 </h2>
 
                 <p className="mt-1 text-xs text-gray-500">
-                  Select a product variant to view its
-                  SKU, stock, price, color and size.
+                  Select a product variant to view
+                  its SKU, stock, price, color and
+                  size.
                 </p>
-
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-
                 {product.variants.map(
                   (variant) => {
-
                     const isSelected =
                       selectedVariantId ===
                       variant.id;
@@ -567,9 +850,7 @@ export default function ProductDetailPage() {
                             : "border-gray-200 bg-white hover:border-blue-300 hover:bg-gray-50"
                         }`}
                       >
-
                         <div className="flex items-start justify-between">
-
                           <div>
                             <p className="text-sm font-bold text-[#12213a]">
                               {variant.name}
@@ -585,11 +866,9 @@ export default function ProductDetailPage() {
                               Selected
                             </span>
                           )}
-
                         </div>
 
                         <div className="mt-4 space-y-2">
-
                           <div className="flex justify-between">
                             <span className="text-[10px] text-gray-400">
                               Color
@@ -627,23 +906,17 @@ export default function ProductDetailPage() {
                               {variant.stock}
                             </span>
                           </div>
-
                         </div>
-
                       </button>
                     );
                   }
                 )}
-
               </div>
 
               {selectedVariant && (
                 <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-5">
-
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
                     <div>
-
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">
                         Selected Variant
                       </p>
@@ -655,11 +928,9 @@ export default function ProductDetailPage() {
                       <p className="mt-1 font-mono text-[10px] text-blue-600">
                         {selectedVariant.sku}
                       </p>
-
                     </div>
 
                     <div className="text-left md:text-right">
-
                       <p className="text-[10px] text-blue-500">
                         Unit Price
                       </p>
@@ -669,13 +940,10 @@ export default function ProductDetailPage() {
                           selectedVariant.price
                         )}
                       </p>
-
                     </div>
-
                   </div>
 
                   <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-
                     <div className="rounded-lg bg-white p-3">
                       <p className="text-[9px] uppercase tracking-wide text-gray-400">
                         SKU
@@ -723,937 +991,957 @@ export default function ProductDetailPage() {
                         {selectedVariant.stock}
                       </p>
                     </div>
-
                   </div>
-
                 </div>
               )}
-
             </section>
-
           </div>
 
-                    {/* VARIANT INVENTORY SUMMARY */}
+                    {/* SELECTED VARIANT ACTIONS */}
 
           {selectedVariant && (
             <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="mb-5">
+                <h2 className="text-base font-bold text-[#12213a]">
+                  Variant Actions
+                </h2>
 
-              <div className="mb-5 flex items-center justify-between">
+                <p className="mt-1 text-xs text-gray-500">
+                  Manage barcode and stock actions for
+                  the selected variant.
+                </p>
+              </div>
 
-                <div>
-                  <h2 className="text-base font-bold text-[#12213a]">
-                    Variant Inventory Summary
-                  </h2>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    Inventory information for the selected
-                    product variant.
-                  </p>
-                </div>
-
-                <span
-                  className={`rounded-full px-3 py-1 text-[10px] font-semibold ${
-                    selectedVariant.stock === 0
-                      ? "bg-red-100 text-red-700"
-                      : selectedVariant.stock <= 10
-                      ? "bg-orange-100 text-orange-700"
-                      : "bg-green-100 text-green-700"
-                  }`}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={openBarcode}
+                  className="rounded-lg border border-gray-200 bg-white p-4 text-left hover:border-blue-300 hover:bg-blue-50"
                 >
-                  {selectedVariant.stock === 0
-                    ? "Out of Stock"
-                    : selectedVariant.stock <= 10
-                    ? "Low Stock"
-                    : "Healthy Stock"}
-                </span>
+                  <p className="text-sm font-bold text-[#12213a]">
+                    Barcode Scanner
+                  </p>
 
+                  <p className="mt-1 text-[10px] text-gray-500">
+                    Scan or enter the SKU to select a
+                    variant.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    alert(
+                      `Stock adjustment for ${selectedVariant.sku}`
+                    )
+                  }
+                  className="rounded-lg border border-gray-200 bg-white p-4 text-left hover:border-orange-300 hover:bg-orange-50"
+                >
+                  <p className="text-sm font-bold text-[#12213a]">
+                    Adjust Stock
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-gray-500">
+                    Record a manual stock adjustment.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push("/inventory")
+                  }
+                  className="rounded-lg border border-gray-200 bg-white p-4 text-left hover:border-green-300 hover:bg-green-50"
+                >
+                  <p className="text-sm font-bold text-[#12213a]">
+                    View Inventory
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-gray-500">
+                    Return to the inventory product list.
+                  </p>
+                </button>
               </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-[9px] uppercase tracking-wider text-gray-400">
-                    SKU
-                  </p>
-
-                  <p className="mt-2 font-mono text-sm font-bold text-[#12213a]">
-                    {selectedVariant.sku}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-[9px] uppercase tracking-wider text-gray-400">
-                    Available Stock
-                  </p>
-
-                  <p
-                    className={`mt-2 text-xl font-bold ${
-                      selectedVariant.stock === 0
-                        ? "text-red-600"
-                        : selectedVariant.stock <= 10
-                        ? "text-orange-600"
-                        : "text-green-600"
-                    }`}
-                  >
-                    {selectedVariant.stock}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-[9px] uppercase tracking-wider text-gray-400">
-                    Unit Price
-                  </p>
-
-                  <p className="mt-2 text-xl font-bold text-green-600">
-                    {formatCurrency(
-                      selectedVariant.price
-                    )}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-[9px] uppercase tracking-wider text-gray-400">
-                    Warehouse
-                  </p>
-
-                  <p className="mt-2 text-sm font-bold text-[#12213a]">
-                    {product.warehouse}
-                  </p>
-                </div>
-
-              </div>
-
             </section>
           )}
 
-          {/* VARIANT ACTIONS */}
+          {/* STOCK SUMMARY */}
+
+          <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                Total Stock
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-[#12213a]">
+                {selectedVariant?.stock ?? 0}
+              </p>
+
+              <p className="mt-1 text-[10px] text-gray-400">
+                Selected variant
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                Reserved
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-orange-600">
+                {selectedWarehouseStock?.reserved ??
+                  0}
+              </p>
+
+              <p className="mt-1 text-[10px] text-gray-400">
+                Current warehouse
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                Available
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-green-600">
+                {selectedWarehouseStock?.available ??
+                  selectedVariant?.stock ??
+                  0}
+              </p>
+
+              <p className="mt-1 text-[10px] text-gray-400">
+                Available to sell
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                Unit Price
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-[#12213a]">
+                {formatCurrency(
+                  selectedVariant?.price ?? 0
+                )}
+              </p>
+
+              <p className="mt-1 text-[10px] text-gray-400">
+                Current selling price
+              </p>
+            </div>
+          </section>
+
+          {/* BIN BUILDER */}
 
           <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
             <div className="mb-5">
-
               <h2 className="text-base font-bold text-[#12213a]">
-                Variant Actions
+                Bin Builder
               </h2>
 
               <p className="mt-1 text-xs text-gray-500">
-                Perform inventory operations for the
-                selected variant.
+                Create and manage storage bins for
+                this product.
               </p>
-
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                  Warehouse
+                </label>
 
-              <button
-                type="button"
-                onClick={() =>
-  router.push(
-    `/inventory/stock-adjustment?sku=${encodeURIComponent(
-      selectedVariant?.sku ?? ""
-    )}`
-  )
-}
-                className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-sm font-bold text-blue-700">
-                  ±
-                </div>
+                <select
+                  value={selectedWarehouse}
+                  onChange={(event) =>
+                    setSelectedWarehouse(
+                      event.target.value
+                    )
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                >
+                  {warehouseStocks.map(
+                    (warehouse) => (
+                      <option
+                        key={warehouse.warehouse}
+                        value={warehouse.warehouse}
+                      >
+                        {warehouse.warehouse}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
 
-                <p className="mt-3 text-sm font-semibold text-[#12213a]">
-                  Adjust Stock
-                </p>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                  Bin Code
+                </label>
 
-                <p className="mt-1 text-[10px] text-gray-500">
-                  Increase or decrease variant stock.
-                </p>
-              </button>
+                <input
+                  type="text"
+                  value={binCode}
+                  onChange={(event) =>
+                    setBinCode(event.target.value)
+                  }
+                  placeholder="A-03"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                />
+              </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  alert(
-                    `Transfer stock for ${selectedVariant?.sku}`
-                  )
-                }
-                className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:border-purple-300 hover:bg-purple-50"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100 text-sm font-bold text-purple-700">
-                  ⇄
-                </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                  Bin Name
+                </label>
 
-                <p className="mt-3 text-sm font-semibold text-[#12213a]">
-                  Transfer Stock
-                </p>
+                <input
+                  type="text"
+                  value={binName}
+                  onChange={(event) =>
+                    setBinName(event.target.value)
+                  }
+                  placeholder="Main Store Bin A-03"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                />
+              </div>
 
-                <p className="mt-1 text-[10px] text-gray-500">
-                  Move the variant between warehouses.
-                </p>
-              </button>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                  Capacity
+                </label>
 
-              <button
-                type="button"
-                onClick={() =>
-                  alert(
-                    `Cycle count for ${selectedVariant?.sku}`
-                  )
-                }
-                className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:border-teal-300 hover:bg-teal-50"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-100 text-sm font-bold text-teal-700">
-                  ✓
-                </div>
-
-                <p className="mt-3 text-sm font-semibold text-[#12213a]">
-                  Cycle Count
-                </p>
-
-                <p className="mt-1 text-[10px] text-gray-500">
-                  Verify physical variant quantity.
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={openBarcode}
-                className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:border-orange-300 hover:bg-orange-50"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-100 text-sm font-bold text-orange-700">
-                  ▦
-                </div>
-
-                <p className="mt-3 text-sm font-semibold text-[#12213a]">
-                  Barcode
-                </p>
-
-                <p className="mt-1 text-[10px] text-gray-500">
-                  Generate or print the variant barcode.
-                </p>
-              </button>
-
+                <input
+                  type="number"
+                  min="1"
+                  value={binCapacity}
+                  onChange={(event) =>
+                    setBinCapacity(event.target.value)
+                  }
+                  placeholder="100"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                />
+              </div>
             </div>
 
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleAddBin}
+                className="rounded-lg bg-[#12213a] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
+              >
+                Add Bin
+              </button>
+            </div>
+
+            <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full text-left">
+                <thead className="border-b border-gray-200 bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Warehouse
+                    </th>
+
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Code
+                    </th>
+
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Name
+                    </th>
+
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Capacity
+                    </th>
+
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {bins
+                    .filter(
+                      (bin) =>
+                        bin.warehouse ===
+                        selectedWarehouse
+                    )
+                    .map((bin) => (
+                      <tr
+                        key={bin.id}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="px-4 py-3 text-xs text-gray-700">
+                          {bin.warehouse}
+                        </td>
+
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-[#12213a]">
+                          {bin.code}
+                        </td>
+
+                        <td className="px-4 py-3 text-xs text-gray-600">
+                          {bin.name}
+                        </td>
+
+                        <td className="px-4 py-3 text-right text-xs font-semibold text-gray-700">
+                          {bin.capacity}
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setBins((current) =>
+                                current.filter(
+                                  (item) =>
+                                    item.id !==
+                                    bin.id
+                                )
+                              )
+                            }
+                            className="text-[10px] font-semibold text-red-600 hover:text-red-800"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                  {bins.filter(
+                    (bin) =>
+                      bin.warehouse ===
+                      selectedWarehouse
+                  ).length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-xs text-gray-400"
+                      >
+                        No bins created for this
+                        warehouse.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* STOCK BY WAREHOUSE */}
 
           <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-bold text-[#12213a]">
                   Stock by Warehouse
                 </h2>
 
                 <p className="mt-1 text-xs text-gray-500">
-                  View inventory availability across all warehouses.
+                  Warehouse-level stock availability
+                  for the selected product.
                 </p>
               </div>
 
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold text-blue-700">
-                {warehouseStocks.length} Warehouses
-              </span>
-
+              <select
+                value={selectedWarehouse}
+                onChange={(event) =>
+                  setSelectedWarehouse(
+                    event.target.value
+                  )
+                }
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 outline-none focus:border-blue-500"
+              >
+                {warehouseStocks.map(
+                  (warehouse) => (
+                    <option
+                      key={warehouse.warehouse}
+                      value={warehouse.warehouse}
+                    >
+                      {warehouse.warehouse}
+                    </option>
+                  )
+                )}
+              </select>
             </div>
 
-            {/* WAREHOUSE TABS */}
-
-            <div className="mb-5 flex flex-wrap gap-2">
-
-              {warehouseStocks.map((item) => {
-
-                const active =
-                  selectedWarehouse ===
-                  item.warehouse;
-
-                return (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {warehouseStocks.map(
+                (warehouse) => (
                   <button
-                    key={item.warehouse}
+                    key={warehouse.warehouse}
                     type="button"
                     onClick={() =>
                       setSelectedWarehouse(
-                        item.warehouse
+                        warehouse.warehouse
                       )
                     }
-                    className={`rounded-lg border px-4 py-2 text-xs font-semibold transition ${
-                      active
-                        ? "border-[#12213a] bg-[#12213a] text-white"
-                        : "border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:bg-blue-50"
+                    className={`rounded-xl border p-4 text-left transition ${
+                      selectedWarehouse ===
+                      warehouse.warehouse
+                        ? "border-blue-400 bg-blue-50"
+                        : "border-gray-200 bg-white hover:border-blue-300"
                     }`}
                   >
-                    {item.warehouse}
-                  </button>
-                );
-              })}
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-[#12213a]">
+                        {warehouse.warehouse}
+                      </p>
 
-            </div>
+                      {selectedWarehouse ===
+                        warehouse.warehouse && (
+                        <span className="rounded-full bg-blue-600 px-2 py-1 text-[9px] font-semibold text-white">
+                          Selected
+                        </span>
+                      )}
+                    </div>
 
-            {/* SELECTED WAREHOUSE */}
+                    <div className="mt-4 grid grid-cols-3 gap-2">
+                      <div className="rounded-lg bg-gray-50 p-2">
+                        <p className="text-[8px] uppercase text-gray-400">
+                          On Hand
+                        </p>
 
-            {selectedWarehouseStock && (
-              <div>
-
-                <div className="mb-4 flex items-center justify-between">
-
-                  <div>
-
-                    <p className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">
-                      Selected Warehouse
-                    </p>
-
-                    <h3 className="mt-1 text-sm font-bold text-[#12213a]">
-                      {selectedWarehouseStock.warehouse}
-                    </h3>
-
-                  </div>
-
-                  <span
-                    className={`rounded-full px-3 py-1 text-[10px] font-semibold ${
-                      selectedWarehouseStock.available === 0
-                        ? "bg-red-100 text-red-700"
-                        : selectedWarehouseStock.available <= 10
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-green-100 text-green-700"
-                    }`}
-                  >
-                    {selectedWarehouseStock.available === 0
-                      ? "Out of Stock"
-                      : selectedWarehouseStock.available <= 10
-                      ? "Low Stock"
-                      : "Healthy"}
-                  </span>
-
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-
-                  <div className="rounded-xl bg-gray-50 p-4">
-
-                    <p className="text-[9px] uppercase tracking-wider text-gray-400">
-                      On Hand
-                    </p>
-
-                    <p className="mt-2 text-2xl font-bold text-[#12213a]">
-                      {selectedWarehouseStock.onHand}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      Physical inventory
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-xl bg-gray-50 p-4">
-
-                    <p className="text-[9px] uppercase tracking-wider text-gray-400">
-                      Reserved
-                    </p>
-
-                    <p className="mt-2 text-2xl font-bold text-orange-600">
-                      {selectedWarehouseStock.reserved}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      Reserved for orders
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-xl bg-gray-50 p-4">
-
-                    <p className="text-[9px] uppercase tracking-wider text-gray-400">
-                      Available
-                    </p>
-
-                    <p className="mt-2 text-2xl font-bold text-green-600">
-                      {selectedWarehouseStock.available}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      Available to sell
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </div>
-            )}
-
-          </section>
-
-                    {/* STOCK OVERVIEW */}
-
-          <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-
-            {/* STOCK BY VARIANT */}
-
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-              <div className="mb-5">
-
-                <h2 className="text-base font-bold text-[#12213a]">
-                  Stock by Variant
-                </h2>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Current stock distribution across
-                  product variants.
-                </p>
-
-              </div>
-
-              <div className="space-y-4">
-
-                {product.variants.map(
-                  (variant) => {
-
-                    const maxStock = Math.max(
-                      ...product.variants.map(
-                        (item) => item.stock
-                      ),
-                      1
-                    );
-
-                    const percentage = Math.round(
-                      (variant.stock / maxStock) *
-                        100
-                    );
-
-                    return (
-                      <div key={variant.id}>
-
-                        <div className="mb-2 flex items-center justify-between">
-
-                          <div>
-
-                            <p className="text-xs font-semibold text-[#12213a]">
-                              {variant.name}
-                            </p>
-
-                            <p className="font-mono text-[9px] text-gray-400">
-                              {variant.sku}
-                            </p>
-
-                          </div>
-
-                          <span className="text-xs font-bold text-gray-700">
-                            {variant.stock} units
-                          </span>
-
-                        </div>
-
-                        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              variant.stock === 0
-                                ? "bg-red-500"
-                                : variant.stock <= 10
-                                ? "bg-orange-500"
-                                : "bg-teal-600"
-                            }`}
-                            style={{
-                              width: `${percentage}%`,
-                            }}
-                          />
-
-                        </div>
-
+                        <p className="mt-1 text-sm font-bold text-[#12213a]">
+                          {warehouse.onHand}
+                        </p>
                       </div>
-                    );
-                  }
-                )}
 
-              </div>
+                      <div className="rounded-lg bg-orange-50 p-2">
+                        <p className="text-[8px] uppercase text-orange-500">
+                          Reserved
+                        </p>
 
+                        <p className="mt-1 text-sm font-bold text-orange-700">
+                          {warehouse.reserved}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-green-50 p-2">
+                        <p className="text-[8px] uppercase text-green-500">
+                          Available
+                        </p>
+
+                        <p className="mt-1 text-sm font-bold text-green-700">
+                          {warehouse.available}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                )
+              )}
             </div>
-
-            {/* PRODUCT INFORMATION */}
-
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-              <div className="mb-5">
-
-                <h2 className="text-base font-bold text-[#12213a]">
-                  Product Information
-                </h2>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Basic product and inventory information.
-                </p>
-
-              </div>
-
-              <div className="space-y-3">
-
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
-
-                  <span className="text-xs text-gray-500">
-                    Product ID
-                  </span>
-
-                  <span className="font-mono text-xs font-semibold text-gray-800">
-                    #{product.id}
-                  </span>
-
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
-
-                  <span className="text-xs text-gray-500">
-                    Category
-                  </span>
-
-                  <span className="text-xs font-semibold text-gray-800">
-                    {product.category}
-                  </span>
-
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
-
-                  <span className="text-xs text-gray-500">
-                    Warehouse
-                  </span>
-
-                  <span className="text-xs font-semibold text-gray-800">
-                    {product.warehouse}
-                  </span>
-
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
-
-                  <span className="text-xs text-gray-500">
-                    Total Variants
-                  </span>
-
-                  <span className="text-xs font-semibold text-gray-800">
-                    {product.variants.length}
-                  </span>
-
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
-
-                  <span className="text-xs text-gray-500">
-                    Total Stock
-                  </span>
-
-                  <span className="text-xs font-bold text-green-600">
-                    {product.variants.reduce(
-                      (total, variant) =>
-                        total + variant.stock,
-                      0
-                    )}
-                  </span>
-
-                </div>
-
-              </div>
-
-            </div>
-
           </section>
 
-          {/* RECENT INVENTORY ACTIVITY */}
+                    {/* RECENT INVENTORY ACTIVITY */}
 
           <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-            <div className="mb-5 flex items-center justify-between">
-
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-
                 <h2 className="text-base font-bold text-[#12213a]">
                   Recent Inventory Activity
                 </h2>
 
                 <p className="mt-1 text-xs text-gray-500">
-                  Recent stock operations for this product.
+                  Latest stock movements and inventory
+                  events for this product.
                 </p>
-
               </div>
 
-              <span className="rounded-full bg-gray-100 px-3 py-1 text-[10px] font-semibold text-gray-600">
-                Live
-              </span>
-
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/reports")
+                }
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                View Reports
+              </button>
             </div>
 
-            <div className="divide-y divide-gray-100">
+            <div className="space-y-3">
+              {[
+                {
+                  date: "04 Sep 2026",
+                  type: "Stock In",
+                  reference: "GRN-2026-0091",
+                  quantity: "+10",
+                  description:
+                    "Goods received into Main Store.",
+                  positive: true,
+                },
+                {
+                  date: "03 Sep 2026",
+                  type: "Sale",
+                  reference: "SO-2026-0148",
+                  quantity: "-5",
+                  description:
+                    "Stock deducted after completed sale.",
+                  positive: false,
+                },
+                {
+                  date: "02 Sep 2026",
+                  type: "Adjustment",
+                  reference: "ADJ-2026-0012",
+                  quantity: "+2",
+                  description:
+                    "Manual stock adjustment recorded.",
+                  positive: true,
+                },
+                {
+                  date: "01 Sep 2026",
+                  type: "Transfer",
+                  reference: "TRF-2026-0045",
+                  quantity: "-5",
+                  description:
+                    "Stock transferred from Main Store.",
+                  positive: false,
+                },
+              ].map((activity) => (
+                <div
+                  key={activity.reference}
+                  className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4 md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                        activity.positive
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {activity.positive
+                        ? "+"
+                        : "−"}
+                    </div>
 
-              <div className="flex items-center justify-between gap-4 py-4">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-bold text-[#12213a]">
+                          {activity.type}
+                        </p>
 
-                <div className="flex items-center gap-3">
+                        <span className="font-mono text-[9px] text-blue-600">
+                          {activity.reference}
+                        </span>
+                      </div>
 
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-100 text-sm font-bold text-green-700">
-                    +
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        {activity.description}
+                      </p>
+                    </div>
                   </div>
 
-                  <div>
+                  <div className="flex items-center gap-5 md:justify-end">
+                    <span className="text-[10px] text-gray-400">
+                      {activity.date}
+                    </span>
 
-                    <p className="text-xs font-semibold text-[#12213a]">
-                      Stock received
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      Main Store • Today
-                    </p>
-
+                    <span
+                      className={`text-sm font-bold ${
+                        activity.positive
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {activity.quantity}
+                    </span>
                   </div>
-
                 </div>
+              ))}
+            </div>
+          </section>
 
-                <span className="text-xs font-bold text-green-600">
-                  +12 units
-                </span>
+          {/* STOCK LEDGER */}
 
-              </div>
+          <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-5">
+              <h2 className="text-base font-bold text-[#12213a]">
+                Stock Ledger
+              </h2>
 
-              <div className="flex items-center justify-between gap-4 py-4">
-
-                <div className="flex items-center gap-3">
-
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-sm font-bold text-blue-700">
-                    ↔
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs font-semibold text-[#12213a]">
-                      Stock transferred
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      Warehouse A → Main Store
-                    </p>
-
-                  </div>
-
-                </div>
-
-                <span className="text-xs font-bold text-blue-600">
-                  +6 units
-                </span>
-
-              </div>
-
-              <div className="flex items-center justify-between gap-4 py-4">
-
-                <div className="flex items-center gap-3">
-
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-100 text-sm font-bold text-orange-700">
-                    −
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs font-semibold text-[#12213a]">
-                      Stock adjustment
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      Damaged units • Yesterday
-                    </p>
-
-                  </div>
-
-                </div>
-
-                <span className="text-xs font-bold text-orange-600">
-                  -2 units
-                </span>
-
-              </div>
-
-              <div className="flex items-center justify-between gap-4 py-4">
-
-                <div className="flex items-center gap-3">
-
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100 text-sm font-bold text-purple-700">
-                    ✓
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs font-semibold text-[#12213a]">
-                      Cycle count completed
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      Main Store • 2 days ago
-                    </p>
-
-                  </div>
-
-                </div>
-
-                <span className="text-xs font-semibold text-gray-600">
-                  Verified
-                </span>
-
-              </div>
-
+              <p className="mt-1 text-xs text-gray-500">
+                View stock movements and balances for
+                this product.
+              </p>
             </div>
 
+            <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                  From Date
+                </label>
+
+                <input
+                  type="date"
+                  value={ledgerFromDate}
+                  onChange={(event) =>
+                    setLedgerFromDate(
+                      event.target.value
+                    )
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                  To Date
+                </label>
+
+                <input
+                  type="date"
+                  value={ledgerToDate}
+                  onChange={(event) =>
+                    setLedgerToDate(
+                      event.target.value
+                    )
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLedgerFromDate("");
+                    setLedgerToDate("");
+                  }}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Clear Dates
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full text-left">
+                <thead className="border-b border-gray-200 bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Date
+                    </th>
+
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Type
+                    </th>
+
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Warehouse
+                    </th>
+
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Reference
+                    </th>
+
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Quantity
+                    </th>
+
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Balance
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {filteredStockLedger.map(
+                    (entry) => (
+                      <tr
+                        key={entry.id}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-700">
+                          {entry.date}
+                        </td>
+
+                        <td className="px-4 py-3 text-xs font-semibold text-[#12213a]">
+                          {entry.type}
+                        </td>
+
+                        <td className="px-4 py-3 text-xs text-gray-600">
+                          {entry.warehouse}
+                        </td>
+
+                        <td className="px-4 py-3 text-xs text-blue-600">
+                          {entry.reference}
+                        </td>
+
+                        <td
+                          className={`px-4 py-3 text-right text-xs font-semibold ${
+                            entry.quantity >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {entry.quantity > 0
+                            ? "+"
+                            : ""}
+                          {entry.quantity}
+                        </td>
+
+                        <td className="px-4 py-3 text-right text-xs font-bold text-[#12213a]">
+                          {entry.balance}
+                        </td>
+                      </tr>
+                    )
+                  )}
+
+                  {filteredStockLedger.length ===
+                    0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-4 py-8 text-center text-xs text-gray-400"
+                      >
+                        No stock ledger entries
+                        found for the selected date
+                        range.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[10px] text-gray-400">
+                Showing{" "}
+                {filteredStockLedger.length}{" "}
+                ledger entries
+              </p>
+
+              <p className="text-[10px] text-gray-400">
+                Positive = stock in · Negative =
+                stock out
+              </p>
+            </div>
           </section>
 
           {/* INVENTORY NOTES */}
 
           <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-            <div className="mb-5">
-
+            <div className="mb-4">
               <h2 className="text-base font-bold text-[#12213a]">
                 Inventory Notes
               </h2>
 
               <p className="mt-1 text-xs text-gray-500">
-                Important notes for inventory management.
+                Operational notes for this inventory
+                product.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+              <p className="text-xs font-semibold text-blue-900">
+                Stock management reminder
               </p>
 
+              <p className="mt-1 text-[10px] leading-5 text-blue-700">
+                Review warehouse availability,
+                reserved quantities and recent stock
+                movements before making manual
+                adjustments.
+              </p>
             </div>
 
-            <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                  Selected Warehouse
+                </p>
 
-              <div className="flex gap-3">
-
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-sm font-bold text-blue-700">
-                  i
-                </div>
-
-                <div>
-
-                  <p className="text-xs font-semibold text-blue-900">
-                    Stock monitoring
-                  </p>
-
-                  <p className="mt-1 text-[11px] leading-5 text-blue-700">
-                    Keep monitoring this product regularly.
-                    Use stock adjustment, transfer and cycle
-                    count operations whenever inventory changes.
-                  </p>
-
-                </div>
-
+                <p className="mt-1 text-xs font-bold text-[#12213a]">
+                  {selectedWarehouse}
+                </p>
               </div>
 
-            </div>
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                  Selected SKU
+                </p>
 
+                <p className="mt-1 truncate font-mono text-xs font-bold text-[#12213a]">
+                  {selectedVariant?.sku ?? "—"}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[9px] uppercase tracking-wide text-gray-400">
+                  Current Balance
+                </p>
+
+                <p className="mt-1 text-xs font-bold text-green-600">
+                  {selectedWarehouseStock?.available ??
+                    0}{" "}
+                  units
+                </p>
+              </div>
+            </div>
           </section>
 
-        </div>
-      </main>
+                {/* BARCODE SCANNER MODAL */}
 
-            {/* BARCODE MODAL */}
-
-      {showBarcode && selectedVariant && (
-
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={closeBarcode}
-        >
-
-          <div
-            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
-          >
-
-            {/* MODAL HEADER */}
-
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-
-              <div>
-
-                <h2 className="text-lg font-bold text-[#12213a]">
-                  Barcode Scanner
-                </h2>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Scan a barcode or enter the SKU manually.
-                </p>
-
-              </div>
-
-              <button
-                type="button"
-                onClick={closeBarcode}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-              >
-                ✕
-              </button>
-
-            </div>
-
-            {/* MODAL BODY */}
-
-            <div className="p-6">
-
-              <div className="mb-5 rounded-xl bg-gray-50 p-4">
-
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">
-                  Selected Variant
-                </p>
-
-                <div className="mt-2 flex items-center justify-between">
-
+          {showBarcode && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+                <div className="flex items-start justify-between gap-4">
                   <div>
+                    <h2 className="text-lg font-bold text-[#12213a]">
+                      Barcode / SKU Scanner
+                    </h2>
 
-                    <p className="text-sm font-bold text-[#12213a]">
-                      {selectedVariant.name}
+                    <p className="mt-1 text-xs text-gray-500">
+                      Scan a barcode or manually enter a
+                      variant SKU.
                     </p>
-
-                    <p className="mt-1 font-mono text-[10px] text-gray-500">
-                      {selectedVariant.sku}
-                    </p>
-
                   </div>
 
-                  <div className="text-right">
-
-                    <p className="text-[9px] text-gray-400">
-                      Stock
-                    </p>
-
-                    <p className="text-sm font-bold text-green-600">
-                      {selectedVariant.stock}
-                    </p>
-
-                  </div>
-
+                  <button
+                    type="button"
+                    onClick={closeBarcode}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-sm font-bold text-gray-500 hover:bg-gray-200"
+                    aria-label="Close scanner"
+                  >
+                    ×
+                  </button>
                 </div>
 
-              </div>
-
-              {/* SCANNER */}
-
-              <div className="mb-5 flex justify-center">
-
-                <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-orange-50">
-
-                  <div className="text-5xl text-orange-500">
+                <div className="mt-6 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50 p-6 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm">
                     ▦
                   </div>
 
+                  <p className="mt-3 text-sm font-bold text-blue-950">
+                    Ready to Scan
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-blue-600">
+                    Place the cursor in the field below
+                    and scan your barcode.
+                  </p>
                 </div>
 
-              </div>
+                <div className="mt-5">
+                  <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                    Barcode / SKU
+                  </label>
 
-              {/* INPUT */}
+                  <input
+                    ref={scannerRef}
+                    type="text"
+                    value={scannerInput}
+                    onChange={handleScannerInput}
+                    onKeyDown={handleScannerKeyDown}
+                    placeholder={
+                      selectedVariant?.sku ??
+                      "Enter SKU"
+                    }
+                    autoComplete="off"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 font-mono text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
 
-              <label className="mb-2 block text-xs font-semibold text-gray-700">
-                Barcode / SKU
-              </label>
-
-              <input
-                ref={scannerRef}
-                type="text"
-                value={scannerInput}
-                onChange={handleScannerInput}
-                onKeyDown={handleScannerKeyDown}
-                placeholder="Scan barcode or enter SKU..."
-                autoFocus
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-
-              <p className="mt-2 text-[10px] text-gray-400">
-                Press Enter after scanning.
-              </p>
-
-              {/* MESSAGE */}
-
-              {scannerMessage && (
-
-                <div
-                  className={`mt-4 rounded-lg p-3 text-xs font-medium ${
-                    scannerMessage.startsWith(
-                      "Product found"
-                    )
-                      ? "bg-green-50 text-green-700"
-                      : "bg-red-50 text-red-700"
-                  }`}
-                >
-                  {scannerMessage}
+                  <p className="mt-2 text-[10px] text-gray-400">
+                    Press Enter after scanning or typing
+                    the SKU.
+                  </p>
                 </div>
 
-              )}
-
-              {/* BARCODE PREVIEW */}
-
-              <div className="mt-6 rounded-xl border border-gray-200 bg-white p-5">
-
-                <p className="mb-3 text-[9px] font-semibold uppercase tracking-wider text-gray-400">
-                  Barcode Preview
-                </p>
-
-                <div className="flex h-20 items-center justify-center overflow-hidden rounded-lg bg-white">
-
-                  <div className="flex h-16 items-center gap-[3px]">
-
-                    {Array.from(
-                      {
-                        length: 45,
-                      },
-                      (_, index) => (
-
-                        <span
-                          key={index}
-                          className={`block bg-black ${
-                            index % 5 === 0
-                              ? "h-16 w-[3px]"
-                              : index % 3 === 0
-                              ? "h-14 w-[2px]"
-                              : "h-16 w-[1px]"
-                          }`}
-                        />
-
+                {scannerMessage && (
+                  <div
+                    className={`mt-4 rounded-lg border p-3 text-xs font-semibold ${
+                      scannerMessage.startsWith(
+                        "Product found"
                       )
-                    )}
-
+                        ? "border-green-200 bg-green-50 text-green-700"
+                        : "border-red-200 bg-red-50 text-red-700"
+                    }`}
+                  >
+                    {scannerMessage}
                   </div>
+                )}
 
+                {selectedVariant && (
+                  <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                      Current Variant
+                    </p>
+
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-[#12213a]">
+                          {selectedVariant.name}
+                        </p>
+
+                        <p className="mt-1 font-mono text-[10px] text-gray-500">
+                          {selectedVariant.sku}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-green-100 px-2.5 py-1 text-[9px] font-semibold text-green-700">
+                        Stock{" "}
+                        {selectedVariant.stock}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeBarcode}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const scannedSku =
+                        scannerInput
+                          .trim()
+                          .toUpperCase();
+
+                      if (!scannedSku) {
+                        setScannerMessage(
+                          "Please scan or enter a SKU."
+                        );
+                        return;
+                      }
+
+                      const foundVariant =
+                        product.variants.find(
+                          (variant) =>
+                            variant.sku.toUpperCase() ===
+                            scannedSku
+                        );
+
+                      if (foundVariant) {
+                        setSelectedVariantId(
+                          foundVariant.id
+                        );
+
+                        setScannerMessage(
+                          `Product found: ${foundVariant.name}`
+                        );
+
+                        setScannerInput("");
+                      } else {
+                        setScannerMessage(
+                          "No product variant found for this barcode/SKU."
+                        );
+                      }
+                    }}
+                    className="rounded-lg bg-[#12213a] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
+                  >
+                    Search SKU
+                  </button>
                 </div>
-
-                <p className="mt-3 text-center font-mono text-xs font-semibold tracking-[0.25em] text-gray-700">
-                  {selectedVariant.sku}
-                </p>
-
               </div>
-
             </div>
-
-            {/* MODAL FOOTER */}
-
-            <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
-
-              <button
-                type="button"
-                onClick={closeBarcode}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Close
-              </button>
-
-              <button
-                type="button"
-                onClick={printBarcode}
-                className="rounded-lg bg-[#12213a] px-5 py-2 text-xs font-semibold text-white hover:bg-[#1c3154]"
-              >
-                Print Barcode
-              </button>
-
-            </div>
-
-          </div>
-
+          )}
         </div>
-
-      )}
-
+      </main>
     </PageLayout>
   );
 }

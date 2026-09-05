@@ -277,6 +277,8 @@ export default function PurchaseOrdersPage() {
   initialPurchaseOrders
 );
 
+const [ordersLoaded, setOrdersLoaded] = useState(false);
+
 
   const [search, setSearch] = useState("");
 
@@ -323,45 +325,25 @@ export default function PurchaseOrdersPage() {
     draftQuantity,
   ]);
 
-useEffect(() => {
-  const savedOrders = localStorage.getItem(
-    "stockflow-purchase-orders"
-  );
-
-  if (!savedOrders) {
-    return;
-  }
-
-  try {
-    const parsedOrders =
-      JSON.parse(savedOrders);
-
-    if (Array.isArray(parsedOrders)) {
-      setPurchaseOrders(parsedOrders);
-    }
-  } catch {
-    localStorage.removeItem(
-      "stockflow-purchase-orders"
-    );
-  }
-}, []);
-
   useEffect(() => {
   const savedOrders = localStorage.getItem(
     "stockflow-purchase-orders"
   );
 
   if (!savedOrders) {
-    return;
-  }
+  setOrdersLoaded(true);
+  return;
+}
 
   try {
     const parsedOrders =
       JSON.parse(savedOrders);
 
     if (Array.isArray(parsedOrders)) {
-      setPurchaseOrders(parsedOrders);
-    }
+  setPurchaseOrders(parsedOrders);
+}
+
+setOrdersLoaded(true);
   } catch {
     localStorage.removeItem(
       "stockflow-purchase-orders"
@@ -370,11 +352,15 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
+  if (!ordersLoaded) {
+    return;
+  }
+
   localStorage.setItem(
     "stockflow-purchase-orders",
     JSON.stringify(purchaseOrders)
   );
-}, [purchaseOrders]);
+}, [purchaseOrders, ordersLoaded]);
 
   /* =========================================================
      FILTERING
@@ -472,6 +458,28 @@ useEffect(() => {
         : current
     );
   };
+
+  const handleSubmitForApproval = (id: string) => {
+  setPurchaseOrders((current) =>
+    current.map((po) =>
+      po.id === id
+        ? {
+            ...po,
+            status: "Pending Approval",
+          }
+        : po
+    )
+  );
+
+  setSelectedPO((current) =>
+    current?.id === id
+      ? {
+          ...current,
+          status: "Pending Approval",
+        }
+      : current
+  );
+};
 
   const handleApprovePO = (id: string) => {
     setPurchaseOrders((current) =>
@@ -1366,6 +1374,20 @@ useEffect(() => {
             {/* Modal Actions */}
 
             <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4">
+
+              {/* Submit for Approval */}
+
+{selectedPO.status === "Draft" && (
+  <button
+    type="button"
+    onClick={() =>
+      handleSubmitForApproval(selectedPO.id)
+    }
+    className="rounded-md bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-600"
+  >
+    Submit for Approval
+  </button>
+)}
 
               {/* Approve */}
 

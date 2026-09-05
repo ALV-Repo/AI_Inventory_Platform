@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type Supplier = {
@@ -10,6 +10,10 @@ type Supplier = {
   contact: string;
   email: string;
   phone: string;
+    gstin?: string;
+  paymentTerms?: string;
+  leadTime?: string;
+  priceList?: string;
   category: string;
   location: string;
   rating: number;
@@ -124,7 +128,10 @@ const money = (value: number) =>
 
 export default function SuppliersPage() {
   const [supplierList, setSupplierList] =
-    useState<Supplier[]>(initialSuppliers);
+  useState<Supplier[]>(initialSuppliers);
+
+const [suppliersLoaded, setSuppliersLoaded] =
+  useState(false);
 
   const [search, setSearch] = useState("");
   const [category, setCategory] =
@@ -132,19 +139,61 @@ export default function SuppliersPage() {
   const [status, setStatus] =
     useState("All Statuses");
 
+    useEffect(() => {
+  const savedSuppliers = localStorage.getItem(
+    "stockflow-suppliers"
+  );
+
+  if (!savedSuppliers) {
+    setSuppliersLoaded(true);
+    return;
+  }
+
+  try {
+    const parsedSuppliers =
+      JSON.parse(savedSuppliers);
+
+    if (Array.isArray(parsedSuppliers)) {
+      setSupplierList(parsedSuppliers);
+    }
+
+    setSuppliersLoaded(true);
+  } catch {
+    localStorage.removeItem(
+      "stockflow-suppliers"
+    );
+    setSuppliersLoaded(true);
+  }
+}, []);
+
+useEffect(() => {
+  if (!suppliersLoaded) {
+    return;
+  }
+
+  localStorage.setItem(
+    "stockflow-suppliers",
+    JSON.stringify(supplierList)
+  );
+}, [supplierList, suppliersLoaded]);
+
   const [showForm, setShowForm] =
     useState(false);
 
   const [newSupplier, setNewSupplier] = useState({
-    name: "",
-    code: "",
-    contact: "",
-    email: "",
-    phone: "",
-    category: "Electronics",
-    location: "",
-    status: "Active" as "Active" | "On Hold",
-  });
+  name: "",
+  code: "",
+  contact: "",
+  email: "",
+  phone: "",
+  gstin: "",
+  paymentTerms: "Net 30",
+  leadTime: "",
+  priceList: "",
+  category: "Electronics",
+  location: "",
+  status: "Active" as "Active" | "On Hold",
+});
 
   const filteredSuppliers = useMemo(() => {
     return supplierList.filter((supplier) => {
@@ -231,13 +280,17 @@ export default function SuppliersPage() {
         : 1;
 
     const createdSupplier: Supplier = {
-      id: nextId,
-      name: newSupplier.name.trim(),
-      code: newSupplier.code.trim(),
-      contact: newSupplier.contact.trim(),
-      email: newSupplier.email.trim(),
-      phone: newSupplier.phone.trim(),
-      category: newSupplier.category,
+  id: nextId,
+  name: newSupplier.name.trim(),
+  code: newSupplier.code.trim(),
+  contact: newSupplier.contact.trim(),
+  email: newSupplier.email.trim(),
+  phone: newSupplier.phone.trim(),
+  gstin: newSupplier.gstin.trim(),
+  paymentTerms: newSupplier.paymentTerms,
+  leadTime: newSupplier.leadTime.trim(),
+  priceList: newSupplier.priceList.trim(),
+  category: newSupplier.category,
       location: newSupplier.location.trim(),
       rating: 0,
       totalOrders: 0,
@@ -253,15 +306,19 @@ export default function SuppliersPage() {
     ]);
 
     setNewSupplier({
-      name: "",
-      code: "",
-      contact: "",
-      email: "",
-      phone: "",
-      category: "Electronics",
-      location: "",
-      status: "Active",
-    });
+  name: "",
+  code: "",
+  contact: "",
+  email: "",
+  phone: "",
+  gstin: "",
+  paymentTerms: "Net 30",
+  leadTime: "",
+  priceList: "",
+  category: "Electronics",
+  location: "",
+  status: "Active",
+});
 
     setShowForm(false);
   };
@@ -421,6 +478,91 @@ export default function SuppliersPage() {
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
                   />
                 </div>
+
+                {/* GSTIN */}
+<div>
+  <label className="mb-1 block text-xs font-semibold text-slate-600">
+    GSTIN
+  </label>
+
+  <input
+    type="text"
+    value={newSupplier.gstin}
+    onChange={(e) =>
+      setNewSupplier({
+        ...newSupplier,
+        gstin: e.target.value,
+      })
+    }
+    placeholder="22AAAAA0000A1Z5"
+    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+  />
+</div>
+
+{/* Payment Terms */}
+<div>
+  <label className="mb-1 block text-xs font-semibold text-slate-600">
+    Payment Terms
+  </label>
+
+  <select
+    value={newSupplier.paymentTerms}
+    onChange={(e) =>
+      setNewSupplier({
+        ...newSupplier,
+        paymentTerms: e.target.value,
+      })
+    }
+    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+  >
+    <option value="Immediate">Immediate</option>
+    <option value="Net 15">Net 15</option>
+    <option value="Net 30">Net 30</option>
+    <option value="Net 45">Net 45</option>
+    <option value="Net 60">Net 60</option>
+  </select>
+</div>
+
+{/* Default Lead Time */}
+<div>
+  <label className="mb-1 block text-xs font-semibold text-slate-600">
+    Default Lead Time (Days)
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    value={newSupplier.leadTime}
+    onChange={(e) =>
+      setNewSupplier({
+        ...newSupplier,
+        leadTime: e.target.value,
+      })
+    }
+    placeholder="7"
+    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+  />
+</div>
+
+{/* Price List */}
+<div className="md:col-span-2">
+  <label className="mb-1 block text-xs font-semibold text-slate-600">
+    Price List
+  </label>
+
+  <textarea
+    value={newSupplier.priceList}
+    onChange={(e) =>
+      setNewSupplier({
+        ...newSupplier,
+        priceList: e.target.value,
+      })
+    }
+    placeholder="Example: Standard price list, Electronics wholesale prices..."
+    rows={3}
+    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+  />
+</div>
 
                 {/* Category */}
                 <div>
