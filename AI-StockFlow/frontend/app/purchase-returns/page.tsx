@@ -131,6 +131,15 @@ export default function PurchaseReturnsPage() {
   const [message, setMessage] =
     useState("");
 
+    const [stockReversed, setStockReversed] =
+  useState(false);
+
+const [supplierCreditPosted, setSupplierCreditPosted] =
+  useState(false);
+
+const [creditNoteNumber, setCreditNoteNumber] =
+  useState("");
+
   const [showAddItem, setShowAddItem] =
     useState(false);
 
@@ -505,6 +514,28 @@ export default function PurchaseReturnsPage() {
       "Purchase return submitted successfully and is pending approval."
     );
   };
+
+  const approveReturn = () => {
+  setStatus("Approved");
+
+  setMessage(
+    "Purchase return approved successfully. It is ready to be processed."
+  );
+};
+
+const processReturn = () => {
+  const creditNote =
+    `CN-${Date.now().toString().slice(-6)}`;
+
+  setStockReversed(true);
+  setSupplierCreditPosted(true);
+  setCreditNoteNumber(creditNote);
+  setStatus("Completed");
+
+  setMessage(
+    `Purchase return processed successfully. ${totalReturnQty} units reversed from inventory and supplier credit of ${formatCurrency(totalReturnValue)} posted.`
+  );
+};
 
   return (
     <main className="min-h-screen bg-[#f6f8fb] p-4 md:p-6">
@@ -1160,35 +1191,121 @@ export default function PurchaseReturnsPage() {
 
             <div className="flex flex-wrap gap-3">
 
-              <button
-                type="button"
-                onClick={
-                  saveDraft
-                }
-                className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Save Draft
-              </button>
+  {status === "Draft" && (
+    <>
+      <button
+        type="button"
+        onClick={saveDraft}
+        className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+      >
+        Save Draft
+      </button>
 
-              <button
-                type="button"
-                onClick={
-                  openConfirmation
-                }
-                className="rounded-lg bg-[#12213a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1c3152]"
-              >
-                Submit Return
-              </button>
+      <button
+        type="button"
+        onClick={openConfirmation}
+        className="rounded-lg bg-[#12213a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1c3152]"
+      >
+        Submit Return
+      </button>
+    </>
+  )}
 
-            </div>
+  {status === "Pending Approval" && (
+    <button
+      type="button"
+      onClick={approveReturn}
+      className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+    >
+      ✓ Approve Return
+    </button>
+  )}
+
+  {status === "Approved" && (
+    <button
+      type="button"
+      onClick={processReturn}
+      className="rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700"
+    >
+      ✓ Process Return
+    </button>
+  )}
+
+  {status === "Completed" && (
+    <span className="rounded-lg bg-green-50 px-5 py-2.5 text-sm font-semibold text-green-700">
+      ✓ Return Completed
+    </span>
+  )}
+
+</div>
 
           </div>
 
-        </section>
+                </section>
+
+        {status === "Completed" && (
+          <section className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-6 shadow-sm">
+
+            <h2 className="text-lg font-semibold text-green-800">
+              Purchase Return Processing Complete
+            </h2>
+
+            <p className="mt-1 text-sm text-green-700">
+              The approved supplier return has been processed successfully.
+            </p>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+
+              <div className="rounded-xl border border-green-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Stock Reversal
+                </p>
+
+                <p className="mt-2 text-lg font-bold text-green-700">
+                  ✓ {totalReturnQty} Units Reversed
+                </p>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Returned stock removed from available inventory.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-purple-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Supplier Credit
+                </p>
+
+                <p className="mt-2 text-lg font-bold text-purple-700">
+                  ✓ {formatCurrency(totalReturnValue)}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Credit posted against supplier account.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-blue-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Credit Note
+                </p>
+
+                <p className="mt-2 text-lg font-bold text-blue-700">
+                  {creditNoteNumber}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Supplier return credit reference.
+                </p>
+              </div>
+
+            </div>
+
+          </section>
+        )}
 
       </div>
 
-              {/* ADD ITEM MODAL */}
+      {/* ADD ITEM MODAL */}
 
         {showAddItem && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

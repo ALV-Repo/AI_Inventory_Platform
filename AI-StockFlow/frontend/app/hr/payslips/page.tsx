@@ -240,16 +240,51 @@ export default function PayslipsPage() {
 
   const handleSelectPayslip = (id: string) => {
     setSelectedId(id);
-    setShowPayslip(false);
+    setShowPayslip(true);
   };
 
-  const handleDownload = () => {
-    setShowDownloadMessage(true);
+ const handleDownload = () => {
+  const content = `
+AI StockFlow
+Employee Payslip
 
-    window.setTimeout(() => {
-      setShowDownloadMessage(false);
-    }, 2500);
-  };
+Employee: ${selectedPayslip.employeeName}
+Employee ID: ${selectedPayslip.employeeId}
+Department: ${selectedPayslip.department}
+Designation: ${selectedPayslip.designation}
+
+Month: ${selectedPayslip.month} ${selectedPayslip.year}
+Pay Date: ${selectedPayslip.payDate}
+
+Gross Earnings: ${formatCurrency(getEarnings(selectedPayslip))}
+Total Deductions: ${formatCurrency(getDeductions(selectedPayslip))}
+Net Salary: ${formatCurrency(getNetSalary(selectedPayslip))}
+
+This is a system-generated payslip.
+`;
+
+  const blob = new Blob([content], {
+    type: "text/plain;charset=utf-8",
+  });
+
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${selectedPayslip.id}.txt`;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+
+  setShowDownloadMessage(true);
+
+  window.setTimeout(() => {
+    setShowDownloadMessage(false);
+  }, 2500);
+};
 
   const handlePrint = () => {
     window.print();

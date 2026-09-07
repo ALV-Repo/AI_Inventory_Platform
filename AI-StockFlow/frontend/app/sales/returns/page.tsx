@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 
-type ReturnStatus = "Draft" | "Pending Approval" | "Approved" | "Completed";
+type ReturnStatus =
+  | "Draft"
+  | "Pending Approval"
+  | "Approved"
+  | "Processed"
+  | "Completed"
+  | "Cancelled";
 
 type SalesReturn = {
   id: string;
@@ -13,6 +19,8 @@ type SalesReturn = {
   amount: number;
   reason: string;
   status: ReturnStatus;
+  stockRestored: boolean;
+  ledgerAdjusted: boolean;
 };
 
 const initialReturns: SalesReturn[] = [
@@ -25,6 +33,8 @@ const initialReturns: SalesReturn[] = [
     amount: 8500,
     reason: "Damaged item",
     status: "Pending Approval",
+    stockRestored: false,
+    ledgerAdjusted: false,
   },
   {
     id: "SR-2026-002",
@@ -35,6 +45,8 @@ const initialReturns: SalesReturn[] = [
     amount: 3200,
     reason: "Wrong item",
     status: "Approved",
+    stockRestored: false,
+    ledgerAdjusted: false,
   },
   {
     id: "SR-2026-003",
@@ -45,6 +57,8 @@ const initialReturns: SalesReturn[] = [
     amount: 12400,
     reason: "Customer return",
     status: "Completed",
+    stockRestored: true,
+    ledgerAdjusted: true,
   },
   {
     id: "SR-2026-004",
@@ -55,6 +69,8 @@ const initialReturns: SalesReturn[] = [
     amount: 4800,
     reason: "Defective product",
     status: "Draft",
+    stockRestored: false,
+    ledgerAdjusted: false,
   },
   {
     id: "SR-2026-005",
@@ -65,6 +81,8 @@ const initialReturns: SalesReturn[] = [
     amount: 5600,
     reason: "Damaged packaging",
     status: "Completed",
+    stockRestored: true,
+    ledgerAdjusted: true,
   },
 ];
 
@@ -72,43 +90,82 @@ const formatCurrency = (value: number) =>
   `₹${value.toLocaleString("en-IN")}`;
 
 export default function SalesReturnsPage() {
-  const [returns, setReturns] = useState<SalesReturn[]>(initialReturns);
+  const [returns, setReturns] =
+    useState<SalesReturn[]>(initialReturns);
+
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"All" | ReturnStatus>(
-    "All"
-  );
+
+  const [statusFilter, setStatusFilter] = useState<
+    "All" | ReturnStatus
+  >("All");
+
   const [showForm, setShowForm] = useState(false);
+
+  const [selectedReturn, setSelectedReturn] =
+    useState<SalesReturn | null>(null);
 
   const filteredReturns = useMemo(() => {
     return returns.filter((item) => {
+      const searchValue = search.toLowerCase();
+
       const matchesSearch =
-        item.id.toLowerCase().includes(search.toLowerCase()) ||
-        item.invoice.toLowerCase().includes(search.toLowerCase()) ||
-        item.customer.toLowerCase().includes(search.toLowerCase());
+        item.id.toLowerCase().includes(searchValue) ||
+        item.invoice.toLowerCase().includes(searchValue) ||
+        item.customer.toLowerCase().includes(searchValue);
 
       const matchesStatus =
-        statusFilter === "All" || item.status === statusFilter;
+        statusFilter === "All" ||
+        item.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
   }, [returns, search, statusFilter]);
 
-  const totalValue = returns.reduce((sum, item) => sum + item.amount, 0);
+  const totalValue = returns.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  );
+
   const pendingCount = returns.filter(
     (item) => item.status === "Pending Approval"
   ).length;
+
   const approvedCount = returns.filter(
     (item) => item.status === "Approved"
   ).length;
+
+  const processedCount = returns.filter(
+    (item) => item.status === "Processed"
+  ).length;
+
   const completedCount = returns.filter(
     (item) => item.status === "Completed"
   ).length;
 
-  const updateStatus = (id: string, status: ReturnStatus) => {
+  const updateStatus = (
+    id: string,
+    status: ReturnStatus
+  ) => {
     setReturns((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, status } : item
-      )
+      current.map((item) => {
+        if (item.id !== id) {
+          return item;
+        }
+
+        if (status === "Completed") {
+          return {
+            ...item,
+            status: "Completed",
+            stockRestored: true,
+            ledgerAdjusted: true,
+          };
+        }
+
+        return {
+          ...item,
+          status,
+        };
+      })
     );
   };
 
@@ -148,7 +205,8 @@ export default function SalesReturnsPage() {
               fontSize: 13,
             }}
           >
-            Manage customer returns, approvals and invoice adjustments.
+            Manage customer returns, approvals and invoice
+            adjustments.
           </p>
         </div>
 
@@ -172,7 +230,7 @@ export default function SalesReturnsPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(5, 1fr)",
           gap: 14,
           marginBottom: 18,
         }}
@@ -191,16 +249,23 @@ export default function SalesReturnsPage() {
         />
 
         <KpiCard
-          title="COMPLETED"
-          value={completedCount}
-          subtitle="Successfully processed"
+          title="APPROVED"
+          value={approvedCount}
+          subtitle="Ready for processing"
           valueColor="#059669"
         />
 
         <KpiCard
-          title="TOTAL RETURN VALUE"
-          value={formatCurrency(totalValue)}
-          subtitle="Combined return value"
+          title="PROCESSED"
+          value={processedCount}
+          subtitle="Ready to complete"
+          valueColor="#7c3aed"
+        />
+
+        <KpiCard
+          title="COMPLETED"
+          value={completedCount}
+          subtitle="Successfully processed"
           valueColor="#2563eb"
         />
       </div>
@@ -215,6 +280,7 @@ export default function SalesReturnsPage() {
           display: "flex",
           gap: 8,
           marginBottom: 14,
+          flexWrap: "wrap",
         }}
       >
         {(
@@ -223,7 +289,9 @@ export default function SalesReturnsPage() {
             "Draft",
             "Pending Approval",
             "Approved",
+            "Processed",
             "Completed",
+            "Cancelled",
           ] as const
         ).map((status) => (
           <button
@@ -235,9 +303,13 @@ export default function SalesReturnsPage() {
               padding: "9px 15px",
               cursor: "pointer",
               background:
-                statusFilter === status ? "#10213d" : "transparent",
+                statusFilter === status
+                  ? "#10213d"
+                  : "transparent",
               color:
-                statusFilter === status ? "#fff" : "#536177",
+                statusFilter === status
+                  ? "#fff"
+                  : "#536177",
               fontWeight: 600,
               fontSize: 12,
             }}
@@ -291,7 +363,7 @@ export default function SalesReturnsPage() {
         </button>
       </div>
 
-      {/* TABLE */}
+            {/* TABLE */}
       <section
         style={{
           background: "#fff",
@@ -350,6 +422,8 @@ export default function SalesReturnsPage() {
                 <th style={thStyle}>AMOUNT</th>
                 <th style={thStyle}>REASON</th>
                 <th style={thStyle}>STATUS</th>
+                <th style={thStyle}>STOCK</th>
+                <th style={thStyle}>LEDGER</th>
                 <th style={thStyle}>ACTION</th>
               </tr>
             </thead>
@@ -362,32 +436,74 @@ export default function SalesReturnsPage() {
                     <div style={subText}>Sales return</div>
                   </td>
 
-                  <td style={tdStyle}>{item.customer}</td>
-
-                  <td style={tdStyle}>{item.invoice}</td>
-
-                  <td style={tdStyle}>{item.date}</td>
-
-                  <td style={tdStyle}>{item.items}</td>
-
                   <td style={tdStyle}>
-                    <strong>{formatCurrency(item.amount)}</strong>
+                    {item.customer}
                   </td>
 
-                  <td style={tdStyle}>{item.reason}</td>
+                  <td style={tdStyle}>
+                    {item.invoice}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {item.date}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {item.items}
+                  </td>
+
+                  <td style={tdStyle}>
+                    <strong>
+                      {formatCurrency(item.amount)}
+                    </strong>
+                  </td>
+
+                  <td style={tdStyle}>
+                    {item.reason}
+                  </td>
 
                   <td style={tdStyle}>
                     <StatusBadge status={item.status} />
                   </td>
 
                   <td style={tdStyle}>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button style={smallButton}>View</button>
+                    <TrackingBadge
+                      completed={item.stockRestored}
+                      label="Stock Restored"
+                    />
+                  </td>
+
+                  <td style={tdStyle}>
+                    <TrackingBadge
+                      completed={item.ledgerAdjusted}
+                      label="Ledger Adjusted"
+                    />
+                  </td>
+
+                  <td style={tdStyle}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <button
+                        onClick={() =>
+                          setSelectedReturn(item)
+                        }
+                        style={smallButton}
+                      >
+                        View
+                      </button>
 
                       {item.status === "Pending Approval" && (
                         <button
                           onClick={() =>
-                            updateStatus(item.id, "Approved")
+                            updateStatus(
+                              item.id,
+                              "Approved"
+                            )
                           }
                           style={{
                             ...smallButton,
@@ -403,7 +519,10 @@ export default function SalesReturnsPage() {
                       {item.status === "Approved" && (
                         <button
                           onClick={() =>
-                            updateStatus(item.id, "Completed")
+                            updateStatus(
+                              item.id,
+                              "Processed"
+                            )
                           }
                           style={{
                             ...smallButton,
@@ -412,7 +531,40 @@ export default function SalesReturnsPage() {
                             borderColor: "#2563eb",
                           }}
                         >
+                          Process
+                        </button>
+                      )}
+
+                      {item.status === "Processed" && (
+                        <button
+                          onClick={() =>
+                            updateStatus(
+                              item.id,
+                              "Completed"
+                            )
+                          }
+                          style={{
+                            ...smallButton,
+                            background: "#059669",
+                            color: "#fff",
+                            borderColor: "#059669",
+                          }}
+                        >
                           Complete
+                        </button>
+                      )}
+
+                      {item.status === "Draft" && (
+                        <button
+                          onClick={() =>
+                            updateStatus(
+                              item.id,
+                              "Pending Approval"
+                            )
+                          }
+                          style={smallButton}
+                        >
+                          Submit
                         </button>
                       )}
                     </div>
@@ -436,44 +588,461 @@ export default function SalesReturnsPage() {
         )}
       </section>
 
-      {/* BOTTOM SUMMARY */}
+      {/* WORKFLOW INFORMATION */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 14,
-          marginTop: 16,
+          marginTop: 18,
+          background: "#fff",
+          border: "1px solid #e1e6ee",
+          borderRadius: 9,
+          padding: 18,
         }}
       >
-        <SummaryCard
-          title="PENDING RETURNS"
-          value={pendingCount}
-          text="Returns awaiting approval"
-        />
+        <h3
+          style={{
+            margin: "0 0 12px",
+            fontSize: 15,
+          }}
+        >
+          Return Workflow
+        </h3>
 
-        <SummaryCard
-          title="APPROVED RETURNS"
-          value={approvedCount}
-          text="Ready for processing"
-        />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            fontSize: 12,
+          }}
+        >
+          <WorkflowStep label="Draft" />
+          <span>→</span>
+          <WorkflowStep label="Pending Approval" />
+          <span>→</span>
+          <WorkflowStep label="Approved" />
+          <span>→</span>
+          <WorkflowStep label="Processed" />
+          <span>→</span>
+          <WorkflowStep label="Completed" />
+        </div>
 
-        <SummaryCard
-          title="RETURN VALUE"
-          value={formatCurrency(totalValue)}
-          text="Total value of sales returns"
-        />
+        <div
+          style={{
+            marginTop: 14,
+            padding: 12,
+            background: "#f8fafc",
+            borderRadius: 7,
+            color: "#64748b",
+            fontSize: 11,
+          }}
+        >
+          When a return reaches Completed status, the system
+          records Stock Restored and Ledger Adjusted.
+        </div>
       </div>
 
-      {/* FORM MODAL */}
+            {/* CREATE RETURN MODAL */}
       {showForm && (
-        <NewReturnModal
-          onClose={() => setShowForm(false)}
-          onCreate={(newReturn) => {
-            setReturns((current) => [newReturn, ...current]);
-            setShowForm(false);
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            padding: 20,
           }}
-        />
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 620,
+              background: "#fff",
+              borderRadius: 10,
+              boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "18px 20px",
+                borderBottom: "1px solid #e5e9f0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: 18,
+                  }}
+                >
+                  New Sales Return
+                </h2>
+
+                <p
+                  style={{
+                    margin: "5px 0 0",
+                    fontSize: 12,
+                    color: "#7b8799",
+                  }}
+                >
+                  Create a return against an existing sales invoice.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowForm(false)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  fontSize: 22,
+                  cursor: "pointer",
+                  color: "#64748b",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              style={{
+                padding: 20,
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <FormField label="Invoice Number">
+                <input
+                  defaultValue="INV-2026-043"
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <FormField label="Customer">
+                <input
+                  defaultValue="Apex Retail Solutions"
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <FormField label="Return Date">
+                <input
+                  type="date"
+                  defaultValue="2026-09-07"
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <FormField label="Product">
+                <input
+                  defaultValue="Wireless Earbuds"
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <FormField label="Quantity">
+                <input
+                  type="number"
+                  defaultValue={1}
+                  min={1}
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <FormField label="Unit Price">
+                <input
+                  type="number"
+                  defaultValue={1450}
+                  min={0}
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <FormField label="Return Reason">
+                <select
+                  defaultValue="Customer return"
+                  style={inputStyle}
+                >
+                  <option>Customer return</option>
+                  <option>Damaged item</option>
+                  <option>Defective product</option>
+                  <option>Wrong item</option>
+                  <option>Wrong quantity</option>
+                  <option>Other</option>
+                </select>
+              </FormField>
+
+              <FormField label="GST">
+                <input
+                  type="number"
+                  defaultValue={261}
+                  min={0}
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="Notes">
+                  <textarea
+                    defaultValue="Customer requested return."
+                    rows={3}
+                    style={{
+                      ...inputStyle,
+                      resize: "vertical",
+                    }}
+                  />
+                </FormField>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: "14px 20px",
+                borderTop: "1px solid #e5e9f0",
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 10,
+              }}
+            >
+              <button
+                onClick={() => setShowForm(false)}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 6,
+                  border: "1px solid #cfd6e2",
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => {
+                  const newReturn: SalesReturn = {
+                    id: `SR-2026-${String(
+                      returns.length + 1
+                    ).padStart(3, "0")}`,
+                    invoice: "INV-2026-043",
+                    customer: "Apex Retail Solutions",
+                    date: "07 Sep 2026",
+                    items: 1,
+                    amount: 1711,
+                    reason: "Customer return",
+                    status: "Draft",
+                    stockRestored: false,
+                    ledgerAdjusted: false,
+                  };
+
+                  setReturns((current) => [
+                    newReturn,
+                    ...current,
+                  ]);
+
+                  setShowForm(false);
+                }}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 6,
+                  border: "1px solid #10213d",
+                  background: "#10213d",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Create Return
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+
+      {/* VIEW RETURN MODAL */}
+      {selectedReturn && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 60,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 560,
+              background: "#fff",
+              borderRadius: 10,
+              boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "18px 20px",
+                borderBottom: "1px solid #e5e9f0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: 18,
+                  }}
+                >
+                  Return Details
+                </h2>
+
+                <p
+                  style={{
+                    margin: "5px 0 0",
+                    fontSize: 12,
+                    color: "#7b8799",
+                  }}
+                >
+                  {selectedReturn.id}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedReturn(null)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  fontSize: 22,
+                  cursor: "pointer",
+                  color: "#64748b",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              style={{
+                padding: 20,
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 14,
+              }}
+            >
+              <DetailItem
+                label="Return Number"
+                value={selectedReturn.id}
+              />
+
+              <DetailItem
+                label="Invoice"
+                value={selectedReturn.invoice}
+              />
+
+              <DetailItem
+                label="Customer"
+                value={selectedReturn.customer}
+              />
+
+              <DetailItem
+                label="Date"
+                value={selectedReturn.date}
+              />
+
+              <DetailItem
+                label="Items"
+                value={String(selectedReturn.items)}
+              />
+
+              <DetailItem
+                label="Amount"
+                value={formatCurrency(selectedReturn.amount)}
+              />
+
+              <DetailItem
+                label="Reason"
+                value={selectedReturn.reason}
+              />
+
+              <div>
+                <div style={detailLabelStyle}>
+                  Status
+                </div>
+
+                <StatusBadge
+                  status={selectedReturn.status}
+                />
+              </div>
+
+              <div>
+                <div style={detailLabelStyle}>
+                  Stock Restored
+                </div>
+
+                <TrackingBadge
+                  completed={selectedReturn.stockRestored}
+                  label={
+                    selectedReturn.stockRestored
+                      ? "Yes"
+                      : "No"
+                  }
+                />
+              </div>
+
+              <div>
+                <div style={detailLabelStyle}>
+                  Ledger Adjusted
+                </div>
+
+                <TrackingBadge
+                  completed={selectedReturn.ledgerAdjusted}
+                  label={
+                    selectedReturn.ledgerAdjusted
+                      ? "Yes"
+                      : "No"
+                  }
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: "14px 20px",
+                borderTop: "1px solid #e5e9f0",
+                display: "flex",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                onClick={() => setSelectedReturn(null)}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 6,
+                  border: "1px solid #cfd6e2",
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+            {/* PAGE END */}
     </main>
   );
 }
@@ -482,7 +1051,7 @@ function KpiCard({
   title,
   value,
   subtitle,
-  valueColor = "#12213a",
+  valueColor,
 }: {
   title: string;
   value: string | number;
@@ -494,8 +1063,8 @@ function KpiCard({
       style={{
         background: "#fff",
         border: "1px solid #e1e6ee",
-        borderRadius: 9,
-        padding: "18px 20px",
+        borderRadius: 8,
+        padding: 17,
       }}
     >
       <div
@@ -503,7 +1072,7 @@ function KpiCard({
           fontSize: 10,
           color: "#7b8799",
           fontWeight: 700,
-          letterSpacing: "0.08em",
+          letterSpacing: 0.4,
         }}
       >
         {title}
@@ -512,62 +1081,9 @@ function KpiCard({
       <div
         style={{
           marginTop: 8,
-          fontSize: 24,
+          fontSize: 23,
           fontWeight: 700,
-          color: valueColor,
-        }}
-      >
-        {value}
-      </div>
-
-      <div
-        style={{
-          marginTop: 5,
-          fontSize: 11,
-          color: "#8a95a7",
-        }}
-      >
-        {subtitle}
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({
-  title,
-  value,
-  text,
-}: {
-  title: string;
-  value: string | number;
-  text: string;
-}) {
-  return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #e1e6ee",
-        borderRadius: 9,
-        padding: "17px 20px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          color: "#7b8799",
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-        }}
-      >
-        {title}
-      </div>
-
-      <div
-        style={{
-          marginTop: 7,
-          fontSize: 20,
-          fontWeight: 700,
-          color: "#12213a",
+          color: valueColor || "#12213a",
         }}
       >
         {value}
@@ -580,13 +1096,17 @@ function SummaryCard({
           color: "#8994a6",
         }}
       >
-        {text}
+        {subtitle}
       </div>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: ReturnStatus }) {
+function StatusBadge({
+  status,
+}: {
+  status: ReturnStatus;
+}) {
   const styles: Record<
     ReturnStatus,
     {
@@ -595,35 +1115,48 @@ function StatusBadge({ status }: { status: ReturnStatus }) {
     }
   > = {
     Draft: {
-      background: "#f1f3f6",
-      color: "#5d6878",
+      background: "#f1f5f9",
+      color: "#475569",
     },
+
     "Pending Approval": {
-      background: "#fff3cd",
-      color: "#a16207",
+      background: "#fef3c7",
+      color: "#92400e",
     },
+
     Approved: {
-      background: "#d1fae5",
-      color: "#047857",
+      background: "#dcfce7",
+      color: "#166534",
     },
+
+    Processed: {
+      background: "#ede9fe",
+      color: "#6d28d9",
+    },
+
     Completed: {
       background: "#dbeafe",
       color: "#1d4ed8",
     },
+
+    Cancelled: {
+      background: "#fee2e2",
+      color: "#b91c1c",
+    },
   };
 
-  const current = styles[status];
+  const style = styles[status];
 
   return (
     <span
       style={{
         display: "inline-flex",
         alignItems: "center",
-        borderRadius: 999,
         padding: "5px 9px",
-        background: current.background,
-        color: current.color,
-        fontSize: 10,
+        borderRadius: 999,
+        background: style.background,
+        color: style.color,
+        fontSize: 11,
         fontWeight: 700,
         whiteSpace: "nowrap",
       }}
@@ -633,218 +1166,53 @@ function StatusBadge({ status }: { status: ReturnStatus }) {
   );
 }
 
-function NewReturnModal({
-  onClose,
-  onCreate,
+function TrackingBadge({
+  completed,
+  label,
 }: {
-  onClose: () => void;
-  onCreate: (item: SalesReturn) => void;
+  completed: boolean;
+  label: string;
 }) {
-  const [invoice, setInvoice] = useState("");
-  const [customer, setCustomer] = useState("");
-  const [items, setItems] = useState("1");
-  const [amount, setAmount] = useState("");
-  const [reason, setReason] = useState("Customer return");
-
-  const handleCreate = () => {
-    if (!invoice.trim() || !customer.trim() || !amount.trim()) {
-      return;
-    }
-
-    const newReturn: SalesReturn = {
-      id: `SR-2026-${String(Date.now()).slice(-3)}`,
-      invoice: invoice.trim(),
-      customer: customer.trim(),
-      date: "21 Aug 2026",
-      items: Number(items) || 1,
-      amount: Number(amount) || 0,
-      reason,
-      status: "Draft",
-    };
-
-    onCreate(newReturn);
-  };
-
   return (
-    <div
+    <span
       style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(10, 20, 35, 0.45)",
-        display: "flex",
+        display: "inline-flex",
         alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: 20,
+        padding: "5px 8px",
+        borderRadius: 999,
+        background: completed ? "#dcfce7" : "#f1f5f9",
+        color: completed ? "#166534" : "#64748b",
+        fontSize: 10,
+        fontWeight: 700,
+        whiteSpace: "nowrap",
       }}
     >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 520,
-          background: "#fff",
-          borderRadius: 10,
-          boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
-          overflow: "hidden",
-        }}
-      >
-        {/* MODAL HEADER */}
-        <div
-          style={{
-            padding: "18px 20px",
-            borderBottom: "1px solid #e5e9ef",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 18,
-              }}
-            >
-              New Sales Return
-            </h2>
+      {completed ? "✓ " : "○ "}
+      {label}
+    </span>
+  );
+}
 
-            <p
-              style={{
-                margin: "5px 0 0",
-                color: "#7b8799",
-                fontSize: 11,
-              }}
-            >
-              Create a return request linked to a sales invoice.
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            style={{
-              border: "none",
-              background: "transparent",
-              fontSize: 20,
-              color: "#7b8799",
-              cursor: "pointer",
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        {/* MODAL BODY */}
-        <div
-          style={{
-            padding: 20,
-            display: "grid",
-            gap: 15,
-          }}
-        >
-          <FormField label="Invoice Number">
-            <input
-              value={invoice}
-              onChange={(e) => setInvoice(e.target.value)}
-              placeholder="e.g. INV-2026-045"
-              style={inputStyle}
-            />
-          </FormField>
-
-          <FormField label="Customer">
-            <input
-              value={customer}
-              onChange={(e) => setCustomer(e.target.value)}
-              placeholder="Customer name"
-              style={inputStyle}
-            />
-          </FormField>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-            }}
-          >
-            <FormField label="Number of Items">
-              <input
-                type="number"
-                min="1"
-                value={items}
-                onChange={(e) => setItems(e.target.value)}
-                style={inputStyle}
-              />
-            </FormField>
-
-            <FormField label="Return Amount">
-              <input
-                type="number"
-                min="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="₹0"
-                style={inputStyle}
-              />
-            </FormField>
-          </div>
-
-          <FormField label="Return Reason">
-            <select
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              style={inputStyle}
-            >
-              <option>Customer return</option>
-              <option>Damaged item</option>
-              <option>Wrong item</option>
-              <option>Defective product</option>
-              <option>Damaged packaging</option>
-              <option>Other</option>
-            </select>
-          </FormField>
-        </div>
-
-        {/* MODAL FOOTER */}
-        <div
-          style={{
-            padding: "15px 20px",
-            borderTop: "1px solid #e5e9ef",
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 10,
-          }}
-        >
-          <button
-            onClick={onClose}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 6,
-              border: "1px solid #cfd6e2",
-              background: "#fff",
-              cursor: "pointer",
-              color: "#34435b",
-            }}
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={handleCreate}
-            style={{
-              padding: "10px 17px",
-              borderRadius: 6,
-              border: "none",
-              background: "#10213d",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            Create Return
-          </button>
-        </div>
-      </div>
-    </div>
+function WorkflowStep({
+  label,
+}: {
+  label: string;
+}) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "7px 11px",
+        borderRadius: 6,
+        background: "#f3f6fa",
+        border: "1px solid #dce3ec",
+        color: "#42516a",
+        fontWeight: 600,
+      }}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -858,35 +1226,53 @@ function FormField({
   return (
     <label
       style={{
-        display: "grid",
+        display: "flex",
+        flexDirection: "column",
         gap: 6,
+        fontSize: 12,
+        color: "#526077",
+        fontWeight: 600,
       }}
     >
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: "#536177",
-        }}
-      >
-        {label}
-      </span>
-
+      {label}
       {children}
     </label>
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  boxSizing: "border-box",
-  border: "1px solid #d7dde7",
-  borderRadius: 6,
-  padding: "10px 12px",
-  fontSize: 13,
-  color: "#12213a",
-  background: "#fff",
-  outline: "none",
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div>
+      <div style={detailLabelStyle}>
+        {label}
+      </div>
+
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 13,
+          color: "#12213a",
+          fontWeight: 600,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+const detailLabelStyle: React.CSSProperties = {
+  fontSize: 10,
+  color: "#8994a6",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 0.3,
 };
 
 const thStyle: React.CSSProperties = {
@@ -894,21 +1280,19 @@ const thStyle: React.CSSProperties = {
   borderBottom: "1px solid #e8ecf2",
   fontSize: 10,
   fontWeight: 700,
-  letterSpacing: "0.05em",
   whiteSpace: "nowrap",
 };
 
 const tdStyle: React.CSSProperties = {
   padding: "14px",
   borderBottom: "1px solid #edf0f4",
-  color: "#334155",
-  whiteSpace: "nowrap",
+  verticalAlign: "middle",
 };
 
 const subText: React.CSSProperties = {
   marginTop: 3,
-  fontSize: 10,
   color: "#8a95a7",
+  fontSize: 10,
 };
 
 const smallButton: React.CSSProperties = {
@@ -920,4 +1304,15 @@ const smallButton: React.CSSProperties = {
   fontSize: 10,
   fontWeight: 600,
   cursor: "pointer",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  border: "1px solid #d7dde7",
+  borderRadius: 6,
+  padding: "10px 11px",
+  fontSize: 12,
+  color: "#12213a",
+  outline: "none",
 };

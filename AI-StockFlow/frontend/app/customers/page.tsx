@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageLayout from "../../components/layout/PageLayout";
 
 type LeadStatus =
@@ -31,6 +31,9 @@ type Customer = {
   email: string;
   city: string;
   company: string;
+  gstin: string;
+  creditLimit: number;
+  priceLevel: string;
   totalPurchases: number;
   orders: number;
   status: "Active" | "Inactive";
@@ -119,6 +122,9 @@ const initialCustomers: Customer[] = [
     email: "rahul.sharma@example.com",
     city: "Hyderabad",
     company: "Sharma Technologies",
+    gstin: "36ABCDE1234F1Z5",
+    creditLimit: 100000,
+    priceLevel: "Standard",
     totalPurchases: 45890,
     orders: 12,
     status: "Active",
@@ -130,6 +136,9 @@ const initialCustomers: Customer[] = [
     email: "priya.reddy@example.com",
     city: "Vijayawada",
     company: "Reddy Enterprises",
+    gstin: "37ABCDE1234F1Z5",
+    creditLimit: 150000,
+    priceLevel: "Wholesale",
     totalPurchases: 32450,
     orders: 8,
     status: "Active",
@@ -141,6 +150,9 @@ const initialCustomers: Customer[] = [
     email: "arjun.kumar@example.com",
     city: "Bangalore",
     company: "AK Retail",
+    gstin: "29ABCDE5678G1Z2",
+    creditLimit: 75000,
+    priceLevel: "Retail",
     totalPurchases: 18750,
     orders: 5,
     status: "Active",
@@ -152,6 +164,9 @@ const initialCustomers: Customer[] = [
     email: "sneha.verma@example.com",
     city: "Chennai",
     company: "Verma Solutions",
+    gstin: "33ABCDE9012H1Z3",
+    creditLimit: 50000,
+    priceLevel: "Standard",
     totalPurchases: 12600,
     orders: 4,
     status: "Inactive",
@@ -163,6 +178,9 @@ const initialCustomers: Customer[] = [
     email: "vikram.singh@example.com",
     city: "Mumbai",
     company: "Singh Industries",
+    gstin: "27ABCDE3456J1Z4",
+    creditLimit: 200000,
+    priceLevel: "Wholesale",
     totalPurchases: 56200,
     orders: 15,
     status: "Active",
@@ -174,1140 +192,925 @@ const initialCustomers: Customer[] = [
     email: "ananya.patel@example.com",
     city: "Pune",
     company: "Patel Mart",
+    gstin: "24ABCDE7890K1Z5",
+    creditLimit: 80000,
+    priceLevel: "Retail",
     totalPurchases: 28900,
     orders: 7,
     status: "Active",
   },
 ];
 
-const pipelineStages: LeadStatus[] = [
-  "New",
-  "Contacted",
-  "Qualified",
-  "Proposal",
-  "Won",
-];
-
-const sourceOptions = [
-  "All Sources",
-  "Website",
-  "Referral",
-  "WhatsApp",
-  "Campaign",
-];
-
-const statusColors: Record<LeadStatus, string> = {
-  New: "bg-blue-100 text-blue-700",
-  Contacted: "bg-purple-100 text-purple-700",
-  Qualified: "bg-yellow-100 text-yellow-700",
-  Proposal: "bg-orange-100 text-orange-700",
-  Won: "bg-green-100 text-green-700",
-  Lost: "bg-red-100 text-red-700",
-};
-
 export default function CustomersPage() {
   const [activeTab, setActiveTab] = useState<
-    "leads" | "pipeline" | "customers" | "customer360"
-  >("leads");
+    "leads" | "pipeline" | "customers"
+  >("customers");
+
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+  if (typeof window === "undefined") {
+    return initialCustomers;
+  }
+
+  const saved = localStorage.getItem("stockflow-customers");
+
+  return saved ? JSON.parse(saved) : initialCustomers;
+});
+
+useEffect(() => {
+  localStorage.setItem("stockflow-customers", JSON.stringify(customers));
+}, [customers]);
 
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
-  const [customers] = useState<Customer[]>(initialCustomers);
 
   const [search, setSearch] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("All Sources");
   const [selectedCustomer, setSelectedCustomer] =
-    useState<Customer | null>(customers[0]);
+    useState<Customer | null>(null);
 
-  const [showLeadForm, setShowLeadForm] = useState(false);
-  const [showFollowUp, setShowFollowUp] = useState(false);
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
 
-  const [leadForm, setLeadForm] = useState({
+  const [newCustomer, setNewCustomer] = useState({
     name: "",
-    company: "",
     phone: "",
     email: "",
-    source: "Website",
-    value: "",
-    expectedClose: "",
+    city: "",
+    company: "",
+    gstin: "",
+    creditLimit: "",
+    priceLevel: "Standard",
   });
-
-  const [followUp, setFollowUp] = useState({
-    date: "",
-    time: "",
-    note: "",
-  });
-
-  const filteredLeads = useMemo(() => {
-    const value = search.toLowerCase();
-
-    return leads.filter((lead) => {
-      const matchesSearch =
-        !value ||
-        lead.name.toLowerCase().includes(value) ||
-        lead.company.toLowerCase().includes(value) ||
-        lead.email.toLowerCase().includes(value) ||
-        lead.phone.toLowerCase().includes(value);
-
-      const matchesSource =
-        sourceFilter === "All Sources" || lead.source === sourceFilter;
-
-      return matchesSearch && matchesSource;
-    });
-  }, [leads, search, sourceFilter]);
 
   const filteredCustomers = useMemo(() => {
-    const value = search.toLowerCase();
+    const query = search.toLowerCase().trim();
 
-    return customers.filter(
-      (customer) =>
-        customer.name.toLowerCase().includes(value) ||
-        customer.company.toLowerCase().includes(value) ||
-        customer.email.toLowerCase().includes(value) ||
-        customer.city.toLowerCase().includes(value)
+    if (!query) {
+      return customers;
+    }
+
+    return customers.filter((customer) =>
+      [
+        customer.name,
+        customer.phone,
+        customer.email,
+        customer.city,
+        customer.company,
+        customer.gstin,
+        customer.priceLevel,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
     );
   }, [customers, search]);
-
-  const totalPipelineValue = leads
-    .filter((lead) => lead.status !== "Lost")
-    .reduce((sum, lead) => sum + lead.value, 0);
-
-  const wonValue = leads
-    .filter((lead) => lead.status === "Won")
-    .reduce((sum, lead) => sum + lead.value, 0);
-
-  const qualifiedValue = leads
-    .filter((lead) => lead.status === "Qualified")
-    .reduce((sum, lead) => sum + lead.value, 0);
-
-  const conversionRate = Math.round((wonValue / totalPipelineValue) * 100);
 
   const totalRevenue = customers.reduce(
     (sum, customer) => sum + customer.totalPurchases,
     0
   );
 
-  const createLead = () => {
-    if (!leadForm.name || !leadForm.company || !leadForm.phone) {
-      alert("Please enter lead name, company and phone.");
+  const activeCustomers = customers.filter(
+    (customer) => customer.status === "Active"
+  ).length;
+
+  const totalOrders = customers.reduce(
+    (sum, customer) => sum + customer.orders,
+    0
+  );
+
+  const formatCurrency = (value: number) =>
+    `₹${value.toLocaleString("en-IN")}`;
+
+  const handleAddCustomer = () => {
+    if (
+      !newCustomer.name ||
+      !newCustomer.phone ||
+      !newCustomer.company
+    ) {
+      alert("Please fill Name, Phone and Company.");
       return;
     }
 
-    const newLead: Lead = {
-      id: `LD-2026-${String(leads.length + 1).padStart(3, "0")}`,
-      name: leadForm.name,
-      company: leadForm.company,
-      phone: leadForm.phone,
-      email: leadForm.email,
-      source: leadForm.source,
-      value: Number(leadForm.value) || 0,
-      expectedClose: leadForm.expectedClose || "Not specified",
-      status: "New",
-      lastActivity: "24 Aug 2026",
+    const customer: Customer = {
+      id:
+        customers.length > 0
+          ? Math.max(...customers.map((item) => item.id)) + 1
+          : 1,
+      name: newCustomer.name,
+      phone: newCustomer.phone,
+      email: newCustomer.email,
+      city: newCustomer.city,
+      company: newCustomer.company,
+      gstin: newCustomer.gstin,
+      creditLimit: Number(newCustomer.creditLimit) || 0,
+      priceLevel: newCustomer.priceLevel,
+      totalPurchases: 0,
+      orders: 0,
+      status: "Active",
     };
 
-    setLeads((current) => [newLead, ...current]);
+    const updatedCustomers = [customer, ...customers];
 
-    setLeadForm({
+setCustomers(updatedCustomers);
+
+localStorage.setItem(
+  "stockflow-customers",
+  JSON.stringify(updatedCustomers)
+);
+
+    setSelectedCustomer(customer);
+    setShowAddCustomer(false);
+
+    setNewCustomer({
       name: "",
-      company: "",
       phone: "",
       email: "",
-      source: "Website",
-      value: "",
-      expectedClose: "",
+      city: "",
+      company: "",
+      gstin: "",
+      creditLimit: "",
+      priceLevel: "Standard",
     });
-
-    setShowLeadForm(false);
-    alert("Lead created successfully.");
   };
 
-  const moveLead = (leadId: string, status: LeadStatus) => {
+  const updateLeadStatus = (
+    id: string,
+    status: LeadStatus
+  ) => {
     setLeads((current) =>
       current.map((lead) =>
-        lead.id === leadId
-          ? {
-              ...lead,
-              status,
-              lastActivity: "24 Aug 2026",
-            }
+        lead.id === id
+          ? { ...lead, status }
           : lead
       )
     );
   };
 
-  const scheduleFollowUp = () => {
-    if (!followUp.date || !followUp.time) {
-      alert("Please select date and time.");
-      return;
-    }
-
-    alert(
-      `Follow-up scheduled for ${followUp.date} at ${followUp.time}${
-        followUp.note ? `\n\n${followUp.note}` : ""
-      }`
-    );
-
-    setFollowUp({
-      date: "",
-      time: "",
-      note: "",
-    });
-
-    setShowFollowUp(false);
-  };
-
   return (
     <PageLayout>
-      <div className="min-h-screen bg-slate-50 p-6">
+      <div className="min-h-screen bg-slate-50 p-6 text-slate-900">
         <div className="mx-auto max-w-7xl">
-          {/* HEADER */}
+
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900">
+              <h1 className="text-2xl font-bold">
                 CRM & Customers
               </h1>
+
               <p className="mt-1 text-sm text-slate-500">
-                Manage leads, customer relationships and sales pipeline.
+                Manage leads, sales pipeline and customer master data.
               </p>
             </div>
 
+            {activeTab === "customers" && (
+              <button
+                onClick={() => setShowAddCustomer(true)}
+                className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                + Add Customer
+              </button>
+            )}
+          </div>
+
+          <div className="mb-6 flex gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+
             <button
-              onClick={() => setShowLeadForm(true)}
-              className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              + Create Lead
-            </button>
-          </div>
-
-          {/* KPI CARDS */}
-          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-            <KpiCard
-              title="Total Leads"
-              value={String(leads.length)}
-              subtitle="Active CRM leads"
-            />
-
-            <KpiCard
-              title="Pipeline Value"
-              value={`₹${totalPipelineValue.toLocaleString("en-IN")}`}
-              subtitle="Open opportunity value"
-              blue
-            />
-
-            <KpiCard
-              title="Qualified Value"
-              value={`₹${qualifiedValue.toLocaleString("en-IN")}`}
-              subtitle="Qualified opportunities"
-              yellow
-            />
-
-            <KpiCard
-              title="Conversion"
-              value={`${conversionRate || 0}%`}
-              subtitle={`₹${wonValue.toLocaleString("en-IN")} won`}
-              green
-            />
-          </div>
-
-          {/* TABS */}
-          <div className="mb-6 flex flex-wrap gap-2 rounded-xl border bg-white p-2 shadow-sm">
-            <TabButton
-              active={activeTab === "leads"}
               onClick={() => setActiveTab("leads")}
+              className={`rounded-lg px-5 py-2.5 text-sm font-semibold ${
+                activeTab === "leads"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
             >
-              Lead List
-            </TabButton>
+              Leads
+            </button>
 
-            <TabButton
-              active={activeTab === "pipeline"}
+            <button
               onClick={() => setActiveTab("pipeline")}
+              className={`rounded-lg px-5 py-2.5 text-sm font-semibold ${
+                activeTab === "pipeline"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
             >
-              Sales Pipeline
-            </TabButton>
+              Pipeline
+            </button>
 
-            <TabButton
-              active={activeTab === "customers"}
+            <button
               onClick={() => setActiveTab("customers")}
+              className={`rounded-lg px-5 py-2.5 text-sm font-semibold ${
+                activeTab === "customers"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
             >
               Customers
-            </TabButton>
+            </button>
 
-            <TabButton
-              active={activeTab === "customer360"}
-              onClick={() => setActiveTab("customer360")}
-            >
-              Customer 360
-            </TabButton>
           </div>
 
-          {/* LEADS */}
-          {activeTab === "leads" && (
-            <section>
-              <div className="mb-4 rounded-xl border bg-white p-4 shadow-sm">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search lead, company, email..."
-                    className="rounded-lg border px-4 py-3 text-sm outline-none focus:border-blue-500"
-                  />
+          {activeTab === "customers" && (
+            <>
+              <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
 
-                  <select
-                    value={sourceFilter}
-                    onChange={(e) => setSourceFilter(e.target.value)}
-                    className="rounded-lg border px-4 py-3 text-sm"
-                  >
-                    {sourceOptions.map((source) => (
-                      <option key={source}>{source}</option>
-                    ))}
-                  </select>
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Total Customers
+                  </p>
 
-                  <select className="rounded-lg border px-4 py-3 text-sm">
-                    <option>All Statuses</option>
-                    <option>New</option>
-                    <option>Contacted</option>
-                    <option>Qualified</option>
-                    <option>Proposal</option>
-                    <option>Won</option>
-                    <option>Lost</option>
-                  </select>
-                </div>
-              </div>
+                  <p className="mt-2 text-2xl font-bold">
+                    {customers.length}
+                  </p>
 
-              <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-                <div className="border-b px-6 py-4">
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Lead List
-                  </h2>
-                  <p className="text-sm text-slate-500">
-                    Manage leads and their current sales stage.
+                  <p className="mt-1 text-xs text-slate-500">
+                    {activeCustomers} active customers
                   </p>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead className="bg-slate-900 text-white">
-                      <tr>
-                        <th className="px-5 py-3 text-left text-xs">Lead</th>
-                        <th className="px-5 py-3 text-left text-xs">Source</th>
-                        <th className="px-5 py-3 text-right text-xs">
-                          Value
-                        </th>
-                        <th className="px-5 py-3 text-left text-xs">
-                          Close Date
-                        </th>
-                        <th className="px-5 py-3 text-center text-xs">
-                          Status
-                        </th>
-                        <th className="px-5 py-3 text-center text-xs">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Total Purchases
+                  </p>
 
-                    <tbody>
-                      {filteredLeads.map((lead) => (
-                        <tr
-                          key={lead.id}
-                          className="border-b hover:bg-slate-50"
-                        >
-                          <td className="px-5 py-4">
-                            <p className="font-semibold text-slate-900">
-                              {lead.name}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {lead.company}
-                            </p>
-                            <p className="text-xs text-slate-400">
-                              {lead.email}
-                            </p>
-                          </td>
+                  <p className="mt-2 text-2xl font-bold text-emerald-600">
+                    {formatCurrency(totalRevenue)}
+                  </p>
 
-                          <td className="px-5 py-4 text-sm text-slate-700">
-                            {lead.source}
-                          </td>
-
-                          <td className="px-5 py-4 text-right font-semibold">
-                            ₹{lead.value.toLocaleString("en-IN")}
-                          </td>
-
-                          <td className="px-5 py-4 text-sm text-slate-600">
-                            {lead.expectedClose}
-                          </td>
-
-                          <td className="px-5 py-4 text-center">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${statusColors[lead.status]}`}
-                            >
-                              {lead.status}
-                            </span>
-                          </td>
-
-                          <td className="px-5 py-4 text-center">
-                            <button
-                              onClick={() => {
-                                setSearch(lead.name);
-                                setActiveTab("customer360");
-                              }}
-                              className="mr-3 text-sm font-semibold text-blue-600"
-                            >
-                              View
-                            </button>
-
-                            <button
-                              onClick={() => setShowFollowUp(true)}
-                              className="text-sm font-semibold text-purple-600"
-                            >
-                              Follow-up
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Customer purchase history
+                  </p>
                 </div>
 
-                {filteredLeads.length === 0 && (
-                  <div className="p-10 text-center text-slate-500">
-                    No leads found.
-                  </div>
-                )}
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Total Orders
+                  </p>
+
+                  <p className="mt-2 text-2xl font-bold">
+                    {totalOrders}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Across all customers
+                  </p>
+                </div>
+
+              </section>
+
+              <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(event.target.value)
+                  }
+                  placeholder="Search customer, GSTIN, company, phone..."
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
+                />
+
+              </section>
+            </>
+          )}
+
+          {activeTab === "leads" && (
+            <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+
+              <div className="border-b border-slate-200 p-5">
+                <h2 className="font-semibold">
+                  Sales Leads
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Manage and track potential customers.
+                </p>
               </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[950px] text-sm">
+
+                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3">Lead</th>
+                      <th className="px-5 py-3">Company</th>
+                      <th className="px-5 py-3">Contact</th>
+                      <th className="px-5 py-3">Source</th>
+                      <th className="px-5 py-3">Value</th>
+                      <th className="px-5 py-3">Status</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100">
+
+                    {leads.map((lead) => (
+                      <tr
+                        key={lead.id}
+                        className="hover:bg-slate-50"
+                      >
+                        <td className="px-5 py-4">
+                          <p className="font-semibold">
+                            {lead.name}
+                          </p>
+
+                          <p className="text-xs text-slate-500">
+                            {lead.id}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          {lead.company}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p>{lead.phone}</p>
+                          <p className="text-xs text-slate-500">
+                            {lead.email}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          {lead.source}
+                        </td>
+
+                        <td className="px-5 py-4 font-semibold">
+                          {formatCurrency(lead.value)}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <select
+                            value={lead.status}
+                            onChange={(event) =>
+                              updateLeadStatus(
+                                lead.id,
+                                event.target.value as LeadStatus
+                              )
+                            }
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
+                          >
+                            <option value="New">New</option>
+                            <option value="Contacted">Contacted</option>
+                            <option value="Qualified">Qualified</option>
+                            <option value="Proposal">Proposal</option>
+                            <option value="Won">Won</option>
+                            <option value="Lost">Lost</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+
+                  </tbody>
+                </table>
+              </div>
+
             </section>
           )}
 
-          {/* PIPELINE */}
           {activeTab === "pipeline" && (
-            <section>
-              <div className="mb-5 rounded-xl border bg-white p-5 shadow-sm">
-                <div className="flex flex-col justify-between gap-3 md:flex-row">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      Sales Pipeline
-                    </h2>
-                    <p className="text-sm text-slate-500">
-                      Drag-and-drop style pipeline stage management.
-                    </p>
-                  </div>
+            <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
-                  <div className="text-sm text-slate-600">
-                    Pipeline:
-                    <strong className="ml-2 text-slate-900">
-                      ₹{totalPipelineValue.toLocaleString("en-IN")}
-                    </strong>
-                  </div>
-                </div>
-              </div>
+              {(
+                [
+                  "New",
+                  "Qualified",
+                  "Proposal",
+                  "Won",
+                  "Lost",
+                ] as LeadStatus[]
+              ).map((status) => {
 
-              <div className="grid gap-4 xl:grid-cols-5">
-                {pipelineStages.map((stage) => {
-                  const stageLeads = leads.filter(
-                    (lead) => lead.status === stage
-                  );
+                const statusLeads = leads.filter(
+                  (lead) => lead.status === status
+                );
 
-                  const stageValue = stageLeads.reduce(
-                    (sum, lead) => sum + lead.value,
-                    0
-                  );
+                return (
+                  <div
+                    key={status}
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="font-semibold">
+                        {status}
+                      </h2>
 
-                  return (
-                    <div
-                      key={stage}
-                      className="min-h-[360px] rounded-xl border bg-slate-100 p-3"
-                    >
-                      <div className="mb-3 flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold text-slate-800">
-                            {stage}
-                          </h3>
-                          <p className="text-xs text-slate-500">
-                            ₹{stageValue.toLocaleString("en-IN")}
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">
+                        {statusLeads.length}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+
+                      {statusLeads.map((lead) => (
+                        <div
+                          key={lead.id}
+                          className="rounded-lg border border-slate-200 p-4"
+                        >
+                          <p className="font-semibold">
+                            {lead.name}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            {lead.company}
+                          </p>
+
+                          <p className="mt-3 font-semibold">
+                            {formatCurrency(lead.value)}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-400">
+                            Close: {lead.expectedClose}
                           </p>
                         </div>
-
-                        <span className="rounded-full bg-white px-2 py-1 text-xs font-bold">
-                          {stageLeads.length}
-                        </span>
-                      </div>
-
-                      <div className="space-y-3">
-                        {stageLeads.map((lead) => (
-                          <div
-                            key={lead.id}
-                            draggable
-                            onDragStart={(event) => {
-                              event.dataTransfer.setData(
-                                "leadId",
-                                lead.id
-                              );
-                            }}
-                            className="cursor-grab rounded-lg border bg-white p-4 shadow-sm active:cursor-grabbing"
-                          >
-                            <div className="mb-2 flex justify-between gap-2">
-                              <p className="font-semibold text-slate-900">
-                                {lead.name}
-                              </p>
-                              <span className="text-xs text-slate-400">
-                                {lead.id}
-                              </span>
-                            </div>
-
-                            <p className="text-xs text-slate-500">
-                              {lead.company}
-                            </p>
-
-                            <p className="mt-3 font-bold text-blue-600">
-                              ₹{lead.value.toLocaleString("en-IN")}
-                            </p>
-
-                            <p className="mt-1 text-xs text-slate-400">
-                              Close: {lead.expectedClose}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          const leadId =
-                            event.dataTransfer.getData("leadId");
-
-                          if (leadId) {
-                            moveLead(leadId, stage);
-                          }
-                        }}
-                        className="mt-4 rounded-lg border-2 border-dashed border-slate-300 p-4 text-center text-xs text-slate-400"
-                      >
-                        Drop lead here
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* CUSTOMER LIST */}
-          {activeTab === "customers" && (
-            <section>
-              <div className="mb-4 rounded-xl border bg-white p-4 shadow-sm">
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search customer by name, company, email or city..."
-                  className="w-full rounded-lg border px-4 py-3 text-sm outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-                <div className="border-b px-6 py-4">
-                  <h2 className="text-lg font-semibold">
-                    Customer List
-                  </h2>
-                  <p className="text-sm text-slate-500">
-                    Customer information and purchase history.
-                  </p>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead className="bg-blue-600 text-white">
-                      <tr>
-                        <th className="px-5 py-3 text-left text-xs">
-                          Customer
-                        </th>
-                        <th className="px-5 py-3 text-left text-xs">
-                          Company
-                        </th>
-                        <th className="px-5 py-3 text-left text-xs">
-                          City
-                        </th>
-                        <th className="px-5 py-3 text-right text-xs">
-                          Orders
-                        </th>
-                        <th className="px-5 py-3 text-right text-xs">
-                          Purchase Value
-                        </th>
-                        <th className="px-5 py-3 text-center text-xs">
-                          Status
-                        </th>
-                        <th className="px-5 py-3 text-center text-xs">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {filteredCustomers.map((customer) => (
-                        <tr
-                          key={customer.id}
-                          className="border-b hover:bg-slate-50"
-                        >
-                          <td className="px-5 py-4">
-                            <p className="font-semibold">
-                              {customer.name}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {customer.email}
-                            </p>
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {customer.company}
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {customer.city}
-                          </td>
-
-                          <td className="px-5 py-4 text-right">
-                            {customer.orders}
-                          </td>
-
-                          <td className="px-5 py-4 text-right font-semibold">
-                            ₹
-                            {customer.totalPurchases.toLocaleString(
-                              "en-IN"
-                            )}
-                          </td>
-
-                          <td className="px-5 py-4 text-center">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs ${
-                                customer.status === "Active"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-slate-100 text-slate-600"
-                              }`}
-                            >
-                              {customer.status}
-                            </span>
-                          </td>
-
-                          <td className="px-5 py-4 text-center">
-                            <button
-                              onClick={() => {
-                                setSelectedCustomer(customer);
-                                setActiveTab("customer360");
-                              }}
-                              className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50"
-                            >
-                              Customer 360
-                            </button>
-                          </td>
-                        </tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+
+                      {statusLeads.length === 0 && (
+                        <p className="py-6 text-center text-xs text-slate-400">
+                          No leads
+                        </p>
+                      )}
+
+                    </div>
+                  </div>
+                );
+              })}
+
             </section>
           )}
 
-          {/* CUSTOMER 360 */}
-          {activeTab === "customer360" && selectedCustomer && (
-            <section>
-              <div className="grid gap-6 lg:grid-cols-3">
-                <div className="rounded-xl border bg-white p-6 shadow-sm">
-                  <div className="mb-5 flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-xl font-bold text-blue-700">
-                      {selectedCustomer.name.charAt(0)}
-                    </div>
+          {activeTab === "customers" && (
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
-                    <div>
-                      <h2 className="text-xl font-bold">
-                        {selectedCustomer.name}
-                      </h2>
-                      <p className="text-sm text-slate-500">
-                        {selectedCustomer.company}
-                      </p>
-                    </div>
-                  </div>
+              <div className="border-b border-slate-200 p-5">
+                <h2 className="font-semibold">
+                  Customer Master
+                </h2>
 
-                  <div className="space-y-4 text-sm">
-                    <InfoRow
-                      label="Phone"
-                      value={selectedCustomer.phone}
-                    />
-                    <InfoRow
-                      label="Email"
-                      value={selectedCustomer.email}
-                    />
-                    <InfoRow
-                      label="City"
-                      value={selectedCustomer.city}
-                    />
-                    <InfoRow
-                      label="Status"
-                      value={selectedCustomer.status}
-                    />
-                  </div>
-                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Showing {filteredCustomers.length} of{" "}
+                  {customers.length} customers
+                </p>
+              </div>
 
-                <div className="lg:col-span-2">
-                  <div className="rounded-xl border bg-white shadow-sm">
-                    <div className="border-b px-6 py-4">
-                      <h2 className="text-lg font-semibold">
-                        Customer 360
-                      </h2>
-                      <p className="text-sm text-slate-500">
-                        Complete customer relationship overview.
-                      </p>
-                    </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1250px] text-sm">
 
-                    <div className="grid grid-cols-2 gap-4 p-6 md:grid-cols-4">
-                      <MiniMetric
-                        title="Orders"
-                        value={String(selectedCustomer.orders)}
-                      />
+                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3">Customer</th>
+                      <th className="px-5 py-3">Contact</th>
+                      <th className="px-5 py-3">GSTIN</th>
+                      <th className="px-5 py-3">Credit Limit</th>
+                      <th className="px-5 py-3">Price Level</th>
+                      <th className="px-5 py-3">Purchases</th>
+                      <th className="px-5 py-3">Orders</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Action</th>
+                    </tr>
+                  </thead>
 
-                      <MiniMetric
-                        title="Purchase Value"
-                        value={`₹${selectedCustomer.totalPurchases.toLocaleString(
-                          "en-IN"
-                        )}`}
-                      />
+                  <tbody className="divide-y divide-slate-100">
 
-                      <MiniMetric
-                        title="Avg Order"
-                        value={`₹${Math.round(
-                          selectedCustomer.totalPurchases /
-                            selectedCustomer.orders
-                        ).toLocaleString("en-IN")}`}
-                      />
+                                      {filteredCustomers.map((customer) => (
+                      <tr
+                        key={customer.id}
+                        className="hover:bg-slate-50"
+                      >
+                        <td className="px-5 py-4">
+                          <p className="font-semibold">
+                            {customer.name}
+                          </p>
 
-                      <MiniMetric
-                        title="Customer Since"
-                        value="2025"
-                      />
-                    </div>
+                          <p className="text-xs text-slate-500">
+                            {customer.company}
+                          </p>
+                        </td>
 
-                    <div className="grid gap-4 border-t p-6 md:grid-cols-2">
-                      <div className="rounded-lg bg-blue-50 p-5">
-                        <h3 className="font-semibold text-blue-900">
-                          AI Customer Insight
-                        </h3>
-                        <p className="mt-2 text-sm leading-6 text-blue-800">
-                          {selectedCustomer.name} is an active customer
-                          with consistent purchase activity. The customer
-                          may be a good candidate for repeat-order and
-                          cross-sell campaigns.
-                        </p>
-                      </div>
+                        <td className="px-5 py-4">
+                          <p>{customer.phone}</p>
 
-                      <div className="rounded-lg bg-slate-50 p-5">
-                        <h3 className="font-semibold text-slate-900">
-                          Recommended Action
-                        </h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          Schedule a follow-up and review recent purchase
-                          history before contacting the customer.
-                        </p>
+                          <p className="text-xs text-slate-500">
+                            {customer.email}
+                          </p>
 
-                        <button
-                          onClick={() => setShowFollowUp(true)}
-                          className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                          <p className="text-xs text-slate-400">
+                            {customer.city}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4 font-mono text-xs">
+                          {customer.gstin || "Not Available"}
+                        </td>
+
+                        <td className="px-5 py-4 font-semibold">
+                          {formatCurrency(customer.creditLimit)}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                            {customer.priceLevel}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4 font-semibold">
+                          {formatCurrency(customer.totalPurchases)}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          {customer.orders}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              customer.status === "Active"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {customer.status}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <button
+                            onClick={() => setSelectedCustomer(customer)}
+                            className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50"
+                          >
+                            Customer 360
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {filteredCustomers.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={9}
+                          className="px-5 py-12 text-center text-sm text-slate-500"
                         >
-                          Schedule Follow-up
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* ACTIVITY TIMELINE */}
-                    <div className="border-t p-6">
-                      <h3 className="mb-5 font-semibold">
-                        Activity Timeline
-                      </h3>
-
-                      <div className="space-y-5">
-                        <TimelineItem
-                          title="Purchase order completed"
-                          date="24 Aug 2026"
-                          description="Customer purchase successfully processed."
-                        />
-
-                        <TimelineItem
-                          title="Customer contacted"
-                          date="21 Aug 2026"
-                          description="Sales team followed up regarding new products."
-                        />
-
-                        <TimelineItem
-                          title="Previous order delivered"
-                          date="14 Aug 2026"
-                          description="Order delivered successfully."
-                        />
-
-                        <TimelineItem
-                          title="Customer created"
-                          date="12 Jan 2025"
-                          description="Customer profile added to StockFlow."
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                          No customers found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </section>
           )}
+
         </div>
       </div>
 
-      {/* CREATE LEAD MODAL */}
-      {showLeadForm && (
-        <Modal
-          title="Create New Lead"
-          onClose={() => setShowLeadForm(false)}
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <Input
-              label="Lead Name"
-              value={leadForm.name}
-              onChange={(value) =>
-                setLeadForm({ ...leadForm, name: value })
-              }
-              placeholder="Enter name"
-            />
+      {/* Add Customer Modal */}
+      {showAddCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
 
-            <Input
-              label="Company"
-              value={leadForm.company}
-              onChange={(value) =>
-                setLeadForm({ ...leadForm, company: value })
-              }
-              placeholder="Company name"
-            />
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <h2 className="text-xl font-bold">
+                  Add Customer
+                </h2>
 
-            <Input
-              label="Phone"
-              value={leadForm.phone}
-              onChange={(value) =>
-                setLeadForm({ ...leadForm, phone: value })
-              }
-              placeholder="+91..."
-            />
+                <p className="mt-1 text-sm text-slate-500">
+                  Add customer master information.
+                </p>
+              </div>
 
-            <Input
-              label="Email"
-              value={leadForm.email}
-              onChange={(value) =>
-                setLeadForm({ ...leadForm, email: value })
-              }
-              placeholder="email@example.com"
-            />
-
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Lead Source
-              </label>
-
-              <select
-                value={leadForm.source}
-                onChange={(e) =>
-                  setLeadForm({
-                    ...leadForm,
-                    source: e.target.value,
-                  })
-                }
-                className="w-full rounded-lg border px-3 py-2.5 text-sm"
-              >
-                {sourceOptions
-                  .filter((item) => item !== "All Sources")
-                  .map((source) => (
-                    <option key={source}>{source}</option>
-                  ))}
-              </select>
-            </div>
-
-            <Input
-              label="Expected Value"
-              value={leadForm.value}
-              onChange={(value) =>
-                setLeadForm({ ...leadForm, value })
-              }
-              placeholder="₹"
-              type="number"
-            />
-
-            <Input
-              label="Expected Close Date"
-              value={leadForm.expectedClose}
-              onChange={(value) =>
-                setLeadForm({
-                  ...leadForm,
-                  expectedClose: value,
-                })
-              }
-              type="date"
-            />
-          </div>
-
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              onClick={() => setShowLeadForm(false)}
-              className="rounded-lg border px-5 py-2.5 text-sm font-semibold"
-            >
-              Cancel
-            </button>
-
-            <button
-              onClick={createLead}
-              className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white"
-            >
-              Create Lead
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* FOLLOW-UP MODAL */}
-      {showFollowUp && (
-        <Modal
-          title="Schedule Follow-up"
-          onClose={() => setShowFollowUp(false)}
-        >
-          <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                label="Date"
-                type="date"
-                value={followUp.date}
-                onChange={(value) =>
-                  setFollowUp({
-                    ...followUp,
-                    date: value,
-                  })
-                }
-              />
-
-              <Input
-                label="Time"
-                type="time"
-                value={followUp.time}
-                onChange={(value) =>
-                  setFollowUp({
-                    ...followUp,
-                    time: value,
-                  })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Reminder / Activity Note
-              </label>
-
-              <textarea
-                value={followUp.note}
-                onChange={(e) =>
-                  setFollowUp({
-                    ...followUp,
-                    note: e.target.value,
-                  })
-                }
-                placeholder="Enter follow-up notes..."
-                rows={4}
-                className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3">
               <button
-                onClick={() => setShowFollowUp(false)}
-                className="rounded-lg border px-5 py-2.5 text-sm font-semibold"
+                onClick={() => setShowAddCustomer(false)}
+                className="rounded-lg border px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Customer Name
+                </label>
+
+                <input
+                  value={newCustomer.name}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="Customer name"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Company
+                </label>
+
+                <input
+                  value={newCustomer.company}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      company: e.target.value,
+                    })
+                  }
+                  placeholder="Company name"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Phone
+                </label>
+
+                <input
+                  value={newCustomer.phone}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      phone: e.target.value,
+                    })
+                  }
+                  placeholder="+91..."
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Email
+                </label>
+
+                <input
+                  value={newCustomer.email}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      email: e.target.value,
+                    })
+                  }
+                  placeholder="customer@example.com"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  City
+                </label>
+
+                <input
+                  value={newCustomer.city}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      city: e.target.value,
+                    })
+                  }
+                  placeholder="City"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  GSTIN
+                </label>
+
+                <input
+                  value={newCustomer.gstin}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      gstin: e.target.value.toUpperCase(),
+                    })
+                  }
+                  placeholder="GSTIN"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Credit Limit
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  value={newCustomer.creditLimit}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      creditLimit: e.target.value,
+                    })
+                  }
+                  placeholder="₹"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Price Level
+                </label>
+
+                <select
+                  value={newCustomer.priceLevel}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      priceLevel: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                >
+                  <option value="Standard">Standard</option>
+                  <option value="Retail">Retail</option>
+                  <option value="Wholesale">Wholesale</option>
+                  <option value="Premium">Premium</option>
+                </select>
+              </div>
+
+            </div>
+
+            <div className="flex justify-end gap-3 border-t p-5">
+
+              <button
+                onClick={() => setShowAddCustomer(false)}
+                className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-semibold"
               >
                 Cancel
               </button>
 
               <button
-                onClick={scheduleFollowUp}
-                className="rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white"
+                onClick={handleAddCustomer}
+                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
               >
-                Schedule Reminder
+                Save Customer
+              </button>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Customer 360 Modal */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <h2 className="text-xl font-bold">
+                  {selectedCustomer.name}
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {selectedCustomer.company}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedCustomer(null)}
+                className="rounded-lg border px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Close
               </button>
             </div>
+
+            <div className="space-y-5 p-5">
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">
+                    Phone
+                  </p>
+                  <p className="mt-1 font-semibold">
+                    {selectedCustomer.phone}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">
+                    Email
+                  </p>
+                  <p className="mt-1 font-semibold">
+                    {selectedCustomer.email}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">
+                    City
+                  </p>
+                  <p className="mt-1 font-semibold">
+                    {selectedCustomer.city}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">
+                    GSTIN
+                  </p>
+                  <p className="mt-1 font-mono font-semibold">
+                    {selectedCustomer.gstin || "Not Available"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">
+                    Credit Limit
+                  </p>
+                  <p className="mt-1 font-semibold">
+                    {formatCurrency(selectedCustomer.creditLimit)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">
+                    Price Level
+                  </p>
+                  <p className="mt-1 font-semibold">
+                    {selectedCustomer.priceLevel}
+                  </p>
+                </div>
+
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-lg font-semibold">
+                  Purchase History
+                </h3>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <p className="text-xs text-slate-400">
+                      Total Orders
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold">
+                      {selectedCustomer.orders}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <p className="text-xs text-slate-400">
+                      Total Purchases
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold text-emerald-600">
+                      {formatCurrency(
+                        selectedCustomer.totalPurchases
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <p className="text-xs text-slate-400">
+                      Average Order
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold">
+                      {formatCurrency(
+                        selectedCustomer.orders > 0
+                          ? Math.round(
+                              selectedCustomer.totalPurchases /
+                                selectedCustomer.orders
+                            )
+                          : 0
+                      )}
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-blue-50 p-5">
+                <h3 className="font-semibold text-blue-900">
+                  Customer Summary
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-blue-800">
+                  {selectedCustomer.name} has{" "}
+                  {selectedCustomer.orders} recorded orders with total
+                  purchases of{" "}
+                  {formatCurrency(selectedCustomer.totalPurchases)}.
+                  The assigned price level is{" "}
+                  {selectedCustomer.priceLevel}, with a credit limit of{" "}
+                  {formatCurrency(selectedCustomer.creditLimit)}.
+                </p>
+              </div>
+
+            </div>
           </div>
-        </Modal>
+        </div>
       )}
     </PageLayout>
-  );
-}
-
-/* ================= COMPONENTS ================= */
-
-function KpiCard({
-  title,
-  value,
-  subtitle,
-  blue = false,
-  yellow = false,
-  green = false,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  blue?: boolean;
-  yellow?: boolean;
-  green?: boolean;
-}) {
-  const valueClass = green
-    ? "text-green-600"
-    : yellow
-    ? "text-yellow-600"
-    : blue
-    ? "text-blue-600"
-    : "text-slate-900";
-
-  return (
-    <div className="rounded-xl border bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{title}</p>
-
-      <p className={`mt-2 text-2xl font-bold ${valueClass}`}>
-        {value}
-      </p>
-
-      <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
-    </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${
-        active
-          ? "bg-slate-900 text-white"
-          : "text-slate-600 hover:bg-slate-100"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Input({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  type?: string;
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">
-        {label}
-      </label>
-
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-      />
-    </div>
-  );
-}
-
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 className="text-xl font-bold text-slate-900">{title}</h2>
-
-          <button
-            onClick={onClose}
-            className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-100"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="p-6">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex justify-between gap-4 border-b pb-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-medium text-slate-900">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function MiniMetric({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-4">
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="mt-1 font-bold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function TimelineItem({
-  title,
-  date,
-  description,
-}: {
-  title: string;
-  date: string;
-  description: string;
-}) {
-  return (
-    <div className="flex gap-4">
-      <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-blue-600" />
-
-      <div className="flex-1 border-b pb-4">
-        <div className="flex flex-col justify-between gap-1 md:flex-row">
-          <h4 className="font-semibold text-slate-900">{title}</h4>
-          <span className="text-xs text-slate-400">{date}</span>
-        </div>
-
-        <p className="mt-1 text-sm text-slate-500">{description}</p>
-      </div>
-    </div>
   );
 }

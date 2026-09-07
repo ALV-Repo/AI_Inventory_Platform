@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type InvoiceStatus = "Paid" | "Pending" | "Overdue";
 
@@ -9,6 +9,9 @@ type Invoice = {
   invoiceNumber: string;
   customer: string;
   phone: string;
+  gstin?: string;
+  placeOfSupply?: string;
+  hsnSac?: string;
   date: string;
   dueDate: string;
   items: number;
@@ -16,14 +19,21 @@ type Invoice = {
   gst: number;
   status: InvoiceStatus;
   paymentMode: string;
+  irn?: string;
+  irnStatus?: "Generated" | "Not Generated";
 };
 
-const invoices: Invoice[] = [
+const initialInvoices: Invoice[] = [
   {
     id: "1",
     invoiceNumber: "INV-2026-041",
     customer: "Apex Retail Solutions",
     phone: "+91 98765 43210",
+    gstin: "29ABCDE1234F1Z5",
+placeOfSupply: "Karnataka",
+hsnSac: "8471",
+irn: "",
+irnStatus: "Not Generated",
     date: "21 Aug 2026",
     dueDate: "28 Aug 2026",
     items: 4,
@@ -95,6 +105,25 @@ export default function InvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] =
     useState<Invoice | null>(null);
 
+    const [invoices, setInvoices] = useState<Invoice[]>(() => {
+  if (typeof window === "undefined") {
+    return initialInvoices;
+  }
+
+  const saved = localStorage.getItem("stockflow-invoices");
+
+  return saved ? JSON.parse(saved) : initialInvoices;
+});
+
+useEffect(() => {
+  localStorage.setItem("stockflow-invoices", JSON.stringify(invoices));
+}, [invoices]);
+
+const [invoicePrefix, setInvoicePrefix] = useState("INV-");
+const [invoiceFinancialYear, setInvoiceFinancialYear] = useState("2026");
+const [nextInvoiceNumber, setNextInvoiceNumber] = useState("042");
+const [showNumberingSettings, setShowNumberingSettings] = useState(false);
+
   const filteredInvoices = useMemo(() => {
     const query = search.toLowerCase().trim();
 
@@ -125,7 +154,31 @@ export default function InvoicesPage() {
     .filter((invoice) => invoice.status !== "Paid")
     .reduce((sum, invoice) => sum + invoice.amount, 0);
 
+    const handleGenerateIrn = () => {
+  if (!selectedInvoice) return;
+
+  const mockIrn =
+    `${crypto.randomUUID().replace(/-/g, "")}${crypto
+      .randomUUID()
+      .replace(/-/g, "")}`;
+
+  const updatedInvoice = {
+  ...selectedInvoice,
+  irn: mockIrn,
+  irnStatus: "Generated" as const,
+};
+
+setSelectedInvoice(updatedInvoice);
+
+setInvoices((currentInvoices) =>
+  currentInvoices.map((invoice) =>
+    invoice.id === selectedInvoice.id ? updatedInvoice : invoice
+  )
+);
+};
+
   return (
+  <>
     <main className="min-h-screen bg-slate-50 p-6 text-slate-900">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
@@ -138,12 +191,21 @@ export default function InvoicesPage() {
             </p>
           </div>
 
-          <button
-            onClick={() => window.print()}
-            className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-          >
-            Print / PDF
-          </button>
+          <div className="flex gap-2">
+  <button
+    onClick={() => setShowNumberingSettings(true)}
+    className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+  >
+    ⚙ Numbering Series
+  </button>
+
+  <button
+    onClick={() => window.print()}
+    className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+  >
+    Print / PDF
+  </button>
+</div>
         </div>
 
         {/* Summary cards */}
@@ -254,6 +316,7 @@ export default function InvoicesPage() {
                   <th className="px-5 py-3">Amount</th>
                   <th className="px-5 py-3">GST</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">IRN Status</th>
                   <th className="px-5 py-3">Action</th>
                 </tr>
               </thead>
@@ -317,6 +380,18 @@ export default function InvoicesPage() {
                     </td>
 
                     <td className="px-5 py-4">
+  <span
+    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+      invoice.irnStatus === "Generated"
+        ? "bg-emerald-100 text-emerald-700"
+        : "bg-orange-100 text-orange-700"
+    }`}
+  >
+    {invoice.irnStatus ?? "Not Generated"}
+  </span>
+</td>
+
+                    <td className="px-5 py-4">
                       <button
                         onClick={() => setSelectedInvoice(invoice)}
                         className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
@@ -330,7 +405,7 @@ export default function InvoicesPage() {
                 {filteredInvoices.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-5 py-12 text-center text-sm text-slate-500"
                     >
                       No invoices found.
@@ -375,8 +450,8 @@ export default function InvoicesPage() {
 
       {/* Invoice modal */}
       {selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="invoice-print-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="invoice-print-modal max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b p-6">
               <div>
                 <h2 className="text-xl font-bold">
@@ -425,6 +500,27 @@ export default function InvoicesPage() {
                   <p className="mt-1 text-sm">
                     Due: {selectedInvoice.dueDate}
                   </p>
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+  <p className="text-xs uppercase text-slate-400">
+    E-Invoice / IRN Status
+  </p>
+
+  <p
+    className={`mt-1 font-semibold ${
+      selectedInvoice.irnStatus === "Generated"
+        ? "text-emerald-600"
+        : "text-orange-600"
+    }`}
+  >
+    {selectedInvoice.irnStatus ?? "Not Generated"}
+  </p>
+
+  {selectedInvoice.irn && (
+    <p className="mt-2 break-all text-xs text-slate-500">
+      IRN: {selectedInvoice.irn}
+    </p>
+  )}
+</div>
                 </div>
               </div>
 
@@ -606,48 +702,209 @@ export default function InvoicesPage() {
               </div>
 
               {/* Modal Actions */}
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  onClick={() => setSelectedInvoice(null)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-                >
-                  Close
-                </button>
+<div className="mt-6 flex flex-wrap justify-end gap-3">
+  {selectedInvoice.irnStatus !== "Generated" && (
+    <button
+      onClick={handleGenerateIrn}
+      className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+    >
+      Generate IRN
+    </button>
+  )}
 
-                <button
-                  onClick={() => window.print()}
-                  className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                >
-                  Print Invoice
-                </button>
-              </div>
+  <button
+    onClick={() => setSelectedInvoice(null)}
+    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+  >
+    Close
+  </button>
+
+  <button
+    onClick={() => window.print()}
+    className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+  >
+    Print Invoice
+  </button>
+</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Print styles */}
+          {/* Print styles */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: A4;
+            margin: 8mm;
+          }
+
+          html,
           body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            height: auto !important;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          .invoice-print-overlay,
+          .invoice-print-overlay * {
+            visibility: visible !important;
+          }
+
+          .invoice-print-overlay {
+            position: absolute !important;
+            inset: 0 !important;
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
             background: white !important;
           }
 
-          button,
-          input,
-          select {
+          .invoice-print-modal {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            max-width: none !important;
+            height: auto !important;
+            max-height: none !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            zoom: 0.68 !important;
+            width: 100% !important;
+          }
+
+          .invoice-print-modal button {
             display: none !important;
           }
 
-          main {
-            padding: 0 !important;
-          }
-
-          section {
-            box-shadow: none !important;
+          .invoice-print-modal * {
+            break-inside: avoid !important;
           }
         }
-      `}</style>
+      `}</style>  
     </main>
+
+    {showNumberingSettings && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">
+            Invoice Numbering Series
+          </h2>
+          <p className="text-xs text-slate-500">
+            Configure the invoice numbering format.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowNumberingSettings(false)}
+          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="space-y-4 p-5">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Prefix
+          </label>
+          <input
+            type="text"
+            value={invoicePrefix}
+onChange={(e) => setInvoicePrefix(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Financial Year
+          </label>
+          <input
+            type="text"
+            value={invoiceFinancialYear}
+onChange={(e) => setInvoiceFinancialYear(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Next Number
+          </label>
+          <input
+            type="text"
+            value={nextInvoiceNumber}
+            onChange={(e) => {
+  const value = e.target.value;
+  setNextInvoiceNumber(value);
+}}
+            min={1}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+  Preview:
+  <span className="ml-2 font-semibold text-slate-900">
+    {invoicePrefix}
+    {invoiceFinancialYear}-
+    {String(Number(nextInvoiceNumber) || 0).padStart(3, "0")}
+  </span>
+</div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setShowNumberingSettings(false)}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+  const newInvoiceNumber = `${invoicePrefix}${invoiceFinancialYear}-${String(
+    Number(nextInvoiceNumber) || 0
+  ).padStart(3, "0")}`;
+
+  setInvoices((currentInvoices) =>
+    currentInvoices.map((invoice) =>
+      invoice.id === "1"
+        ? { ...invoice, invoiceNumber: newInvoiceNumber }
+        : invoice
+    )
+  );
+
+  setShowNumberingSettings(false);
+}}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Save Series
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+   </>
   );
 }

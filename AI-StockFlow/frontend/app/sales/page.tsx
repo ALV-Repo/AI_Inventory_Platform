@@ -30,6 +30,34 @@ type CartItem = Product & {
   quantity: number;
 };
 
+type CreditCustomer = {
+  name: string;
+  creditLimit: number;
+  outstanding: number;
+  overdue: boolean;
+};
+
+const creditCustomers: CreditCustomer[] = [
+  {
+    name: "Apex Retail Solutions",
+    creditLimit: 100000,
+    outstanding: 82000,
+    overdue: false,
+  },
+  {
+    name: "Green Valley Stores",
+    creditLimit: 75000,
+    outstanding: 28000,
+    overdue: false,
+  },
+  {
+    name: "Metro Office Supplies",
+    creditLimit: 50000,
+    outstanding: 47000,
+    overdue: true,
+  },
+];
+
 type SalesSummary = {
   revenue: number;
   orders: number;
@@ -293,6 +321,10 @@ const [syncingQueue, setSyncingQueue] =
   const [customer, setCustomer] =
     useState("");
 
+    const selectedCreditCustomer = creditCustomers.find(
+  (item) => item.name.toLowerCase() === customer.trim().toLowerCase()
+);
+
     const [discount, setDiscount] =
   useState(0);
 
@@ -305,14 +337,46 @@ const [syncingQueue, setSyncingQueue] =
     setPaymentMethod,
   ] = useState("Cash");
 
+  const [userRole, setUserRole] = useState<"Cashier" | "Manager">("Cashier");
+  const [creditOverride, setCreditOverride] = useState(false);
+
   /* =========================================================
      SALE UI STATE
      ========================================================= */
 
   const [
-    showSuccess,
-    setShowSuccess,
-  ] = useState(false);
+  showSuccess,
+  setShowSuccess,
+] = useState(false);
+
+const [
+  offlineSaleQueued,
+  setOfflineSaleQueued,
+] = useState(false);
+
+const [
+  showReceipt,
+  setShowReceipt,
+] = useState(false);
+
+const [
+  lastReceipt,
+  setLastReceipt,
+] = useState<{
+  receiptNumber: string;
+  date: string;
+  customer: string;
+  paymentMethod: string;
+  items: {
+    name: string;
+    quantity: number;
+    price: number;
+  }[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+} | null>(null);
 
   const [
     processing,
@@ -451,10 +515,11 @@ async function syncOfflineSales() {
   setSyncingQueue(false);
 
   if (remaining.length === 0) {
-    setShowSuccess(true);
-    await loadProducts();
-    await loadTodaySales();
-  }
+  setOfflineSaleQueued(false);
+  setShowSuccess(true);
+  await loadProducts();
+  await loadTodaySales();
+}
 }
 
   /* =========================================================
@@ -869,6 +934,33 @@ const total = useMemo(() => {
       return;
     }
 
+        if (
+      selectedCreditCustomer &&
+      paymentMethod === "Credit" &&
+      selectedCreditCustomer.outstanding + total >
+        selectedCreditCustomer.creditLimit &&
+      !creditOverride
+    ) {
+      setSaleError(
+        `Credit limit exceeded for ${selectedCreditCustomer.name}. Available credit: ₹${(
+          selectedCreditCustomer.creditLimit -
+          selectedCreditCustomer.outstanding
+        ).toLocaleString()}`
+      );
+      return;
+    }
+
+    if (
+  selectedCreditCustomer?.overdue &&
+  paymentMethod === "Credit" &&
+  !creditOverride
+) {
+      setSaleError(
+        `${selectedCreditCustomer.name} has overdue payments. Credit sale is blocked.`
+      );
+      return;
+    }
+
     setProcessing(true);
 
 try {
@@ -903,12 +995,36 @@ try {
       offlineSale,
     ]);
 
-    setCart([]);
-    setCustomer("");
-    setPaymentMethod("Cash");
-    setShowSuccess(true);
+    setLastReceipt({
+  receiptNumber: `POS-${Date.now()}`,
+  date: new Date().toLocaleString("en-IN"),
+  customer: customer || "Walk-in Customer",
+  paymentMethod,
+  items: cart.map((item) => ({
+    name: item.name,
+    quantity: item.quantity,
+    price: item.price,
+  })),
 
-    return;
+  subtotal,
+  discount: discountAmount,
+  tax: taxAmount,
+  total,
+});
+
+setCart([]);
+
+setCustomer("");
+
+setPaymentMethod("Cash");
+
+setOfflineSaleQueued(true);
+setShowSuccess(true);
+setSaleError(null);
+
+setShowReceipt(true);
+
+return;
   }
       /*
        * Backend expects:
@@ -967,13 +1083,35 @@ try {
        * confirms successful creation.
        */
 
-      setCart([]);
+      setLastReceipt({
+  receiptNumber:
+    typeof createdSale?.id === "string"
+      ? createdSale.id
+      : `POS-${Date.now()}`,
+  date: new Date().toLocaleString("en-IN"),
+  customer: customer || "Walk-in Customer",
+  paymentMethod,
+  items: cart.map((item) => ({
+    name: item.name,
+    quantity: item.quantity,
+    price: item.price,
+  })),
+  subtotal,
+  discount: discountAmount,
+  tax: taxAmount,
+  total,
+});
 
-      setCustomer("");
+setCart([]);
 
-      setPaymentMethod("Cash");
+setCustomer("");
 
-      setShowSuccess(true);
+setPaymentMethod("Cash");
+
+setOfflineSaleQueued(false);
+setShowSuccess(true);
+
+setShowReceipt(true);
 
       /*
        * Refresh inventory so stock shown
@@ -1006,6 +1144,13 @@ try {
     /* =========================================================
      PRODUCT INITIAL
      ========================================================= */
+  function printReceipt() {
+  if (!lastReceipt) {
+    return;
+  }
+
+  window.print();
+}
 
   function productInitial(name: string) {
     return (
@@ -1036,19 +1181,22 @@ try {
     }
 
     if (showSuccess) {
-      return (
-        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-          <div className="font-semibold">
-            Sale completed successfully.
-          </div>
+  return (
+    <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+      <div className="font-semibold">
+        {offlineSaleQueued
+          ? "Sale queued for sync."
+          : "Sale completed successfully."}
+      </div>
 
-          <div className="mt-1">
-            Inventory and today&apos;s sales have
-            been updated.
-          </div>
-        </div>
-      );
-    }
+      <div className="mt-1">
+        {offlineSaleQueued
+          ? "The sale is saved on this device and will sync automatically when internet returns."
+          : "Inventory and today's sales have been updated."}
+      </div>
+    </div>
+  );
+}
 
     if (summaryError) {
       return (
@@ -1619,6 +1767,73 @@ try {
 
                 </div>
 
+                <div className="mt-2 text-[9px]">
+                  {selectedCreditCustomer ? (
+                    selectedCreditCustomer.overdue ? (
+                      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-700">
+                        <span className="font-semibold">
+                          Credit Block:
+                        </span>{" "}
+                        Customer has overdue payments.
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700">
+                        <span className="font-semibold">
+                          Available Credit:
+                        </span>{" "}
+                        ₹
+                        {(
+                          selectedCreditCustomer.creditLimit -
+                          selectedCreditCustomer.outstanding
+                        ).toLocaleString()}
+                      </div>
+                    )
+                  ) : null}
+                </div>
+
+                {selectedCreditCustomer &&
+  (
+    selectedCreditCustomer.outstanding + total >
+      selectedCreditCustomer.creditLimit ||
+    selectedCreditCustomer.overdue
+  ) &&
+  paymentMethod === "Credit" &&
+  userRole === "Manager" && (
+    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[9px] text-amber-700">
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={creditOverride}
+          onChange={(event) =>
+            setCreditOverride(event.target.checked)
+          }
+        />
+        <span>
+          Manager Override — allow sale above credit limit
+        </span>
+      </label>
+    </div>
+  )}
+
+                <div className="mt-3">
+  <label className="mb-1 block text-[9px] font-medium text-slate-600">
+    User Role
+  </label>
+
+  <select
+    value={userRole}
+    onChange={(event) =>
+      setUserRole(
+        event.target.value as "Cashier" | "Manager"
+      )
+    }
+    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+  >
+    <option value="Cashier">Cashier</option>
+    <option value="Manager">Manager</option>
+  </select>
+</div>
+
                 <div className="mt-3">
 
                   <label className="mb-1 block text-[9px] font-medium text-slate-600">
@@ -1672,6 +1887,10 @@ try {
                     <option value="Bank Transfer">
                       Bank Transfer
                     </option>
+
+                    <option value="Credit">
+  Credit
+</option>
                   </select>
 
                 </div>
@@ -1736,8 +1955,183 @@ try {
 
           </div>
 
-        </main>
+                </main>
       </div>
+
+      {showReceipt && lastReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="receipt-print-modal w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Sales Receipt
+                </h2>
+
+                <button
+                  type="button"
+                  onClick={() => setShowReceipt(false)}
+                  className="text-xs text-slate-500 hover:text-slate-900"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="receipt-print-area p-5">
+              <div className="text-center">
+                <div className="text-lg font-bold text-slate-900">
+                  AI-StockFlow
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Sales Receipt
+                </div>
+              </div>
+
+              <div className="mt-4 border-y border-dashed border-slate-300 py-3 text-xs">
+                <div className="flex justify-between">
+                  <span>Receipt No.</span>
+                  <span className="font-medium">
+                    {lastReceipt.receiptNumber}
+                  </span>
+                </div>
+
+                <div className="mt-1 flex justify-between">
+                  <span>Date</span>
+                  <span>{lastReceipt.date}</span>
+                </div>
+
+                <div className="mt-1 flex justify-between">
+                  <span>Customer</span>
+                  <span>{lastReceipt.customer}</span>
+                </div>
+
+                <div className="mt-1 flex justify-between">
+                  <span>Payment</span>
+                  <span>{lastReceipt.paymentMethod}</span>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                {lastReceipt.items.map((item, index) => (
+                  <div
+                    key={`${item.name}-${index}`}
+                    className="flex justify-between gap-3 py-1 text-xs"
+                  >
+                    <span>
+                      {item.name} × {item.quantity}
+                    </span>
+
+                    <span className="font-medium">
+                      {formatCurrency(
+                        item.price * item.quantity
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 border-t border-slate-200 pt-3 text-xs">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>
+                    {formatCurrency(lastReceipt.subtotal)}
+                  </span>
+                </div>
+
+                <div className="mt-1 flex justify-between">
+                  <span>Discount</span>
+                  <span>
+                    -{formatCurrency(lastReceipt.discount)}
+                  </span>
+                </div>
+
+                <div className="mt-1 flex justify-between">
+                  <span>GST ({TAX_RATE}%)</span>
+                  <span>
+                    {formatCurrency(lastReceipt.tax)}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex justify-between border-t border-slate-200 pt-3 text-sm font-bold">
+                  <span>Total</span>
+                  <span>
+                    {formatCurrency(lastReceipt.total)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={printReceipt}
+                className="flex-1 rounded-md bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+              >
+                Print Receipt
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowReceipt(false)}
+                className="rounded-md border border-slate-200 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+        <style jsx global>{`
+      @media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  body {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .receipt-print-modal,
+  .receipt-print-modal * {
+    visibility: visible !important;
+  }
+
+  .receipt-print-modal {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .receipt-print-modal > div:first-child,
+  .receipt-print-modal > div:last-child {
+    display: none !important;
+  }
+
+  .receipt-print-area {
+    width: 100% !important;
+    padding: 30px !important;
+  }
+}
+    `}</style>
+
     </PageLayout>
   );
 }
