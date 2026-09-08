@@ -100,7 +100,7 @@ async def unhandled_exception(request: Request, exc: Exception):
 # Dev A routers
 from app.routers import ai, auth, dashboard, inventory, purchases, sales, finance
 # Dev C routers
-from app.routers import suppliers, crm, hrm, warehouse
+from app.routers import suppliers, crm, hrm, warehouse, audit
 
 for router in (
     auth.router,
@@ -114,6 +114,7 @@ for router in (
     crm.router,          # FR-CRM-01 to FR-CRM-04
     hrm.router,          # FR-HRM-01 to FR-HRM-04
     warehouse.router,    # FR-WHS-01 to FR-WHS-04
+    audit.router,        # NFR-08 audit trail
 ):
     app.include_router(router, prefix=settings.API_V1)
 

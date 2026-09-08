@@ -1,698 +1,212 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import PageLayout from "../../components/layout/PageLayout";
+import { api, inr } from "../../lib/api";
 
-type Transaction = {
-  id: string;
-  date: string;
-  description: string;
-  category: string;
-  type: "Income" | "Expense";
-  amount: number;
-  status: "Completed" | "Pending";
+type PL = {
+  period: { from: string; to: string };
+  revenue: number;
+  gst: number;
+  net_sales: number;
+  cogs: number;
+  gross_profit: number;
+  expenses: number;
+  net_profit: number;
 };
 
-const transactions: Transaction[] = [
-  {
-    id: "TXN-1001",
-    date: "15/08/2026",
-    description: "Customer Payment - Wireless Headphones",
-    category: "Sales",
-    type: "Income",
-    amount: 125000,
-    status: "Completed",
-  },
-  {
-    id: "TXN-1002",
-    date: "14/08/2026",
-    description: "Supplier Payment - Tech Supplies India",
-    category: "Purchases",
-    type: "Expense",
-    amount: 87500,
-    status: "Completed",
-  },
-  {
-    id: "TXN-1003",
-    date: "13/08/2026",
-    description: "Customer Payment - Gaming Keyboard",
-    category: "Sales",
-    type: "Income",
-    amount: 156000,
-    status: "Completed",
-  },
-  {
-    id: "TXN-1004",
-    date: "12/08/2026",
-    description: "Warehouse Operating Expense",
-    category: "Operations",
-    type: "Expense",
-    amount: 32500,
-    status: "Completed",
-  },
-  {
-    id: "TXN-1005",
-    date: "11/08/2026",
-    description: "Customer Payment - Bluetooth Speaker",
-    category: "Sales",
-    type: "Income",
-    amount: 98500,
-    status: "Pending",
-  },
-  {
-    id: "TXN-1006",
-    date: "10/08/2026",
-    description: "Employee Payroll",
-    category: "HR",
-    type: "Expense",
-    amount: 72500,
-    status: "Completed",
-  },
-];
+type CashFlow = {
+  inflows: number;
+  payments: number;
+  expenses: number;
+  total_outflows: number;
+  net_cash_flow: number;
+};
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
+type Aging = {
+  accounts_receivable: Record<string, number>;
+  accounts_payable: Record<string, number>;
+  ar_total: number;
+  ap_total: number;
+};
 
 export default function FinancePage() {
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All Types");
-  const [statusFilter, setStatusFilter] = useState("All Status");
-  const [categoryFilter, setCategoryFilter] =
-    useState("All Categories");
+  const [pl, setPL] = useState<PL | null>(null);
+  const [cashflow, setCashflow] = useState<CashFlow | null>(null);
+  const [aging, setAging] = useState<Aging | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [days, setDays] = useState(30);
 
-  const totalIncome = transactions
-    .filter((item) => item.type === "Income")
-    .reduce((sum, item) => sum + item.amount, 0);
+  useEffect(() => { load(); }, [days]);
 
-  const totalExpense = transactions
-    .filter((item) => item.type === "Expense")
-    .reduce((sum, item) => sum + item.amount, 0);
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const today = new Date();
+      const from = new Date(today);
+      from.setDate(from.getDate() - days);
+      const dateFrom = from.toISOString().split("T")[0];
+      const dateTo = today.toISOString().split("T")[0];
 
-  const netProfit = totalIncome - totalExpense;
+      const [plData, cfData, agingData] = await Promise.all([
+        api.finance.profitLoss(dateFrom, dateTo),
+        api.finance.cashFlow(dateFrom, dateTo),
+        api.finance.aging(),
+      ]);
+      setPL(plData as PL);
+      setCashflow(cfData as CashFlow);
+      setAging(agingData as Aging);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load finance data.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const pendingAmount = transactions
-    .filter((item) => item.status === "Pending")
-    .reduce((sum, item) => sum + item.amount, 0);
-
-  const profitMargin =
-    totalIncome > 0
-      ? ((netProfit / totalIncome) * 100).toFixed(1)
-      : "0.0";
-
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter((item) => {
-      const searchText = search.toLowerCase().trim();
-
-      const matchesSearch =
-        item.description.toLowerCase().includes(searchText) ||
-        item.category.toLowerCase().includes(searchText) ||
-        item.id.toLowerCase().includes(searchText);
-
-      const matchesType =
-        typeFilter === "All Types" ||
-        item.type === typeFilter;
-
-      const matchesStatus =
-        statusFilter === "All Status" ||
-        item.status === statusFilter;
-
-      const matchesCategory =
-        categoryFilter === "All Categories" ||
-        item.category === categoryFilter;
-
-      return (
-        matchesSearch &&
-        matchesType &&
-        matchesStatus &&
-        matchesCategory
-      );
-    });
-  }, [search, typeFilter, statusFilter, categoryFilter]);
-
-  const salesIncome = transactions
-    .filter(
-      (item) =>
-        item.type === "Income" &&
-        item.category === "Sales"
-    )
-    .reduce((sum, item) => sum + item.amount, 0);
-
-  const purchaseExpense = transactions
-    .filter(
-      (item) =>
-        item.type === "Expense" &&
-        item.category === "Purchases"
-    )
-    .reduce((sum, item) => sum + item.amount, 0);
+  const metricColor = (v: number) => v >= 0 ? "text-green-600" : "text-red-600";
 
   return (
     <PageLayout>
-      <main className="min-h-screen bg-[#f8fafc] px-6 py-7 text-slate-900">
-        <div className="mx-auto max-w-6xl">
-
-          {/* HEADER */}
-          <div className="mb-6 flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                Finance
-              </h1>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Monitor revenue, expenses, cash flow and
-                financial performance
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              Refresh
-            </button>
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Finance</h1>
+            <p className="mt-1 text-sm text-gray-500">P&L, cash flow, aging and GST</p>
           </div>
-
-          {/* KPI CARDS */}
-          <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-
-            <KpiCard
-              title="Total Revenue"
-              value={formatCurrency(totalIncome)}
-              subtitle="Customer sales income"
-              color="green"
-            />
-
-            <KpiCard
-              title="Total Expenses"
-              value={formatCurrency(totalExpense)}
-              subtitle="Business expenses"
-              color="orange"
-            />
-
-            <KpiCard
-              title="Net Profit"
-              value={formatCurrency(netProfit)}
-              subtitle={`${profitMargin}% profit margin`}
-              color="green"
-            />
-
-            <KpiCard
-              title="Pending Payments"
-              value={formatCurrency(pendingAmount)}
-              subtitle="Awaiting settlement"
-              color="orange"
-            />
-
-          </div>
-
-          {/* FINANCIAL OVERVIEW */}
-          <section className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
-
-            <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-sm font-semibold">
-                Financial Overview
-              </h2>
-
-              <p className="mt-1 text-[11px] text-slate-500">
-                Revenue and expense performance
-              </p>
-            </div>
-
-            <div className="grid gap-8 p-5 md:grid-cols-2">
-
-              <FinancialBar
-                title="Revenue"
-                value={totalIncome}
-                maximum={Math.max(totalIncome, totalExpense)}
-                color="blue"
-              />
-
-              <FinancialBar
-                title="Expenses"
-                value={totalExpense}
-                maximum={Math.max(totalIncome, totalExpense)}
-                color="orange"
-              />
-
-            </div>
-          </section>
-
-          {/* QUICK FINANCE SUMMARY */}
-          <section className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-
-            <SummaryCard
-              title="Sales Income"
-              value={formatCurrency(salesIncome)}
-              description="Revenue generated from customer sales"
-              color="blue"
-            />
-
-            <SummaryCard
-              title="Purchase Expense"
-              value={formatCurrency(purchaseExpense)}
-              description="Payments made towards purchases"
-              color="orange"
-            />
-
-            <SummaryCard
-              title="Net Cash Position"
-              value={formatCurrency(netProfit)}
-              description="Income minus recorded expenses"
-              color="green"
-            />
-
-          </section>
-
-          {/* SEARCH + FILTERS */}
-          <section className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
-
-            <div className="grid gap-2 md:grid-cols-4">
-
-              <input
-                type="text"
-                value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
-                placeholder="Search transaction, category or ID..."
-                className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
-              />
-
-              <select
-                value={typeFilter}
-                onChange={(event) =>
-                  setTypeFilter(event.target.value)
-                }
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-              >
-                <option>All Types</option>
-                <option>Income</option>
-                <option>Expense</option>
-              </select>
-
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value)
-                }
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-              >
-                <option>All Status</option>
-                <option>Completed</option>
-                <option>Pending</option>
-              </select>
-
-              <select
-                value={categoryFilter}
-                onChange={(event) =>
-                  setCategoryFilter(event.target.value)
-                }
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-              >
-                <option>All Categories</option>
-                <option>Sales</option>
-                <option>Purchases</option>
-                <option>Operations</option>
-                <option>HR</option>
-              </select>
-
-            </div>
-
-            <div className="mt-2 flex justify-end">
+          <div className="flex gap-2">
+            {[7, 30, 90].map(d => (
               <button
-                type="button"
-                onClick={() => {
-                  setSearch("");
-                  setTypeFilter("All Types");
-                  setStatusFilter("All Status");
-                  setCategoryFilter("All Categories");
-                }}
-                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+                key={d}
+                onClick={() => setDays(d)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${days === d ? "bg-blue-600 text-white" : "border border-gray-300 text-gray-600 hover:bg-gray-50"}`}
               >
-                Clear all filters
+                {d} days
               </button>
-            </div>
-
-          </section>
-
-          {/* TRANSACTIONS */}
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-
-            <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-sm font-semibold">
-                Recent Transactions
-              </h2>
-
-              <p className="mt-1 text-[11px] text-slate-500">
-                Latest financial activity
-              </p>
-            </div>
-
-            <div className="overflow-x-auto">
-
-              <table className="w-full border-collapse text-xs">
-
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Transaction
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Date
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Category
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Type
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Amount
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Status
-                    </th>
-
-                  </tr>
-                </thead>
-
-                <tbody>
-
-                  {filteredTransactions.map((item) => (
-
-                    <tr
-                      key={item.id}
-                      className="border-b border-slate-100 transition hover:bg-slate-50"
-                    >
-
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-800">
-                          {item.description}
-                        </p>
-
-                        <p className="mt-0.5 text-[10px] text-slate-400">
-                          {item.id}
-                        </p>
-                      </td>
-
-                      <td className="px-4 py-3 text-slate-600">
-                        {item.date}
-                      </td>
-
-                      <td className="px-4 py-3 text-slate-600">
-                        {item.category}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`font-semibold ${
-                            item.type === "Income"
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          {item.type}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 font-bold text-slate-800">
-                        {formatCurrency(item.amount)}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                            item.status === "Completed"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-orange-100 text-orange-700"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-
-                    </tr>
-
-                  ))}
-
-                </tbody>
-
-              </table>
-
-              {filteredTransactions.length === 0 && (
-                <div className="px-6 py-12 text-center">
-                  <p className="text-sm font-medium text-slate-700">
-                    No transactions found.
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-400">
-                    Try changing your search or filters.
-                  </p>
-                </div>
-              )}
-
-            </div>
-
-            <div className="border-t border-slate-200 px-5 py-3">
-              <p className="text-[10px] text-slate-500">
-                Showing {filteredTransactions.length} of{" "}
-                {transactions.length} transactions
-              </p>
-            </div>
-
-          </section>
-
-                    {/* FINANCE INSIGHTS */}
-          <section className="mt-5 grid gap-3 md:grid-cols-3">
-
-            <InsightCard
-              title="Profitability"
-              value={`${profitMargin}%`}
-              description="Current net profit margin"
-            />
-
-            <InsightCard
-              title="Cash Flow"
-              value={formatCurrency(netProfit)}
-              description="Income minus recorded expenses"
-            />
-
-            <InsightCard
-              title="Pending Collection"
-              value={formatCurrency(pendingAmount)}
-              description="Payments requiring attention"
-              warning
-            />
-
-          </section>
-
-          {/* FOOTER */}
-          <div className="py-8 text-center text-[10px] text-slate-400">
-            AI StockFlow • Finance Management
+            ))}
           </div>
-
         </div>
-      </main>
+
+        {/* Sub-nav */}
+        <div className="mb-6 flex gap-2 flex-wrap">
+          {[
+            { label: "Overview", href: "/finance" },
+            { label: "Expenses", href: "/finance/expenses" },
+            { label: "Payments", href: "/finance/payments" },
+            { label: "Aging", href: "/finance/aging" },
+          ].map(({ label, href }) => (
+            <Link key={href} href={href} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              {label}
+            </Link>
+          ))}
+        </div>
+
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+        {loading ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+            <p className="text-sm text-gray-500">Loading finance data...</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* P&L */}
+            {pl && (
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-200 px-6 py-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Profit & Loss</h2>
+                  <p className="text-sm text-gray-500">Last {days} days</p>
+                </div>
+                <div className="grid grid-cols-2 gap-0 sm:grid-cols-4">
+                  {[
+                    { label: "Revenue", value: pl.revenue, highlight: false },
+                    { label: "Net Sales", value: pl.net_sales, highlight: false },
+                    { label: "Gross Profit", value: pl.gross_profit, highlight: true },
+                    { label: "Net Profit", value: pl.net_profit, highlight: true },
+                  ].map((m, i) => (
+                    <div key={m.label} className={`p-6 ${i < 3 ? "border-r border-gray-100" : ""}`}>
+                      <p className="text-sm text-gray-500">{m.label}</p>
+                      <p className={`mt-2 text-2xl font-bold ${m.highlight ? metricColor(m.value) : "text-gray-900"}`}>
+                        {inr(m.value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-3 gap-0 border-t border-gray-100">
+                  {[
+                    { label: "GST Collected", value: pl.gst },
+                    { label: "COGS", value: pl.cogs },
+                    { label: "Expenses", value: pl.expenses },
+                  ].map((m, i) => (
+                    <div key={m.label} className={`p-5 ${i < 2 ? "border-r border-gray-100" : ""}`}>
+                      <p className="text-sm text-gray-500">{m.label}</p>
+                      <p className="mt-1 text-lg font-semibold text-gray-700">{inr(m.value)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Cash Flow */}
+            {cashflow && (
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-200 px-6 py-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Cash Flow</h2>
+                  <p className="text-sm text-gray-500">Last {days} days</p>
+                </div>
+                <div className="grid grid-cols-2 gap-0 sm:grid-cols-4">
+                  {[
+                    { label: "Inflows", value: cashflow.inflows, color: "text-green-600" },
+                    { label: "Payments", value: cashflow.payments, color: "text-red-600" },
+                    { label: "Expenses", value: cashflow.expenses, color: "text-red-600" },
+                    { label: "Net Cash Flow", value: cashflow.net_cash_flow, color: metricColor(cashflow.net_cash_flow) },
+                  ].map((m, i) => (
+                    <div key={m.label} className={`p-6 ${i < 3 ? "border-r border-gray-100" : ""}`}>
+                      <p className="text-sm text-gray-500">{m.label}</p>
+                      <p className={`mt-2 text-2xl font-bold ${m.color}`}>{inr(m.value)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Aging */}
+            {aging && (
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                {[
+                  { title: "Accounts Receivable (A/R)", data: aging.accounts_receivable, total: aging.ar_total, color: "text-blue-600" },
+                  { title: "Accounts Payable (A/P)", data: aging.accounts_payable, total: aging.ap_total, color: "text-orange-600" },
+                ].map(section => (
+                  <div key={section.title} className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                      <h2 className="text-lg font-semibold text-gray-900">{section.title}</h2>
+                      <span className={`text-lg font-bold ${section.color}`}>{inr(section.total)}</span>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {Object.entries(section.data).map(([bucket, amount]) => (
+                        <div key={bucket} className="flex items-center justify-between">
+                          <span className="text-sm text-gray-500">{bucket} days</span>
+                          <div className="flex items-center gap-3">
+                            <div className="h-2 w-32 rounded-full bg-gray-100">
+                              <div
+                                className={`h-2 rounded-full ${section.color.includes("blue") ? "bg-blue-500" : "bg-orange-500"}`}
+                                style={{ width: section.total ? `${Math.min((amount / section.total) * 100, 100)}%` : "0%" }}
+                              />
+                            </div>
+                            <span className="text-sm font-semibold text-gray-900 w-24 text-right">{inr(amount)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </PageLayout>
-  );
-}
-
-
-/* ============================================================
-   KPI CARD
-============================================================ */
-
-function KpiCard({
-  title,
-  value,
-  subtitle,
-  color,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  color: "green" | "orange";
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">
-        {title}
-      </p>
-
-      <h2 className="mt-2 text-2xl font-bold text-slate-900">
-        {value}
-      </h2>
-
-      <p
-        className={`mt-1 text-[10px] ${
-          color === "green"
-            ? "text-green-600"
-            : "text-orange-500"
-        }`}
-      >
-        {subtitle}
-      </p>
-
-    </div>
-  );
-}
-
-
-/* ============================================================
-   FINANCIAL BAR
-============================================================ */
-
-function FinancialBar({
-  title,
-  value,
-  maximum,
-  color,
-}: {
-  title: string;
-  value: number;
-  maximum: number;
-  color: "blue" | "orange";
-}) {
-  const percentage =
-    maximum > 0
-      ? Math.min((value / maximum) * 100, 100)
-      : 0;
-
-  return (
-    <div>
-
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-slate-500">
-          {title}
-        </p>
-
-        <strong className="text-sm">
-          {formatCurrency(value)}
-        </strong>
-      </div>
-
-      <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
-
-        <div
-          className={`h-full rounded-full ${
-            color === "blue"
-              ? "bg-blue-600"
-              : "bg-orange-500"
-          }`}
-          style={{
-            width: `${percentage}%`,
-          }}
-        />
-
-      </div>
-
-      <div className="mt-2 flex justify-between text-[11px] text-slate-500">
-
-        <span>
-          {formatCurrency(value)}
-        </span>
-
-        <span>
-          {Math.round(percentage)}%
-        </span>
-
-      </div>
-
-    </div>
-  );
-}
-
-
-/* ============================================================
-   SUMMARY CARD
-============================================================ */
-
-function SummaryCard({
-  title,
-  value,
-  description,
-  color,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  color: "blue" | "orange" | "green";
-}) {
-  const valueColor = {
-    blue: "text-blue-600",
-    orange: "text-orange-500",
-    green: "text-green-600",
-  }[color];
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">
-        {title}
-      </p>
-
-      <h3
-        className={`mt-2 text-xl font-bold ${valueColor}`}
-      >
-        {value}
-      </h3>
-
-      <p className="mt-1 text-[10px] leading-5 text-slate-500">
-        {description}
-      </p>
-
-    </div>
-  );
-}
-
-
-/* ============================================================
-   INSIGHT CARD
-============================================================ */
-
-function InsightCard({
-  title,
-  value,
-  description,
-  warning = false,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  warning?: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">
-        {title}
-      </p>
-
-      <h3
-        className={`mt-2 text-2xl font-bold ${
-          warning
-            ? "text-orange-500"
-            : "text-slate-900"
-        }`}
-      >
-        {value}
-      </h3>
-
-      <p className="mt-1 text-[10px] text-slate-500">
-        {description}
-      </p>
-
-    </div>
   );
 }

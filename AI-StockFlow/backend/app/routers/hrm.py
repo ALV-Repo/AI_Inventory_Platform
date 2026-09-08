@@ -384,8 +384,8 @@ def reject_leave(
 @router.post("/payslips/generate")
 def generate_payslip(
     employee_id: int,
-    month: int = Field(ge=1, le=12),
-    year: int = Field(ge=2020),
+    month: int,
+    year: int,
     user: User = Depends(require("inventory:write")),
     db: Session = Depends(get_db),
 ):

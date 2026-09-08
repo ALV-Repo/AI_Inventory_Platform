@@ -352,6 +352,52 @@ export const api = {
     createDispatch: (body: { sales_order_id: number; warehouse_id: number; courier?: string; vehicle_number?: string; tracking_number?: string }) =>
       request<DispatchRecord>("/warehouse/dispatch", { method: "POST", body: JSON.stringify(body) }),
   },
+
+  // ── Purchase Orders ────────────────────────────────────────────────────────
+  purchaseOrders: {
+    list: () => request<unknown[]>("/purchases/orders"),
+    get: (id: number) => request<unknown>(`/purchases/orders/${id}`),
+    approve: (id: number) =>
+      request<unknown>(`/purchases/orders/${id}/approve`, { method: "POST" }),
+  },
+
+  // ── Customers ──────────────────────────────────────────────────────────────
+  customers: {
+    list: () => request<unknown[]>("/sales/customers"),
+  },
+
+  // ── Finance ────────────────────────────────────────────────────────────────
+  finance: {
+    profitLoss: (dateFrom: string, dateTo: string) =>
+      request<unknown>(`/finance/profit-loss?date_from=${dateFrom}&date_to=${dateTo}`),
+    cashFlow: (dateFrom: string, dateTo: string) =>
+      request<unknown>(`/finance/cash-flow?date_from=${dateFrom}&date_to=${dateTo}`),
+    aging: (asOf?: string) =>
+      request<unknown>(`/finance/aging${asOf ? `?as_of=${asOf}` : ""}`),
+    expenses: (params?: { date_from?: string; date_to?: string; category?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.date_from) q.set("date_from", params.date_from);
+      if (params?.date_to) q.set("date_to", params.date_to);
+      if (params?.category) q.set("category", params.category);
+      return request<unknown[]>(`/finance/expenses?${q}`);
+    },
+    createExpense: (body: { category: string; amount: number; payment_mode?: string; description?: string; expense_date?: string }) =>
+      request<unknown>("/finance/expenses", { method: "POST", body: JSON.stringify(body) }),
+    transactions: (params?: { transaction_type?: string; date_from?: string; date_to?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.transaction_type) q.set("transaction_type", params.transaction_type);
+      if (params?.date_from) q.set("date_from", params.date_from);
+      if (params?.date_to) q.set("date_to", params.date_to);
+      return request<unknown[]>(`/finance/transactions?${q}`);
+    },
+    createTransaction: (body: { transaction_type: string; amount: number; payment_mode?: string; transaction_date?: string }) =>
+      request<unknown>("/finance/transactions", { method: "POST", body: JSON.stringify(body) }),
+  },
+
+  // ── Audit Logs ─────────────────────────────────────────────────────────────
+  auditLogs: {
+    list: (limit = 200) => request<unknown[]>(`/audit-logs?limit=${limit}`),
+  },
 };
 
 // ── Formatting helpers ────────────────────────────────────────────────────────

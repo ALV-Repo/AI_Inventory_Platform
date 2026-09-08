@@ -1,801 +1,173 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import PageLayout from "../../../components/layout/PageLayout";
+import { api, fmtDate } from "../../../lib/api";
 
-type PickStatus = "Pending" | "In Progress" | "Picked";
-
-type PickItem = {
-  id: string;
-  sku: string;
-  name: string;
-  location: string;
-  bin: string;
-  quantity: number;
-  picked: number;
-  status: PickStatus;
+type PickList = {
+  id: number;
+  sales_order_id: number;
+  warehouse_id: number;
+  status: string;
+  assigned_to?: number;
+  created_at: string;
+  completed_at?: string;
+  line_count: number;
 };
 
-const initialItems: PickItem[] = [
-  {
-    id: "PI-001",
-    sku: "KB-WL-001",
-    name: "Wireless Keyboard",
-    location: "Zone A / Rack A1",
-    bin: "A1-01",
-    quantity: 10,
-    picked: 0,
-    status: "Pending",
-  },
-  {
-    id: "PI-002",
-    sku: "MIC-USB-002",
-    name: "USB Microphone",
-    location: "Zone A / Rack A2",
-    bin: "A2-04",
-    quantity: 5,
-    picked: 0,
-    status: "Pending",
-  },
-  {
-    id: "PI-003",
-    sku: "CHA-OFC-003",
-    name: "Office Chair",
-    location: "Zone B / Rack B1",
-    bin: "B1-08",
-    quantity: 8,
-    picked: 0,
-    status: "Pending",
-  },
-  {
-    id: "PI-004",
-    sku: "MON-24-004",
-    name: "24-inch Monitor",
-    location: "Zone B / Rack B2",
-    bin: "B2-03",
-    quantity: 6,
-    picked: 0,
-    status: "Pending",
-  },
-  {
-    id: "PI-005",
-    sku: "BIN-ST-005",
-    name: "Storage Bins",
-    location: "Zone C / Rack C1",
-    bin: "C1-12",
-    quantity: 12,
-    picked: 0,
-    status: "Pending",
-  },
-];
+const statusColor = (s: string) => ({
+  pending: "bg-yellow-50 text-yellow-700",
+  in_progress: "bg-blue-50 text-blue-700",
+  completed: "bg-green-50 text-green-700",
+}[s.toLowerCase()] ?? "bg-gray-100 text-gray-700");
 
 export default function PickListPage() {
-  const [items, setItems] = useState<PickItem[]>(initialItems);
-  const [search, setSearch] = useState("");
-  const [scanValue, setScanValue] = useState("");
-  const [selectedItem, setSelectedItem] =
-    useState<PickItem | null>(null);
-  const [message, setMessage] = useState("");
-  const [showScanner, setShowScanner] = useState(false);
+  const [lists, setLists] = useState<PickList[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selected, setSelected] = useState<Record<string, unknown> | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  const filteredItems = useMemo(() => {
-    const value = search.toLowerCase().trim();
+  useEffect(() => { load(); }, []);
 
-    if (!value) return items;
-
-    return items.filter(
-      (item) =>
-        item.id.toLowerCase().includes(value) ||
-        item.sku.toLowerCase().includes(value) ||
-        item.name.toLowerCase().includes(value) ||
-        item.bin.toLowerCase().includes(value) ||
-        item.location.toLowerCase().includes(value)
-    );
-  }, [items, search]);
-
-  const totalItems = items.length;
-
-  const completedItems = items.filter(
-    (item) => item.status === "Picked"
-  ).length;
-
-  const pendingItems = items.filter(
-    (item) => item.status !== "Picked"
-  ).length;
-
-  const totalQuantity = items.reduce(
-    (sum, item) => sum + item.quantity,
-    0
-  );
-
-  const pickedQuantity = items.reduce(
-    (sum, item) => sum + item.picked,
-    0
-  );
-
-  const progress =
-    totalQuantity === 0
-      ? 0
-      : Math.round((pickedQuantity / totalQuantity) * 100);
-
-  function confirmPick(itemId: string) {
-    setItems((current) =>
-      current.map((item) => {
-        if (item.id !== itemId) return item;
-
-        const nextPicked = Math.min(
-          item.picked + 1,
-          item.quantity
-        );
-
-        return {
-          ...item,
-          picked: nextPicked,
-          status:
-            nextPicked >= item.quantity
-              ? "Picked"
-              : "In Progress",
-        };
-      })
-    );
-
-    setMessage("Item scan confirmed successfully.");
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const data = await api.warehouse.pickLists(statusFilter === "all" ? undefined : statusFilter);
+      setLists(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load pick lists.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function scanItem() {
-    const value = scanValue.trim().toLowerCase();
-
-    if (!value) {
-      setMessage("Enter or scan an SKU, item ID or bin.");
-      return;
+  async function viewDetail(id: number) {
+    try {
+      setDetailLoading(true);
+      const data = await api.warehouse.getPickList(id);
+      setSelected(data as Record<string, unknown>);
+    } catch {
+      setError("Failed to load pick list detail.");
+    } finally {
+      setDetailLoading(false);
     }
-
-    const found = items.find(
-      (item) =>
-        item.id.toLowerCase() === value ||
-        item.sku.toLowerCase() === value ||
-        item.bin.toLowerCase() === value
-    );
-
-    if (!found) {
-      setMessage(
-        "Item not found. Please check the barcode or bin."
-      );
-      return;
-    }
-
-    setSelectedItem(found);
-    setMessage(`Item found: ${found.name}`);
-  }
-
-  function finishPickList() {
-    if (completedItems !== totalItems) {
-      setMessage(
-        "Complete all pick items before confirming the pick list."
-      );
-      return;
-    }
-
-    setMessage("Pick list completed successfully.");
-  }
-
-  function resetPickList() {
-    setItems(initialItems);
-    setSelectedItem(null);
-    setScanValue("");
-    setMessage("");
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-3 py-5 text-slate-800 sm:px-6 lg:px-8">
-
-      <div className="mx-auto max-w-6xl">
-
-        {/* HEADER */}
-
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
-          <div>
-            <button
-              type="button"
-              onClick={() =>
-                window.history.back()
-              }
-              className="mb-2 text-[11px] font-semibold text-blue-600 hover:text-blue-800"
-            >
-              ← Back to Warehouse
-            </button>
-
-            <h1 className="text-xl font-bold sm:text-2xl">
-              Pick List
-            </h1>
-
-            <p className="mt-1 text-xs text-slate-500">
-              Mobile picking workflow with barcode scan confirmation.
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-
-            <button
-              type="button"
-              onClick={resetPickList}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700"
-            >
-              Reset
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setShowScanner(!showScanner)
-              }
-              className="rounded-md bg-[#10233f] px-4 py-2 text-[10px] font-semibold text-white"
-            >
-              {showScanner
-                ? "Close Scanner"
-                : "Scan Item"}
-            </button>
-
-          </div>
-
+    <PageLayout>
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Pick Lists</h1>
+          <p className="mt-1 text-sm text-gray-500">Warehouse picking tasks for sales orders</p>
         </div>
 
-        {/* PICK LIST SUMMARY */}
+        {/* Sub-nav */}
+        <div className="mb-6 flex gap-2 flex-wrap">
+          {[
+            { label: "Overview", href: "/warehouse" },
+            { label: "Pick Lists", href: "/warehouse/pick-list" },
+            { label: "Put-Away", href: "/warehouse/put-away" },
+            { label: "Dispatch", href: "/warehouse/dispatch" },
+          ].map(({ label, href }) => (
+            <Link key={href} href={href} className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${href === "/warehouse/pick-list" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>
+              {label}
+            </Link>
+          ))}
+        </div>
 
-        <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-          <SummaryCard
-            title="Total Items"
-            value={String(totalItems)}
-            subtitle="Items to pick"
-          />
+        {/* Filter */}
+        <div className="mb-5 flex gap-2">
+          {["all", "pending", "in_progress", "completed"].map(s => (
+            <button key={s} onClick={() => { setStatusFilter(s); load(); }}
+              className={`rounded-lg px-4 py-2 text-sm font-medium capitalize transition ${statusFilter === s ? "bg-blue-600 text-white" : "border border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+              {s.replace("_", " ")}
+            </button>
+          ))}
+        </div>
 
-          <SummaryCard
-            title="Pending"
-            value={String(pendingItems)}
-            subtitle="Remaining items"
-            valueClass="text-orange-500"
-          />
-
-          <SummaryCard
-            title="Picked"
-            value={String(completedItems)}
-            subtitle="Completed items"
-            valueClass="text-green-600"
-          />
-
-          <SummaryCard
-            title="Progress"
-            value={`${progress}%`}
-            subtitle={`${pickedQuantity} / ${totalQuantity} units`}
-            valueClass="text-blue-600"
-          />
-
-        </section>
-
-        {/* PROGRESS */}
-
-        <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
-
-          <div className="flex items-center justify-between">
-
-            <div>
-              <p className="text-xs font-semibold">
-                Picking Progress
-              </p>
-
-              <p className="mt-1 text-[10px] text-slate-400">
-                Complete each item by scanning its barcode.
-              </p>
+        {/* Table */}
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          {loading ? (
+            <div className="py-16 text-center">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+              <p className="text-sm text-gray-500">Loading pick lists...</p>
             </div>
-
-            <span className="text-sm font-bold text-blue-600">
-              {progress}%
-            </span>
-
-          </div>
-
-          <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
-
-            <div
-              className="h-full rounded-full bg-blue-600 transition-all duration-300"
-              style={{
-                width: `${progress}%`,
-              }}
-            />
-
-          </div>
-
-        </section>
-
-        {/* SCANNER */}
-
-        {showScanner && (
-          <section className="mb-5 rounded-xl border border-blue-200 bg-white p-4">
-
-            <div className="mb-3">
-
-              <h2 className="text-sm font-semibold">
-                Scan Confirmation
-              </h2>
-
-              <p className="mt-1 text-[10px] text-slate-500">
-                Scan a barcode or manually enter the SKU,
-                item ID or bin number.
-              </p>
-
+          ) : lists.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-4xl mb-3">📋</p>
+              <p className="text-gray-500 text-sm">No pick lists found</p>
             </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-
-              <input
-                type="text"
-                value={scanValue}
-                onChange={(event) =>
-                  setScanValue(event.target.value)
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    scanItem();
-                  }
-                }}
-                placeholder="Scan barcode / enter SKU / bin..."
-                className="min-h-11 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                autoFocus
-              />
-
-              <button
-                type="button"
-                onClick={scanItem}
-                className="min-h-11 rounded-lg bg-blue-600 px-5 text-xs font-semibold text-white hover:bg-blue-700"
-              >
-                Confirm Scan
-              </button>
-
-            </div>
-
-            {selectedItem && (
-              <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
-                  <div>
-
-                    <p className="text-xs font-semibold text-green-800">
-                      {selectedItem.name}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-green-700">
-                      {selectedItem.sku} • Bin{" "}
-                      {selectedItem.bin}
-                    </p>
-
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      confirmPick(selectedItem.id)
-                    }
-                    disabled={
-                      selectedItem.picked >=
-                      selectedItem.quantity
-                    }
-                    className="rounded-md bg-green-600 px-4 py-2 text-[10px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    Confirm Pick
-                  </button>
-
-                </div>
-
-              </div>
-            )}
-
-            {message && (
-              <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-[10px] font-medium text-slate-600">
-                {message}
-              </p>
-            )}
-
-          </section>
-        )}
-
-        {/* SEARCH */}
-
-        <section className="mb-5 rounded-xl border border-slate-200 bg-white p-3">
-
-          <input
-            type="text"
-            value={search}
-            onChange={(event) =>
-              setSearch(event.target.value)
-            }
-            placeholder="Search item, SKU, bin or location..."
-            className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
-          />
-
-        </section>
-
-        {/* PICK ITEMS */}
-
-        <section className="rounded-xl border border-slate-200 bg-white">
-
-          <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
-
-            <h2 className="text-sm font-semibold">
-              Items to Pick
-            </h2>
-
-            <p className="mt-1 text-[10px] text-slate-500">
-              {filteredItems.length} items displayed
-            </p>
-
-          </div>
-
-          <div className="divide-y divide-slate-100">
-
-            {filteredItems.map((item) => (
-
-              <div
-                key={item.id}
-                className="p-4 transition hover:bg-slate-50 sm:p-5"
-              >
-
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
-                  {/* ITEM */}
-
-                  <div className="min-w-0 flex-1">
-
-                    <div className="flex items-start gap-3">
-
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
-                        {item.id.replace("PI-", "")}
-                      </div>
-
-                      <div className="min-w-0">
-
-                        <div className="flex flex-wrap items-center gap-2">
-
-                          <h3 className="text-xs font-bold text-slate-800 sm:text-sm">
-                            {item.name}
-                          </h3>
-
-                          <StatusBadge
-                            status={item.status}
-                          />
-
-                        </div>
-
-                        <p className="mt-1 text-[10px] text-slate-400">
-                          SKU: {item.sku}
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                    {/* LOCATION */}
-
-                    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-
-                      <InfoBox
-                        label="Location"
-                        value={item.location}
-                      />
-
-                      <InfoBox
-                        label="Bin"
-                        value={item.bin}
-                      />
-
-                      <InfoBox
-                        label="Quantity"
-                        value={`${item.picked} / ${item.quantity}`}
-                      />
-
-                    </div>
-
-                  </div>
-
-                  {/* ACTION */}
-
-                  <div className="flex gap-2 lg:flex-col">
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedItem(item);
-                        setScanValue(item.sku);
-                        setShowScanner(true);
-                      }}
-                      className="flex-1 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-50 lg:min-w-28"
-                    >
-                      Scan
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        confirmPick(item.id)
-                      }
-                      disabled={
-                        item.picked >= item.quantity
-                      }
-                      className="flex-1 rounded-md bg-[#10233f] px-4 py-2.5 text-[10px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 lg:min-w-28"
-                    >
-                      {item.status === "Picked"
-                        ? "Picked"
-                        : "Pick 1"}
-                    </button>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            ))}
-
-          </div>
-
-          {filteredItems.length === 0 && (
-            <div className="px-5 py-12 text-center">
-
-              <p className="text-sm font-semibold text-slate-700">
-                No pick items found
-              </p>
-
-              <p className="mt-1 text-xs text-slate-400">
-                Try another search term.
-              </p>
-
-            </div>
+          ) : (
+            <table className="w-full text-left">
+              <thead className="border-b border-gray-200 bg-gray-50">
+                <tr>
+                  {["Pick List #", "Sales Order", "Lines", "Status", "Created", "Completed", "Action"].map(h => (
+                    <th key={h} className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {lists.map(pl => (
+                  <tr key={pl.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm font-mono font-semibold text-gray-900">PL-{pl.id}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">SO-{pl.sales_order_id}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{pl.line_count} items</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${statusColor(pl.status)}`}>
+                        {pl.status.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{fmtDate(pl.created_at)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{pl.completed_at ? fmtDate(pl.completed_at) : "-"}</td>
+                    <td className="px-6 py-4">
+                      <button onClick={() => viewDetail(pl.id)} className="text-sm font-medium text-blue-600 hover:text-blue-800">View Lines</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
-
-        </section>
-
-                {/* PICK LIST COMPLETION */}
-
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
-            <div>
-              <p className="text-sm font-semibold text-slate-800">
-                Pick List Confirmation
-              </p>
-
-              <p className="mt-1 text-[10px] leading-5 text-slate-500">
-                Confirm the pick list after all required quantities
-                have been collected from the warehouse.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={finishPickList}
-              disabled={completedItems !== totalItems}
-              className="rounded-lg bg-green-600 px-5 py-3 text-[10px] font-bold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              Confirm Pick List
-            </button>
-
-          </div>
-
-          {/* COMPLETION STATUS */}
-
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-
-            <div className="rounded-lg bg-slate-50 p-3">
-
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                Total Units
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-slate-800">
-                {totalQuantity}
-              </p>
-
-            </div>
-
-            <div className="rounded-lg bg-green-50 p-3">
-
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-green-600">
-                Picked
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-green-700">
-                {pickedQuantity}
-              </p>
-
-            </div>
-
-            <div className="rounded-lg bg-orange-50 p-3">
-
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-orange-600">
-                Remaining
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-orange-700">
-                {totalQuantity - pickedQuantity}
-              </p>
-
-            </div>
-
-            <div className="rounded-lg bg-blue-50 p-3">
-
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">
-                Completion
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-blue-700">
-                {progress}%
-              </p>
-
-            </div>
-
-          </div>
-
-        </section>
-
-        {/* MOBILE SCAN INSTRUCTIONS */}
-
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-
-          <div className="flex gap-3">
-
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm text-blue-700">
-              ✓
-            </div>
-
-            <div>
-
-              <h3 className="text-xs font-semibold text-slate-800">
-                Mobile Picking Instructions
-              </h3>
-
-              <div className="mt-2 space-y-1.5 text-[10px] leading-5 text-slate-500">
-
-                <p>
-                  <span className="font-semibold text-slate-700">
-                    1.
-                  </span>{" "}
-                  Go to the displayed warehouse location.
-                </p>
-
-                <p>
-                  <span className="font-semibold text-slate-700">
-                    2.
-                  </span>{" "}
-                  Scan the item barcode or enter the SKU manually.
-                </p>
-
-                <p>
-                  <span className="font-semibold text-slate-700">
-                    3.
-                  </span>{" "}
-                  Verify the item and bin before confirming the pick.
-                </p>
-
-                <p>
-                  <span className="font-semibold text-slate-700">
-                    4.
-                  </span>{" "}
-                  Repeat until all required quantities are picked.
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-        {/* FOOTER */}
-
-        <div className="pb-8 pt-6 text-center">
-
-          <p className="text-[10px] text-slate-400">
-            AI StockFlow • Mobile Pick List & Scan Confirmation
-          </p>
-
         </div>
 
+        {/* Detail modal */}
+        {selected && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setSelected(null)}>
+            <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Pick List PL-{selected.id as number}</h2>
+                <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              </div>
+              <div className="mb-4 grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-gray-500">Sales Order:</span> <span className="font-medium">SO-{selected.sales_order_id as number}</span></div>
+                <div><span className="text-gray-500">Status:</span> <span className="font-medium capitalize">{String(selected.status).replace("_", " ")}</span></div>
+              </div>
+              <h3 className="mb-2 font-semibold text-gray-800 text-sm">Pick Lines</h3>
+              <div className="space-y-2">
+                {((selected.lines as Array<Record<string, unknown>>) ?? []).map((line, i) => (
+                  <div key={i} className={`rounded-lg border p-3 text-sm ${line.is_picked ? "border-green-200 bg-green-50" : "border-gray-200"}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">Product #{line.product_id as number}</span>
+                      <span className={`text-xs font-semibold ${line.is_picked ? "text-green-600" : "text-yellow-600"}`}>
+                        {line.is_picked ? "✓ Picked" : "Pending"}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-gray-500">
+                      Required: {line.quantity_required as number} | Picked: {line.quantity_picked as number}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setSelected(null)} className="mt-5 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">Close</button>
+            </div>
+          </div>
+        )}
       </div>
-    </main>
-  );
-}
-
-
-/* =========================================================
-   SUMMARY CARD
-   ========================================================= */
-
-type SummaryCardProps = {
-  title: string;
-  value: string;
-  subtitle: string;
-  valueClass?: string;
-};
-
-function SummaryCard({
-  title,
-  value,
-  subtitle,
-  valueClass = "text-slate-800",
-}: SummaryCardProps) {
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-
-      <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-        {title}
-      </p>
-
-      <p className={`mt-2 text-xl font-bold ${valueClass}`}>
-        {value}
-      </p>
-
-      <p className="mt-1 text-[9px] text-slate-400">
-        {subtitle}
-      </p>
-
-    </div>
-  );
-}
-
-
-/* =========================================================
-   STATUS BADGE
-   ========================================================= */
-
-function StatusBadge({
-  status,
-}: {
-  status: PickStatus;
-}) {
-
-  const styles = {
-    Pending: "bg-orange-100 text-orange-700",
-    "In Progress": "bg-blue-100 text-blue-700",
-    Picked: "bg-green-100 text-green-700",
-  };
-
-  return (
-    <span
-      className={`rounded-full px-2 py-1 text-[9px] font-semibold ${styles[status]}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-
-/* =========================================================
-   INFO BOX
-   ========================================================= */
-
-function InfoBox({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-
-  return (
-    <div className="rounded-md bg-slate-50 px-3 py-2">
-
-      <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-400">
-        {label}
-      </p>
-
-      <p className="mt-1 truncate text-[10px] font-semibold text-slate-700">
-        {value}
-      </p>
-
-    </div>
+    </PageLayout>
   );
 }

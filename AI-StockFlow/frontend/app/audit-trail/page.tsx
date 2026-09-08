@@ -1,677 +1,167 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageLayout from "../../components/layout/PageLayout";
+import { api, fmtDate } from "../../lib/api";
 
 type AuditLog = {
-  id: string;
-  timestamp: string;
-  user: string;
-  role: string;
+  id: number;
+  user_id: number;
   action: string;
-  module: string;
-  description: string;
-  status: "Success" | "Warning" | "Failed";
-  ip: string;
+  entity_type: string;
+  entity_id: number;
+  details: Record<string, unknown>;
+  ip_address: string;
+  created_at: string;
 };
 
-const auditLogs: AuditLog[] = [
-  {
-    id: "AUD-1001",
-    timestamp: "18/08/2026 15:12",
-    user: "Rahul Kumar",
-    role: "Admin",
-    action: "Updated",
-    module: "Inventory",
-    description:
-      "Updated stock quantity for Hot Wheels Track Set",
-    status: "Success",
-    ip: "192.168.1.101",
-  },
-  {
-    id: "AUD-1002",
-    timestamp: "18/08/2026 14:58",
-    user: "Vikram Singh",
-    role: "Manager",
-    action: "Created",
-    module: "Sales",
-    description:
-      "Created new point of sale transaction",
-    status: "Success",
-    ip: "192.168.1.102",
-  },
-  {
-    id: "AUD-1003",
-    timestamp: "18/08/2026 14:42",
-    user: "Sneha Patel",
-    role: "Manager",
-    action: "Updated",
-    module: "Purchase Orders",
-    description:
-      "Updated purchase order PO-2026-018",
-    status: "Success",
-    ip: "192.168.1.103",
-  },
-  {
-    id: "AUD-1004",
-    timestamp: "18/08/2026 14:30",
-    user: "Ananya Rao",
-    role: "Staff",
-    action: "Viewed",
-    module: "Customers",
-    description:
-      "Viewed customer purchase history",
-    status: "Success",
-    ip: "192.168.1.104",
-  },
-  {
-    id: "AUD-1005",
-    timestamp: "18/08/2026 13:55",
-    user: "Arjun Mehta",
-    role: "Admin",
-    action: "Updated",
-    module: "Finance",
-    description:
-      "Updated financial transaction TXN-1005",
-    status: "Success",
-    ip: "192.168.1.105",
-  },
-  {
-    id: "AUD-1006",
-    timestamp: "18/08/2026 13:28",
-    user: "Priya Reddy",
-    role: "Staff",
-    action: "Created",
-    module: "Customers",
-    description:
-      "Created new customer record",
-    status: "Success",
-    ip: "192.168.1.106",
-  },
-  {
-    id: "AUD-1007",
-    timestamp: "18/08/2026 12:46",
-    user: "Rahul Kumar",
-    role: "Admin",
-    action: "Deleted",
-    module: "Inventory",
-    description:
-      "Removed discontinued product from inventory",
-    status: "Warning",
-    ip: "192.168.1.101",
-  },
-  {
-    id: "AUD-1008",
-    timestamp: "18/08/2026 12:15",
-    user: "Vikram Singh",
-    role: "Manager",
-    action: "Approved",
-    module: "Purchase Orders",
-    description:
-      "Approved purchase order PO-2026-017",
-    status: "Success",
-    ip: "192.168.1.102",
-  },
-  {
-    id: "AUD-1009",
-    timestamp: "18/08/2026 11:52",
-    user: "Sneha Patel",
-    role: "Manager",
-    action: "Exported",
-    module: "Reports",
-    description:
-      "Exported monthly sales report",
-    status: "Success",
-    ip: "192.168.1.103",
-  },
-  {
-    id: "AUD-1010",
-    timestamp: "18/08/2026 11:24",
-    user: "Unknown User",
-    role: "Unknown",
-    action: "Login",
-    module: "Authentication",
-    description:
-      "Failed login attempt",
-    status: "Failed",
-    ip: "192.168.1.120",
-  },
-];
+const actionColor = (action: string) => {
+  if (action.includes("created")) return "bg-green-50 text-green-700";
+  if (action.includes("updated") || action.includes("approved")) return "bg-blue-50 text-blue-700";
+  if (action.includes("deleted") || action.includes("rejected")) return "bg-red-50 text-red-700";
+  return "bg-gray-100 text-gray-700";
+};
 
 export default function AuditTrailPage() {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [moduleFilter, setModuleFilter] =
-    useState("All Modules");
-  const [actionFilter, setActionFilter] =
-    useState("All Actions");
-  const [statusFilter, setStatusFilter] =
-    useState("All Status");
+  const [moduleFilter, setModuleFilter] = useState("All");
+  const [selected, setSelected] = useState<AuditLog | null>(null);
 
-  const modules = [
-    "All Modules",
-    "Inventory",
-    "Sales",
-    "Purchase Orders",
-    "Customers",
-    "Finance",
-    "Reports",
-    "Authentication",
-  ];
+  useEffect(() => { load(); }, []);
 
-  const actions = [
-    "All Actions",
-    "Created",
-    "Updated",
-    "Deleted",
-    "Viewed",
-    "Approved",
-    "Exported",
-    "Login",
-  ];
-
-  const statuses = [
-    "All Status",
-    "Success",
-    "Warning",
-    "Failed",
-  ];
-
-  const filteredLogs = useMemo(() => {
-    return auditLogs.filter((log) => {
-      const searchText = search.toLowerCase();
-
-      const matchesSearch =
-        log.id.toLowerCase().includes(searchText) ||
-        log.user.toLowerCase().includes(searchText) ||
-        log.module.toLowerCase().includes(searchText) ||
-        log.description
-          .toLowerCase()
-          .includes(searchText) ||
-        log.ip.toLowerCase().includes(searchText);
-
-      const matchesModule =
-        moduleFilter === "All Modules" ||
-        log.module === moduleFilter;
-
-      const matchesAction =
-        actionFilter === "All Actions" ||
-        log.action === actionFilter;
-
-      const matchesStatus =
-        statusFilter === "All Status" ||
-        log.status === statusFilter;
-
-      return (
-        matchesSearch &&
-        matchesModule &&
-        matchesAction &&
-        matchesStatus
-      );
-    });
-  }, [
-    search,
-    moduleFilter,
-    actionFilter,
-    statusFilter,
-  ]);
-
-  const totalEvents = auditLogs.length;
-
-  const successfulEvents = auditLogs.filter(
-    (log) => log.status === "Success"
-  ).length;
-
-  const warningEvents = auditLogs.filter(
-    (log) => log.status === "Warning"
-  ).length;
-
-  const failedEvents = auditLogs.filter(
-    (log) => log.status === "Failed"
-  ).length;
-
-  const clearFilters = () => {
-    setSearch("");
-    setModuleFilter("All Modules");
-    setActionFilter("All Actions");
-    setStatusFilter("All Status");
-  };
-
-  const getStatusClass = (
-    status: AuditLog["status"]
-  ) => {
-    if (status === "Success") {
-      return "bg-green-100 text-green-700";
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const data = await api.auditLogs.list();
+      setLogs(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load audit logs.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    if (status === "Warning") {
-      return "bg-orange-100 text-orange-700";
-    }
+  const modules = ["All", ...Array.from(new Set(logs.map(l => l.entity_type).filter(Boolean)))];
 
-    return "bg-red-100 text-red-700";
-  };
-
-  const getActionClass = (action: string) => {
-    if (action === "Deleted") {
-      return "text-red-600";
-    }
-
-    if (
-      action === "Created" ||
-      action === "Approved"
-    ) {
-      return "text-green-600";
-    }
-
-    if (action === "Updated") {
-      return "text-blue-600";
-    }
-
-    return "text-slate-700";
-  };
+  const filtered = useMemo(() => logs.filter(l => {
+    const matchSearch = l.action.toLowerCase().includes(search.toLowerCase()) ||
+      (l.entity_type ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchModule = moduleFilter === "All" || l.entity_type === moduleFilter;
+    return matchSearch && matchModule;
+  }), [logs, search, moduleFilter]);
 
   return (
     <PageLayout>
-      <main className="min-h-screen bg-[#f6f8fb] px-6 py-7 text-slate-900">
-        <div className="mx-auto max-w-6xl">
-
-          {/* Header */}
-          <div className="mb-5 flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                Audit Trail
-              </h1>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Track system activity, user actions and important business events.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                window.location.reload()
-              }
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              Refresh
-            </button>
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Audit Trail</h1>
+            <p className="mt-1 text-sm text-gray-500">Immutable log of all actions across the platform</p>
           </div>
+          <button onClick={load} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Refresh</button>
+        </div>
 
-          {/* Status Banner */}
-          <section className="mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-green-500" />
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-                  <p className="text-sm font-semibold text-slate-800">
-                    Audit logging is active
-                  </p>
-                </div>
+        {/* Filters */}
+        <div className="mb-5 flex gap-3">
+          <input
+            type="text"
+            placeholder="Search by action or module..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
+          />
+          <select
+            value={moduleFilter}
+            onChange={e => setModuleFilter(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+          >
+            {modules.map(m => <option key={m} value={m}>{m === "All" ? "All Modules" : m}</option>)}
+          </select>
+        </div>
 
-                <p className="mt-1 text-[11px] text-slate-500">
-                  All important system activities are being recorded.
-                </p>
+        {/* Table */}
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          {loading ? (
+            <div className="py-16 text-center">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+              <p className="text-sm text-gray-500">Loading audit logs...</p>
+            </div>
+          ) : (
+            <>
+              <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
+                <span className="text-sm text-gray-500">{filtered.length} entries</span>
               </div>
-
-              <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-green-600 shadow-sm">
-                System protected
-              </span>
-            </div>
-          </section>
-
-          {/* Summary Cards */}
-          <div className="mb-5 grid grid-cols-4 gap-3">
-            <SummaryCard
-              title="Total Events"
-              value={totalEvents}
-              subtitle="Recorded activities"
-            />
-
-            <SummaryCard
-              title="Successful"
-              value={successfulEvents}
-              subtitle="Normal activities"
-              color="green"
-            />
-
-            <SummaryCard
-              title="Warnings"
-              value={warningEvents}
-              subtitle="Needs review"
-              color="orange"
-            />
-
-            <SummaryCard
-              title="Failed Events"
-              value={failedEvents}
-              subtitle="Security attention"
-              color="red"
-            />
-          </div>
-
-          {/* Filters */}
-          <section className="mb-5 rounded-lg border border-slate-200 bg-white p-3">
-            <div className="grid grid-cols-[1fr_170px_170px_170px_auto] gap-2">
-
-              <input
-                type="text"
-                value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
-                placeholder="Search user, action, module, event ID or IP..."
-                className="rounded-md border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
-              />
-
-              <select
-                value={moduleFilter}
-                onChange={(e) =>
-                  setModuleFilter(e.target.value)
-                }
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-              >
-                {modules.map((module) => (
-                  <option key={module}>
-                    {module}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={actionFilter}
-                onChange={(e) =>
-                  setActionFilter(e.target.value)
-                }
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-              >
-                {actions.map((action) => (
-                  <option key={action}>
-                    {action}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value)
-                }
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs outline-none"
-              >
-                {statuses.map((status) => (
-                  <option key={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Clear
-              </button>
-            </div>
-          </section>
-
-          {/* Audit Log Table */}
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 px-4 py-4">
-              <h2 className="text-sm font-semibold">
-                Activity Log
-              </h2>
-
-              <p className="mt-1 text-[10px] text-slate-400">
-                Complete record of recent system activities
-              </p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Event
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Date & Time
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      User
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Action
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Module
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Description
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Status
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      IP Address
-                    </th>
+              <table className="w-full text-left">
+                <thead className="border-b border-gray-200 bg-gray-50">
+                  <tr>
+                    {["Time", "Action", "Module", "Entity ID", "User", "IP", "Details"].map(h => (
+                      <th key={h} className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
+                    ))}
                   </tr>
                 </thead>
-
-                <tbody>
-                  {filteredLogs.map((log) => (
-                    <tr
-                      key={log.id}
-                      className="border-b border-slate-100 transition hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-800">
-                          {log.id}
-                        </p>
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                        {log.timestamp}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-slate-800">
-                          {log.user}
-                        </p>
-
-                        <p className="mt-0.5 text-[10px] text-slate-400">
-                          {log.role}
-                        </p>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`font-semibold ${getActionClass(
-                            log.action
-                          )}`}
-                        >
+                <tbody className="divide-y divide-gray-100">
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={7} className="py-12 text-center text-sm text-gray-400">No audit logs found</td></tr>
+                  ) : filtered.map(log => (
+                    <tr key={log.id} className="hover:bg-gray-50">
+                      <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(log.created_at)}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${actionColor(log.action)}`}>
                           {log.action}
                         </span>
                       </td>
-
-                      <td className="px-4 py-3 text-slate-600">
-                        {log.module}
-                      </td>
-
-                      <td className="min-w-[260px] px-4 py-3 text-slate-600">
-                        {log.description}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${getStatusClass(
-                            log.status
-                          )}`}
-                        >
-                          {log.status}
-                        </span>
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-[10px] text-slate-500">
-                        {log.ip}
+                      <td className="px-5 py-3 text-sm text-gray-600">{log.entity_type ?? "-"}</td>
+                      <td className="px-5 py-3 text-sm text-gray-600">{log.entity_id ?? "-"}</td>
+                      <td className="px-5 py-3 text-sm text-gray-600">User #{log.user_id}</td>
+                      <td className="px-5 py-3 text-xs font-mono text-gray-500">{log.ip_address ?? "-"}</td>
+                      <td className="px-5 py-3">
+                        {log.details && (
+                          <button onClick={() => setSelected(log)} className="text-xs font-medium text-blue-600 hover:text-blue-800">View</button>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-
-            {filteredLogs.length === 0 && (
-              <div className="px-6 py-12 text-center">
-                <p className="text-sm font-medium text-slate-700">
-                  No audit events found
-                </p>
-
-                <p className="mt-1 text-xs text-slate-400">
-                  Try changing your search or filters.
-                </p>
-              </div>
-            )}
-
-            <div className="border-t border-slate-200 px-4 py-3">
-              <p className="text-[10px] text-slate-500">
-                Showing {filteredLogs.length} of{" "}
-                {auditLogs.length} audit events
-              </p>
-            </div>
-          </section>
-
-          {/* Security Insights */}
-          <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold">
-              Security Insights
-            </h2>
-
-            <p className="mt-1 text-[10px] text-slate-400">
-              Summary of recent audit activity
-            </p>
-
-            <div className="mt-4 grid grid-cols-3 gap-3">
-
-              <InsightCard
-                title="Most Active Module"
-                value="Inventory"
-                description="Highest number of recorded activities"
-              />
-
-              <InsightCard
-                title="Latest Activity"
-                value="15:12"
-                description="Inventory stock updated"
-              />
-
-              <InsightCard
-                title="Security Alerts"
-                value="1 failed event"
-                description="Review authentication activity"
-                danger
-              />
-
-            </div>
-          </section>
+            </>
+          )}
         </div>
-      </main>
+
+        {/* Detail modal */}
+        {selected && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setSelected(null)}>
+            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900">Audit Log Details</h2>
+                <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              </div>
+              <div className="mb-4 space-y-2 text-sm">
+                <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Action</span><span className="font-medium">{selected.action}</span></div>
+                <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Module</span><span className="font-medium">{selected.entity_type}</span></div>
+                <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Entity ID</span><span className="font-medium">{selected.entity_id}</span></div>
+                <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Time</span><span className="font-medium">{fmtDate(selected.created_at)}</span></div>
+                <div className="flex justify-between border-b pb-2"><span className="text-gray-500">IP</span><span className="font-mono text-xs">{selected.ip_address ?? "-"}</span></div>
+              </div>
+              {selected.details && (
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="mb-1 text-xs font-semibold text-gray-500 uppercase">Details</p>
+                  <pre className="text-xs text-gray-700 whitespace-pre-wrap overflow-auto max-h-40">
+                    {JSON.stringify(selected.details, null, 2)}
+                  </pre>
+                </div>
+              )}
+              <button onClick={() => setSelected(null)} className="mt-4 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">Close</button>
+            </div>
+          </div>
+        )}
+      </div>
     </PageLayout>
-  );
-}
-
-/* ============================================================
-   SUMMARY CARD
-============================================================ */
-
-function SummaryCard({
-  title,
-  value,
-  subtitle,
-  color = "default",
-}: {
-  title: string;
-  value: number;
-  subtitle: string;
-  color?: "default" | "green" | "orange" | "red";
-}) {
-  const valueClass = {
-    default: "text-slate-900",
-    green: "text-green-600",
-    orange: "text-orange-500",
-    red: "text-red-600",
-  }[color];
-
-  const subtitleClass = {
-    default: "text-slate-400",
-    green: "text-green-600",
-    orange: "text-orange-500",
-    red: "text-red-500",
-  }[color];
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <p className="text-[10px] uppercase tracking-wide text-slate-400">
-        {title}
-      </p>
-
-      <p
-        className={`mt-2 text-2xl font-bold ${valueClass}`}
-      >
-        {value}
-      </p>
-
-      <p
-        className={`mt-1 text-[10px] ${subtitleClass}`}
-      >
-        {subtitle}
-      </p>
-    </div>
-  );
-}
-
-/* ============================================================
-   SECURITY INSIGHT
-============================================================ */
-
-function InsightCard({
-  title,
-  value,
-  description,
-  danger = false,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  danger?: boolean;
-}) {
-  return (
-    <div className="rounded-md border border-slate-200 p-4">
-      <p className="text-[10px] text-slate-400">
-        {title}
-      </p>
-
-      <p
-        className={`mt-2 text-base font-semibold ${
-          danger
-            ? "text-red-600"
-            : "text-slate-900"
-        }`}
-      >
-        {value}
-      </p>
-
-      <p className="mt-1 text-[10px] text-slate-500">
-        {description}
-      </p>
-    </div>
   );
 }
