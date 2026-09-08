@@ -74,47 +74,7 @@ class Customer(Base, TenantMixin):
     email = Column(String(180))
     credit_limit = Column(Float, default=0.0)
     outstanding = Column(Float, default=0.0)
-class Quotation(Base, TenantMixin):
-    """Sales quotation (FR-SAL-01)."""
-    __tablename__ = "quotations"
 
-    id = Column(Integer, primary_key=True)
-    quote_number = Column(String(40), nullable=False)
-    customer_id = Column(Integer, ForeignKey("customers.id"))
-    status = Column(String(24), default="draft")
-    valid_until = Column(Date)
-    revision = Column(Integer, default=1)
-    subtotal = Column(Float, default=0.0)
-    tax_amount = Column(Float, default=0.0)
-    total = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=utcnow)
-
-    lines = relationship(
-        "QuotationLine",
-        back_populates="quotation",
-        cascade="all, delete-orphan",
-    )
-
-    __table_args__ = (
-        Index("ix_quotations_tenant_number", "tenant_id", "quote_number", unique=True),
-    )
-
-
-class QuotationLine(Base, TenantMixin):
-    """Quotation line item (FR-SAL-01)."""
-    __tablename__ = "quotation_lines"
-
-    id = Column(Integer, primary_key=True)
-    quotation_id = Column(Integer, ForeignKey("quotations.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    quantity = Column(Float, nullable=False)
-    unit_price = Column(Float, default=0.0)
-    discount = Column(Float, default=0.0)
-    gst_rate = Column(Float, default=18.0)
-    tax_amount = Column(Float, default=0.0)
-    line_total = Column(Float, default=0.0)
-
-    quotation = relationship("Quotation", back_populates="lines")
 
 class Product(Base, TenantMixin):
     """FR-INV-01 / FR-INV-02."""
@@ -139,17 +99,10 @@ class Product(Base, TenantMixin):
     attributes = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utcnow)
+
     stock_items = relationship("StockItem", back_populates="product")
 
-    parent = relationship(
-        "Product",
-        remote_side=[id],
-        backref="variants",
-    )
-
-    __table_args__ = (
-        Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),
-    )
+    __table_args__ = (Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),)
 
 
 class StockItem(Base, TenantMixin):
@@ -236,10 +189,7 @@ class SalesOrder(Base, TenantMixin):
     total = Column(Float, default=0.0)
     cogs = Column(Float, default=0.0)                     # for gross profit (FR-RPT-01)
     payment_mode = Column(String(24), default="cash")
-    idempotency_key = Column(String(64))   
-    irn = Column(String(64), nullable=True)
-    irn_status = Column(String(24), default="not_required")
-                   # NFR-05 offline POS sync
+    idempotency_key = Column(String(64))                  # NFR-05 offline POS sync
     created_at = Column(DateTime, default=utcnow)
 
     lines = relationship("SalesOrderLine", back_populates="order", cascade="all, delete-orphan")
@@ -299,51 +249,6 @@ class AIRecommendation(Base, TenantMixin):
     acted_at = Column(DateTime)
     created_at = Column(DateTime, default=utcnow, index=True)
 
-class StockTransfer(Base, TenantMixin):
-    """FR-INV-06 — warehouse transfer workflow."""
-
-    __tablename__ = "stock_transfers"
-
-    id = Column(Integer, primary_key=True)
-
-    product_id = Column(
-        Integer,
-        ForeignKey("products.id"),
-        nullable=False,
-        index=True,
-    )
-
-    from_warehouse_id = Column(
-        Integer,
-        ForeignKey("warehouses.id"),
-        nullable=False,
-    )
-
-    to_warehouse_id = Column(
-        Integer,
-        ForeignKey("warehouses.id"),
-        nullable=False,
-    )
-
-    quantity = Column(Float, nullable=False)
-
-    status = Column(
-        String(20),
-        default="pending",
-        nullable=False,
-        index=True,
-    )  # pending|approved|in_transit|received
-
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    approved_by = Column(Integer, ForeignKey("users.id"))
-    dispatched_by = Column(Integer, ForeignKey("users.id"))
-    received_by = Column(Integer, ForeignKey("users.id"))
-
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    approved_at = Column(DateTime)
-    dispatched_at = Column(DateTime)
-    received_at = Column(DateTime)
-
 
 class AuditLog(Base, TenantMixin):
     """NFR-08 — immutable."""
@@ -356,186 +261,211 @@ class AuditLog(Base, TenantMixin):
     details = Column(JSON)
     ip_address = Column(String(64))
     created_at = Column(DateTime, default=utcnow, index=True)
-class CycleCountSession(Base, TenantMixin):
-    """FR-INV-07 — physical stock cycle-count session."""
-    __tablename__ = "cycle_count_sessions"
+"""
+NEW MODELS FOR entities.py — Dev C (Nikhil)
+Append these classes to the bottom of app/models/entities.py
+Covers: CRM (Lead, Activity, Pipeline), HRM (Employee, Attendance, Leave, Payslip), WHS (Bin, PickList, PutAway, Dispatch)
+"""
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CRM MODELS (FR-CRM-01 to FR-CRM-04)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Lead(Base, TenantMixin):
+    """FR-CRM-01 — lead with source attribution."""
+    __tablename__ = "leads"
     id = Column(Integer, primary_key=True)
-    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
-    status = Column(String(20), default="open", nullable=False, index=True)
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    closed_at = Column(DateTime)
-
-
-class CycleCountEntry(Base, TenantMixin):
-    """Physical count entry belonging to a cycle-count session."""
-    __tablename__ = "cycle_count_entries"
-
-    id = Column(Integer, primary_key=True)
-    session_id = Column(
-        Integer,
-        ForeignKey("cycle_count_sessions.id"),
-        nullable=False,
-        index=True,
-    )
-    product_id = Column(
-        Integer,
-        ForeignKey("products.id"),
-        nullable=False,
-        index=True,
-    )
-
-    system_quantity = Column(Float, nullable=False)
-    counted_quantity = Column(Float)
-    variance = Column(Float)
-
-    counted_by = Column(Integer, ForeignKey("users.id"))
-    counted_at = Column(DateTime)
-class StockSerial(Base, TenantMixin):
-    """Individual serial-number tracking for serialized inventory."""
-    __tablename__ = "stock_serials"
-
-    id = Column(Integer, primary_key=True)
-    product_id = Column(
-        Integer,
-        ForeignKey("products.id"),
-        nullable=False,
-        index=True,
-    )
-    warehouse_id = Column(
-        Integer,
-        ForeignKey("warehouses.id"),
-        nullable=False,
-        index=True,
-    )
-    serial_number = Column(String(128), nullable=False, index=True)
-    batch_no = Column(String(64))
-    status = Column(
-        String(24),
-        default="available",
-        nullable=False,
-    )  # available|reserved|sold|transferred
-
-    created_at = Column(DateTime, default=utcnow)
-
-    __table_args__ = (
-        Index(
-            "uq_stock_serial_tenant_serial",
-            "tenant_id",
-            "serial_number",
-            unique=True,
-        ),
-    )
-class ProductBOM(Base, TenantMixin):
-    """Bill of materials / bundle definition (FR-INV-10)."""
-    __tablename__ = "product_boms"
-
-    id = Column(Integer, primary_key=True)
-
-    product_id = Column(
-        Integer,
-        ForeignKey("products.id"),
-        nullable=False,
-        index=True,
-    )
-
-    is_active = Column(
-        Boolean,
-        default=True,
-        nullable=False,
-    )
-
-    created_at = Column(
-        DateTime,
-        default=utcnow,
-        nullable=True,
-    )
-
-    product = relationship("Product")
-
-    lines = relationship(
-        "ProductBOMLine",
-        back_populates="bom",
-        cascade="all, delete-orphan",
-    )
-
-
-class ProductBOMLine(Base, TenantMixin):
-    """Component required by a bundle/BOM."""
-    __tablename__ = "product_bom_lines"
-
-    id = Column(Integer, primary_key=True)
-
-    bom_id = Column(
-        Integer,
-        ForeignKey("product_boms.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-
-    component_product_id = Column(
-        Integer,
-        ForeignKey("products.id"),
-        nullable=False,
-        index=True,
-    )
-
-    quantity = Column(
-        Float,
-        nullable=False,
-    )
-
-    bom = relationship(
-        "ProductBOM",
-        back_populates="lines",
-    )
-
-    component_product = relationship("Product")
-class Expense(Base, TenantMixin):
-    """Finance expense record (FR-FIN-02)."""
-    __tablename__ = "expenses"
-
-    id = Column(Integer, primary_key=True)
-    category = Column(String(80), nullable=False)
-    amount = Column(Float, nullable=False)
-    payment_mode = Column(String(24), default="cash")
-    description = Column(Text)
-    attachment_url = Column(String(500))
-    expense_date = Column(Date, nullable=False)
-    created_by = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime, default=utcnow)
-
-
-class FinanceTransaction(Base, TenantMixin):
-    """Cash/bank transaction (FR-FIN-04, FR-FIN-06)."""
-    __tablename__ = "finance_transactions"
-
-    id = Column(Integer, primary_key=True)
-    transaction_type = Column(String(24), nullable=False)
-    amount = Column(Float, nullable=False)
-    payment_mode = Column(String(24), default="cash")
-    reference_type = Column(String(40))
-    reference_id = Column(Integer)
-    party_id = Column(Integer)
+    name = Column(String(180), nullable=False)
+    email = Column(String(180))
+    phone = Column(String(32))
+    source = Column(String(40), default="walk_in")   # walk_in|referral|online|campaign
+    status = Column(String(32), default="new")        # new|contacted|qualified|converted|lost
+    assigned_to = Column(Integer, ForeignKey("users.id"))
     notes = Column(Text)
-    transaction_date = Column(Date, nullable=False)
-    created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    activities = relationship("LeadActivity", back_populates="lead", cascade="all, delete-orphan")
+
+    __table_args__ = (Index("ix_leads_tenant_status", "tenant_id", "status"),)
 
 
-class FinanceAllocation(Base, TenantMixin):
-    """Allocation of receipts/payments against invoices/bills (FR-FIN-06)."""
-    __tablename__ = "finance_allocations"
-
+class LeadActivity(Base, TenantMixin):
+    """FR-CRM-02 — activity/follow-up timeline per lead."""
+    __tablename__ = "lead_activities"
     id = Column(Integer, primary_key=True)
-    transaction_id = Column(
-        Integer,
-        ForeignKey("finance_transactions.id"),
-        nullable=False,
-        index=True,
-    )
-    document_type = Column(String(40), nullable=False)
-    document_id = Column(Integer, nullable=False)
-    allocated_amount = Column(Float, nullable=False)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False, index=True)
+    activity_type = Column(String(40), default="note")  # note|call|email|meeting|follow_up
+    description = Column(Text, nullable=False)
+    due_date = Column(DateTime)
+    completed = Column(Boolean, default=False)
+    completed_at = Column(DateTime)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=utcnow)
+
+    lead = relationship("Lead", back_populates="activities")
+
+
+class SalesPipeline(Base, TenantMixin):
+    """FR-CRM-04 — sales pipeline stage tracking."""
+    __tablename__ = "sales_pipeline"
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    title = Column(String(220), nullable=False)
+    stage = Column(String(40), default="prospect")   # prospect|proposal|negotiation|closed_won|closed_lost
+    value = Column(Float, default=0.0)
+    expected_close_date = Column(Date)
+    assigned_to = Column(Integer, ForeignKey("users.id"))
+    notes = Column(Text)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (Index("ix_pipeline_tenant_stage", "tenant_id", "stage"),)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HRM MODELS (FR-HRM-01 to FR-HRM-04)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Employee(Base, TenantMixin):
+    """FR-HRM-01 — employee master."""
+    __tablename__ = "employees"
+    id = Column(Integer, primary_key=True)
+    employee_code = Column(String(32), nullable=False)
+    full_name = Column(String(180), nullable=False)
+    email = Column(String(180))
+    phone = Column(String(32))
+    department = Column(String(120))
+    designation = Column(String(120))
+    joining_date = Column(Date, nullable=False)
+    basic_salary = Column(Float, default=0.0)
+    status = Column(String(20), default="active")    # active|inactive|terminated
+    created_at = Column(DateTime, default=utcnow)
+
+    __table_args__ = (Index("ix_employees_tenant_code", "tenant_id", "employee_code", unique=True),)
+
+
+class Attendance(Base, TenantMixin):
+    """FR-HRM-02 — daily attendance record."""
+    __tablename__ = "attendance"
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False)
+    check_in = Column(DateTime)
+    check_out = Column(DateTime)
+    status = Column(String(20), default="present")   # present|absent|half_day|holiday|leave
+    source = Column(String(20), default="manual")    # manual|mobile|biometric
+
+    __table_args__ = (Index("ix_attendance_employee_date", "tenant_id", "employee_id", "date", unique=True),)
+
+
+class LeaveRequest(Base, TenantMixin):
+    """FR-HRM-03 — leave request and approval."""
+    __tablename__ = "leave_requests"
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    leave_type = Column(String(40), default="casual")   # casual|sick|earned|unpaid
+    from_date = Column(Date, nullable=False)
+    to_date = Column(Date, nullable=False)
+    days = Column(Float, nullable=False)
+    reason = Column(Text)
+    status = Column(String(20), default="pending")      # pending|approved|rejected
+    approved_by = Column(Integer, ForeignKey("users.id"))
+    approved_at = Column(DateTime)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class Payslip(Base, TenantMixin):
+    """FR-HRM-04 — computed payslip."""
+    __tablename__ = "payslips"
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    month = Column(Integer, nullable=False)    # 1-12
+    year = Column(Integer, nullable=False)
+    working_days = Column(Float, default=0.0)
+    present_days = Column(Float, default=0.0)
+    basic = Column(Float, default=0.0)
+    allowances = Column(Float, default=0.0)
+    deductions = Column(Float, default=0.0)
+    net_pay = Column(Float, default=0.0)
+    status = Column(String(20), default="draft")   # draft|approved|paid
+    created_at = Column(DateTime, default=utcnow)
+
+    __table_args__ = (Index("ix_payslips_employee_month", "tenant_id", "employee_id", "year", "month", unique=True),)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WAREHOUSE MODELS (FR-WHS-01 to FR-WHS-04)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WarehouseBin(Base, TenantMixin):
+    """FR-WHS-01 — zone → rack → bin hierarchy."""
+    __tablename__ = "warehouse_bins"
+    id = Column(Integer, primary_key=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False, index=True)
+    zone = Column(String(32), nullable=False)
+    rack = Column(String(32), nullable=False)
+    bin_code = Column(String(32), nullable=False)
+    capacity = Column(Float, default=0.0)
+    is_active = Column(Boolean, default=True)
+
+    __table_args__ = (Index("ix_bins_tenant_code", "tenant_id", "warehouse_id", "bin_code", unique=True),)
+
+
+class PickList(Base, TenantMixin):
+    """FR-WHS-02 — pick list for a sales order."""
+    __tablename__ = "pick_lists"
+    id = Column(Integer, primary_key=True)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=False, index=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    status = Column(String(20), default="pending")   # pending|in_progress|completed
+    assigned_to = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow)
+    completed_at = Column(DateTime)
+
+    lines = relationship("PickListLine", back_populates="pick_list", cascade="all, delete-orphan")
+
+
+class PickListLine(Base, TenantMixin):
+    """Individual line in a pick list."""
+    __tablename__ = "pick_list_lines"
+    id = Column(Integer, primary_key=True)
+    pick_list_id = Column(Integer, ForeignKey("pick_lists.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    bin_id = Column(Integer, ForeignKey("warehouse_bins.id"))
+    quantity_required = Column(Float, nullable=False)
+    quantity_picked = Column(Float, default=0.0)
+    is_picked = Column(Boolean, default=False)
+
+    pick_list = relationship("PickList", back_populates="lines")
+
+
+class PutAway(Base, TenantMixin):
+    """FR-WHS-03 — put-away task after goods receipt."""
+    __tablename__ = "put_aways"
+    id = Column(Integer, primary_key=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    suggested_bin_id = Column(Integer, ForeignKey("warehouse_bins.id"))
+    actual_bin_id = Column(Integer, ForeignKey("warehouse_bins.id"))
+    quantity = Column(Float, nullable=False)
+    status = Column(String(20), default="pending")   # pending|completed
+    assigned_to = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow)
+    completed_at = Column(DateTime)
+
+
+class Dispatch(Base, TenantMixin):
+    """FR-WHS-04 — dispatch record with gate pass."""
+    __tablename__ = "dispatches"
+    id = Column(Integer, primary_key=True)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=False, index=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    courier = Column(String(120))
+    vehicle_number = Column(String(32))
+    tracking_number = Column(String(64))
+    gate_pass_number = Column(String(32))
+    dispatched_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    dispatched_at = Column(DateTime, default=utcnow)
+    status = Column(String(20), default="dispatched")   # dispatched|delivered|returned
