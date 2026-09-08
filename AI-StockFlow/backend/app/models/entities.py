@@ -261,3 +261,211 @@ class AuditLog(Base, TenantMixin):
     details = Column(JSON)
     ip_address = Column(String(64))
     created_at = Column(DateTime, default=utcnow, index=True)
+"""
+NEW MODELS FOR entities.py — Dev C (Nikhil)
+Append these classes to the bottom of app/models/entities.py
+Covers: CRM (Lead, Activity, Pipeline), HRM (Employee, Attendance, Leave, Payslip), WHS (Bin, PickList, PutAway, Dispatch)
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRM MODELS (FR-CRM-01 to FR-CRM-04)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Lead(Base, TenantMixin):
+    """FR-CRM-01 — lead with source attribution."""
+    __tablename__ = "leads"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(180), nullable=False)
+    email = Column(String(180))
+    phone = Column(String(32))
+    source = Column(String(40), default="walk_in")   # walk_in|referral|online|campaign
+    status = Column(String(32), default="new")        # new|contacted|qualified|converted|lost
+    assigned_to = Column(Integer, ForeignKey("users.id"))
+    notes = Column(Text)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    activities = relationship("LeadActivity", back_populates="lead", cascade="all, delete-orphan")
+
+    __table_args__ = (Index("ix_leads_tenant_status", "tenant_id", "status"),)
+
+
+class LeadActivity(Base, TenantMixin):
+    """FR-CRM-02 — activity/follow-up timeline per lead."""
+    __tablename__ = "lead_activities"
+    id = Column(Integer, primary_key=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False, index=True)
+    activity_type = Column(String(40), default="note")  # note|call|email|meeting|follow_up
+    description = Column(Text, nullable=False)
+    due_date = Column(DateTime)
+    completed = Column(Boolean, default=False)
+    completed_at = Column(DateTime)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    lead = relationship("Lead", back_populates="activities")
+
+
+class SalesPipeline(Base, TenantMixin):
+    """FR-CRM-04 — sales pipeline stage tracking."""
+    __tablename__ = "sales_pipeline"
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    title = Column(String(220), nullable=False)
+    stage = Column(String(40), default="prospect")   # prospect|proposal|negotiation|closed_won|closed_lost
+    value = Column(Float, default=0.0)
+    expected_close_date = Column(Date)
+    assigned_to = Column(Integer, ForeignKey("users.id"))
+    notes = Column(Text)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (Index("ix_pipeline_tenant_stage", "tenant_id", "stage"),)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HRM MODELS (FR-HRM-01 to FR-HRM-04)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Employee(Base, TenantMixin):
+    """FR-HRM-01 — employee master."""
+    __tablename__ = "employees"
+    id = Column(Integer, primary_key=True)
+    employee_code = Column(String(32), nullable=False)
+    full_name = Column(String(180), nullable=False)
+    email = Column(String(180))
+    phone = Column(String(32))
+    department = Column(String(120))
+    designation = Column(String(120))
+    joining_date = Column(Date, nullable=False)
+    basic_salary = Column(Float, default=0.0)
+    status = Column(String(20), default="active")    # active|inactive|terminated
+    created_at = Column(DateTime, default=utcnow)
+
+    __table_args__ = (Index("ix_employees_tenant_code", "tenant_id", "employee_code", unique=True),)
+
+
+class Attendance(Base, TenantMixin):
+    """FR-HRM-02 — daily attendance record."""
+    __tablename__ = "attendance"
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False)
+    check_in = Column(DateTime)
+    check_out = Column(DateTime)
+    status = Column(String(20), default="present")   # present|absent|half_day|holiday|leave
+    source = Column(String(20), default="manual")    # manual|mobile|biometric
+
+    __table_args__ = (Index("ix_attendance_employee_date", "tenant_id", "employee_id", "date", unique=True),)
+
+
+class LeaveRequest(Base, TenantMixin):
+    """FR-HRM-03 — leave request and approval."""
+    __tablename__ = "leave_requests"
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    leave_type = Column(String(40), default="casual")   # casual|sick|earned|unpaid
+    from_date = Column(Date, nullable=False)
+    to_date = Column(Date, nullable=False)
+    days = Column(Float, nullable=False)
+    reason = Column(Text)
+    status = Column(String(20), default="pending")      # pending|approved|rejected
+    approved_by = Column(Integer, ForeignKey("users.id"))
+    approved_at = Column(DateTime)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class Payslip(Base, TenantMixin):
+    """FR-HRM-04 — computed payslip."""
+    __tablename__ = "payslips"
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    month = Column(Integer, nullable=False)    # 1-12
+    year = Column(Integer, nullable=False)
+    working_days = Column(Float, default=0.0)
+    present_days = Column(Float, default=0.0)
+    basic = Column(Float, default=0.0)
+    allowances = Column(Float, default=0.0)
+    deductions = Column(Float, default=0.0)
+    net_pay = Column(Float, default=0.0)
+    status = Column(String(20), default="draft")   # draft|approved|paid
+    created_at = Column(DateTime, default=utcnow)
+
+    __table_args__ = (Index("ix_payslips_employee_month", "tenant_id", "employee_id", "year", "month", unique=True),)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WAREHOUSE MODELS (FR-WHS-01 to FR-WHS-04)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WarehouseBin(Base, TenantMixin):
+    """FR-WHS-01 — zone → rack → bin hierarchy."""
+    __tablename__ = "warehouse_bins"
+    id = Column(Integer, primary_key=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False, index=True)
+    zone = Column(String(32), nullable=False)
+    rack = Column(String(32), nullable=False)
+    bin_code = Column(String(32), nullable=False)
+    capacity = Column(Float, default=0.0)
+    is_active = Column(Boolean, default=True)
+
+    __table_args__ = (Index("ix_bins_tenant_code", "tenant_id", "warehouse_id", "bin_code", unique=True),)
+
+
+class PickList(Base, TenantMixin):
+    """FR-WHS-02 — pick list for a sales order."""
+    __tablename__ = "pick_lists"
+    id = Column(Integer, primary_key=True)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=False, index=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    status = Column(String(20), default="pending")   # pending|in_progress|completed
+    assigned_to = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow)
+    completed_at = Column(DateTime)
+
+    lines = relationship("PickListLine", back_populates="pick_list", cascade="all, delete-orphan")
+
+
+class PickListLine(Base, TenantMixin):
+    """Individual line in a pick list."""
+    __tablename__ = "pick_list_lines"
+    id = Column(Integer, primary_key=True)
+    pick_list_id = Column(Integer, ForeignKey("pick_lists.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    bin_id = Column(Integer, ForeignKey("warehouse_bins.id"))
+    quantity_required = Column(Float, nullable=False)
+    quantity_picked = Column(Float, default=0.0)
+    is_picked = Column(Boolean, default=False)
+
+    pick_list = relationship("PickList", back_populates="lines")
+
+
+class PutAway(Base, TenantMixin):
+    """FR-WHS-03 — put-away task after goods receipt."""
+    __tablename__ = "put_aways"
+    id = Column(Integer, primary_key=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    suggested_bin_id = Column(Integer, ForeignKey("warehouse_bins.id"))
+    actual_bin_id = Column(Integer, ForeignKey("warehouse_bins.id"))
+    quantity = Column(Float, nullable=False)
+    status = Column(String(20), default="pending")   # pending|completed
+    assigned_to = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow)
+    completed_at = Column(DateTime)
+
+
+class Dispatch(Base, TenantMixin):
+    """FR-WHS-04 — dispatch record with gate pass."""
+    __tablename__ = "dispatches"
+    id = Column(Integer, primary_key=True)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=False, index=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    courier = Column(String(120))
+    vehicle_number = Column(String(32))
+    tracking_number = Column(String(64))
+    gate_pass_number = Column(String(32))
+    dispatched_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    dispatched_at = Column(DateTime, default=utcnow)
+    status = Column(String(20), default="dispatched")   # dispatched|delivered|returned
