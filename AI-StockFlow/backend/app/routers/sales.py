@@ -1,5 +1,6 @@
 """Sales and POS endpoints (SRS §3.3)."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -19,12 +20,13 @@ from app.models.entities import (
     QuotationLine,
     SalesOrder,
     SalesOrderLine,
+    SalesReturn,
+    SalesReturnLine,
     StockItem,
     StockMovement,
     StockSerial,
-        User,
-        Warehouse,
-Warehouse,
+    User,
+    Warehouse,
 )
 from app.services.logic import compute_gst
 
@@ -50,6 +52,18 @@ class SaleIn(BaseModel):
         default=None,
         description="Send a stable key from the POS so replayed offline bills post once (NFR-05).",
     )
+
+
+class SalesReturnLineIn(BaseModel):
+    product_id: int
+    quantity: float = Field(gt=0)
+
+
+class SalesReturnIn(BaseModel):
+    sales_order_id: int
+    warehouse_id: int | None = None
+    reason: str | None = None
+    lines: list[SalesReturnLineIn] = Field(min_length=1)
 
 
 class QuotationLineIn(BaseModel):
@@ -119,10 +133,12 @@ def create_sale(
     )
 
 
-def _create_sale_once(body: SaleIn, user:
-        User,
-        Warehouse,
-db: Session, attempt: int):
+def _create_sale_once(
+    body: SaleIn,
+    user: User,
+    db: Session,
+    attempt: int,
+):
     # NFR-05: a replayed offline bill must not create a second invoice.
     if body.idempotency_key:
         existing = (
@@ -270,6 +286,27 @@ db: Session, attempt: int):
     order.total = round(subtotal + tax_total, 2)
     order.cogs = round(cogs, 2)
 
+    # --------------------------------------------------------------
+    # FR-FIN-05: Accounts Receivable for unpaid/credit sales
+    # --------------------------------------------------------------
+    if (
+        order.customer_id
+        and str(order.payment_mode or "").lower() == "pending"
+    ):
+        customer = (
+            scoped(db, Customer, user.tenant_id)
+            .filter(Customer.id == order.customer_id)
+            .first()
+        )
+
+        if customer:
+            terms = int(customer.payment_terms_days or 30)
+            order.outstanding = order.total
+            order.due_date = order.order_date.date() + timedelta(days=terms)
+            customer.outstanding = (
+                float(customer.outstanding or 0) + order.total
+            )
+
     db.add(AuditLog(
         tenant_id=user.tenant_id, user_id=user.id, action="sales.create",
         entity_type="sales_order", entity_id=order.id,
@@ -280,11 +317,252 @@ db: Session, attempt: int):
     return {
         "id": order.id,
         "order_number": order.order_number,
+        "irn": order.irn,
+        "irn_status": order.irn_status,
         "subtotal": order.subtotal,
         "tax_amount": order.tax_amount,
         "total": order.total,
         "gross_profit": round(order.subtotal - order.cogs, 2),
         "duplicate": False,
+    }
+
+
+@router.post("/{sale_id}/e-invoice")
+def generate_e_invoice(
+    sale_id: int,
+    user: User = Depends(require("sales:write")),
+    db: Session = Depends(get_db),
+):
+    """Generate an e-invoice IRN for an eligible sales invoice."""
+
+    order = (
+        scoped(db, SalesOrder, user.tenant_id)
+        .filter(SalesOrder.id == sale_id)
+        .first()
+    )
+
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Sales invoice not found.",
+        )
+
+    if order.irn:
+        return {
+            "sales_order_id": order.id,
+            "order_number": order.order_number,
+            "irn": order.irn,
+            "irn_status": order.irn_status,
+            "duplicate": True,
+        }
+
+    # Demo/local IRN generation.
+    # A production IRN must be issued by the GST IRP.
+    raw = (
+        f"{user.tenant_id}|"
+        f"{order.order_number}|"
+        f"{order.total:.2f}|"
+        f"{order.order_date.isoformat()}"
+    )
+
+    irn = hashlib.sha256(raw.encode()).hexdigest()
+
+    order.irn = irn
+    order.irn_status = "generated"
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="sales.e_invoice.generate",
+            entity_type="sales_order",
+            entity_id=order.id,
+            details={
+                "order_number": order.order_number,
+                "irn_status": "generated",
+            },
+        )
+    )
+
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "sales_order_id": order.id,
+        "order_number": order.order_number,
+        "irn": order.irn,
+        "irn_status": order.irn_status,
+        "total": order.total,
+        "message": "E-invoice IRN generated successfully.",
+    }
+
+
+@router.post("/returns", response_model=dict)
+def create_sales_return(
+    body: SalesReturnIn,
+    user: User = Depends(require("sales:write")),
+    db: Session = Depends(get_db),
+):
+    order = (
+        db.query(SalesOrder)
+        .filter(
+            SalesOrder.id == body.sales_order_id,
+            SalesOrder.tenant_id == user.tenant_id,
+        )
+        .first()
+    )
+
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Sales order not found")
+
+    warehouse_id = body.warehouse_id or order.warehouse_id
+
+    if not warehouse_id:
+        raise HTTPException(status_code=400, detail="Warehouse is required")
+
+    return_lines = []
+    total_amount = 0.0
+    tax_amount = 0.0
+
+    for item in body.lines:
+        original = next(
+            (
+                line
+                for line in order.lines
+                if line.product_id == item.product_id
+            ),
+            None,
+        )
+
+        if not original:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Product {item.product_id} was not sold in this order",
+            )
+
+        already_returned = (
+            db.query(SalesReturnLine)
+            .join(SalesReturn, SalesReturn.id == SalesReturnLine.return_id)
+            .filter(
+                SalesReturn.tenant_id == user.tenant_id,
+                SalesReturn.sales_order_id == order.id,
+                SalesReturnLine.product_id == item.product_id,
+            )
+            .with_entities(func.coalesce(func.sum(SalesReturnLine.quantity), 0))
+            .scalar()
+            or 0
+        )
+
+        available = original.quantity - float(already_returned)
+
+        if item.quantity > available:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Return quantity exceeds sold quantity for product "
+                    f"{item.product_id}. Available: {available}"
+                ),
+            )
+
+        line_total = original.unit_price * item.quantity
+        line_tax = line_total * (original.gst_rate / 100)
+
+        return_lines.append(
+            {
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+                "unit_price": original.unit_price,
+                "gst_rate": original.gst_rate,
+                "tax_amount": line_tax,
+                "line_total": line_total + line_tax,
+                "unit_cost": original.unit_cost,
+            }
+        )
+
+        total_amount += line_total + line_tax
+        tax_amount += line_tax
+
+    last_id = (
+        db.query(func.max(SalesReturn.id))
+        .filter(SalesReturn.tenant_id == user.tenant_id)
+        .scalar()
+        or 0
+    )
+
+    sales_return = SalesReturn(
+        tenant_id=user.tenant_id,
+        return_number=f"RET-{last_id + 1:05d}",
+        sales_order_id=order.id,
+        customer_id=order.customer_id,
+        warehouse_id=warehouse_id,
+        reason=body.reason,
+        refund_amount=total_amount - tax_amount,
+        tax_amount=tax_amount,
+        total_amount=total_amount,
+        status="confirmed",
+    )
+
+    db.add(sales_return)
+    db.flush()
+
+    for data in return_lines:
+        db.add(
+            SalesReturnLine(
+                tenant_id=user.tenant_id,
+                return_id=sales_return.id,
+                product_id=data["product_id"],
+                quantity=data["quantity"],
+                unit_price=data["unit_price"],
+                gst_rate=data["gst_rate"],
+                tax_amount=data["tax_amount"],
+                line_total=data["line_total"],
+            )
+        )
+
+        stock = (
+            db.query(StockItem)
+            .filter(
+                StockItem.tenant_id == user.tenant_id,
+                StockItem.product_id == data["product_id"],
+                StockItem.warehouse_id == warehouse_id,
+            )
+            .first()
+        )
+
+        if not stock:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Stock item not found for product {data['product_id']}",
+            )
+
+        stock.quantity += data["quantity"]
+
+        db.add(
+            StockMovement(
+                tenant_id=user.tenant_id,
+                product_id=data["product_id"],
+                warehouse_id=warehouse_id,
+                movement_type="return",
+                quantity=data["quantity"],
+                unit_cost=data["unit_cost"],
+                reason_code="sales_return",
+                reference_type="sales_return",
+                reference_id=sales_return.id,
+                user_id=user.id,
+            )
+        )
+
+    db.commit()
+    db.refresh(sales_return)
+
+    return {
+        "id": sales_return.id,
+        "return_number": sales_return.return_number,
+        "sales_order_id": sales_return.sales_order_id,
+        "total_amount": sales_return.total_amount,
+        "tax_amount": sales_return.tax_amount,
+        "status": sales_return.status,
     }
 
 

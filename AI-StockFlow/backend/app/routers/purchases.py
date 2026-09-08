@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-
+from datetime import date, datetime, timedelta, timezone
 from app.core.database import get_db, scoped
 from app.core.security import require
 from app.models.entities import (
@@ -456,7 +456,7 @@ def receive_purchase_order(
         if supplier:
             terms = int(supplier.payment_terms_days or 30)
             order.outstanding = order.total
-            order.due_date = order.order_date.date() + timedelta(days=terms)
+            order.due_date = order.order_date + timedelta(days=terms)
 
     db.add(
         AuditLog(
