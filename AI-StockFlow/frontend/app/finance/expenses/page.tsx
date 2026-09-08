@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageLayout from "../../../components/layout/PageLayout";
 
 type Expense = {
@@ -55,7 +55,28 @@ const formatCurrency = (value: number) =>
   }).format(value);
 
 export default function ExpensesPage() {
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
+  const [expenses, setExpenses] = useState<Expense[]>(() => {
+  if (typeof window === "undefined") {
+    return initialExpenses;
+  }
+
+  const savedExpenses = localStorage.getItem("stockflow-expenses");
+
+  if (!savedExpenses) {
+    return initialExpenses;
+  }
+
+  try {
+    return JSON.parse(savedExpenses);
+  } catch {
+    localStorage.removeItem("stockflow-expenses");
+    return initialExpenses;
+  }
+});
+
+useEffect(() => {
+  localStorage.setItem("stockflow-expenses", JSON.stringify(expenses));
+}, [expenses]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [periodFilter, setPeriodFilter] = useState("All Periods");

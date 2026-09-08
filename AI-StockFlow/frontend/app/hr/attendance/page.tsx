@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type AttendanceStatus = "Present" | "Absent" | "Late" | "Leave";
 
@@ -82,9 +82,30 @@ function getStatusClasses(status: AttendanceStatus) {
 }
 
 export default function AttendancePage() {
-  const [records, setRecords] =
-    useState<AttendanceRecord[]>(initialAttendance);
+  const [records, setRecords] = useState<AttendanceRecord[]>(() => {
+  if (typeof window !== "undefined") {
+    const saved = localStorage.getItem("stockflow-hr-attendance");
+
+    if (saved) {
+      try {
+        return JSON.parse(saved) as AttendanceRecord[];
+      } catch {
+        return initialAttendance;
+      }
+    }
+  }
+
+  return initialAttendance;
+});
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+  localStorage.setItem(
+    "stockflow-hr-attendance",
+    JSON.stringify(records)
+  );
+}, [records]);
+
   const [selectedDate, setSelectedDate] = useState("2026-09-04");
   const [statusFilter, setStatusFilter] = useState<"All" | AttendanceStatus>(
     "All"

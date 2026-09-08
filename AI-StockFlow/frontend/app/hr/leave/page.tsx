@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type LeaveStatus = "Pending" | "Approved" | "Rejected";
 
@@ -159,6 +159,31 @@ export default function LeaveManagementPage() {
   >("Overview");
 
   const [showForm, setShowForm] = useState(false);
+
+    const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const savedRequests = localStorage.getItem("stockflow-hr-leave");
+
+    if (savedRequests) {
+      try {
+        setRequests(JSON.parse(savedRequests));
+      } catch {
+        // Ignore invalid saved data
+      }
+    }
+
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) {
+      localStorage.setItem(
+        "stockflow-hr-leave",
+        JSON.stringify(requests)
+      );
+    }
+  }, [requests, hydrated]);
 
   const [employee, setEmployee] = useState("Rahul Sharma");
   const [leaveType, setLeaveType] = useState("Casual Leave");
