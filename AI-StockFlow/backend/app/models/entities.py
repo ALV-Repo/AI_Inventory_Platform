@@ -81,6 +81,7 @@ class Customer(Base, TenantMixin):
     email = Column(String(180))
     credit_limit = Column(Float, default=0.0)
     outstanding = Column(Float, default=0.0)
+    payment_terms_days = Column(Integer, default=30)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -250,6 +251,8 @@ class PurchaseOrder(Base, TenantMixin):
     subtotal = Column(Float, default=0.0)
     tax_amount = Column(Float, default=0.0)
     total = Column(Float, default=0.0)
+    due_date = Column(Date, nullable=True)
+    outstanding = Column(Float, default=0.0)
     created_by_ai = Column(Boolean, default=False)
     ai_reasoning = Column(JSON)
     created_at = Column(DateTime, default=utcnow)
@@ -325,6 +328,8 @@ class SalesOrder(Base, TenantMixin):
     idempotency_key = Column(String(64))
     irn = Column(String(64), nullable=True)
     irn_status = Column(String(24), default="not_required")
+    due_date = Column(Date, nullable=True)
+    outstanding = Column(Float, default=0.0)
     created_at = Column(DateTime, default=utcnow)
     lines = relationship("SalesOrderLine", back_populates="order", cascade="all, delete-orphan")
 
@@ -653,6 +658,10 @@ class Dispatch(Base, TenantMixin):
     dispatched_at = Column(DateTime, default=utcnow)
     status = Column(String(20), default="dispatched")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SALES RETURNS (Dev A — FR-SAL-06)
+# ─────────────────────────────────────────────────────────────────────────────
 
 class SalesReturn(Base, TenantMixin):
     """FR-SAL-06 — sales return / credit note."""
