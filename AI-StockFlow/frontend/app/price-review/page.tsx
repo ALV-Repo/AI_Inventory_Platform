@@ -1,810 +1,174 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import PageLayout from "../../components/layout/PageLayout";
+import { api, inr } from "../../lib/api";
 
-type PriceStatus = "Pending" | "Approved" | "Rejected";
-
-type PriceItem = {
-  id: number;
-  product: string;
+type Recommendation = {
+  recommendation_id: number;
+  product_id: number;
   sku: string;
-  currentPrice: number;
-  suggestedPrice: number;
-  change: number;
-  margin: number;
-  status: PriceStatus;
+  name: string;
+  on_hand: number;
+  available: number;
+  days_of_cover: number;
+  suggested_qty: number;
+  estimated_cost: number;
+  forecast_confidence: number;
+  forecast_method: string;
+  reasoning: Record<string, unknown>;
+  requires_approval: boolean;
 };
 
-const initialData: PriceItem[] = [
-  {
-    id: 1,
-    product: "Wireless Headphones",
-    sku: "WH-1001",
-    currentPrice: 2499,
-    suggestedPrice: 2699,
-    change: 8.0,
-    margin: 32.5,
-    status: "Pending",
-  },
-  {
-    id: 2,
-    product: "Bluetooth Speaker",
-    sku: "BS-1002",
-    currentPrice: 1899,
-    suggestedPrice: 1799,
-    change: -5.3,
-    margin: 28.4,
-    status: "Pending",
-  },
-  {
-    id: 3,
-    product: "Gaming Keyboard",
-    sku: "GK-1003",
-    currentPrice: 3499,
-    suggestedPrice: 3799,
-    change: 8.6,
-    margin: 36.2,
-    status: "Approved",
-  },
-  {
-    id: 4,
-    product: "Wireless Mouse",
-    sku: "WM-1004",
-    currentPrice: 1299,
-    suggestedPrice: 1399,
-    change: 7.7,
-    margin: 34.1,
-    status: "Pending",
-  },
-  {
-    id: 5,
-    product: "USB-C Hub",
-    sku: "UC-1005",
-    currentPrice: 999,
-    suggestedPrice: 899,
-    change: -10.0,
-    margin: 24.8,
-    status: "Rejected",
-  },
-  {
-    id: 6,
-    product: "Power Bank",
-    sku: "PB-1006",
-    currentPrice: 1599,
-    suggestedPrice: 1699,
-    change: 6.3,
-    margin: 31.7,
-    status: "Approved",
-  },
-];
-
-function formatCurrency(value: number) {
-  return `₹${value.toLocaleString("en-IN")}`;
-}
-
-function StatusBadge({ status }: { status: PriceStatus }) {
-  const styles: Record<
-    PriceStatus,
-    React.CSSProperties
-  > = {
-    Pending: {
-      background: "#fff7ed",
-      color: "#ea580c",
-      border: "1px solid #fed7aa",
-    },
-    Approved: {
-      background: "#ecfdf5",
-      color: "#059669",
-      border: "1px solid #a7f3d0",
-    },
-    Rejected: {
-      background: "#fef2f2",
-      color: "#dc2626",
-      border: "1px solid #fecaca",
-    },
-  };
-
-  return (
-    <span
-      style={{
-        ...styles[status],
-        padding: "5px 10px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 600,
-        display: "inline-block",
-      }}
-    >
-      {status}
-    </span>
-  );
-}
+type Decision = "accepted" | "rejected" | null;
+type Decisions = Record<number, Decision>;
 
 export default function PriceReviewPage() {
-  const [items, setItems] =
-    useState<PriceItem[]>(initialData);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [decisions, setDecisions] = useState<Decisions>({});
+  const [deciding, setDeciding] = useState<number | null>(null);
 
-  const [search, setSearch] = useState("");
+  useEffect(() => { load(); }, []);
 
-  const [statusFilter, setStatusFilter] =
-    useState<"All" | PriceStatus>("All");
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const data = await api.reorderSuggestions();
+      setRecommendations(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load price recommendations.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const filteredItems = useMemo(() => {
-    const query = search.toLowerCase().trim();
+  async function decide(rec: Recommendation, decision: "accepted" | "rejected") {
+    try {
+      setDeciding(rec.recommendation_id);
+      await api.decideRecommendation(rec.recommendation_id, decision);
+      setDecisions(prev => ({ ...prev, [rec.recommendation_id]: decision }));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Decision failed.");
+    } finally {
+      setDeciding(null);
+    }
+  }
 
-    return items.filter((item) => {
-      const matchesSearch =
-        !query ||
-        item.product
-          .toLowerCase()
-          .includes(query) ||
-        item.sku
-          .toLowerCase()
-          .includes(query);
+  const pending = recommendations.filter(r => !decisions[r.recommendation_id]);
+  const accepted = recommendations.filter(r => decisions[r.recommendation_id] === "accepted");
+  const rejected = recommendations.filter(r => decisions[r.recommendation_id] === "rejected");
 
-      const matchesStatus =
-        statusFilter === "All" ||
-        item.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [items, search, statusFilter]);
-
-  const pendingCount = items.filter(
-    (item) => item.status === "Pending"
-  ).length;
-
-  const approvedCount = items.filter(
-    (item) => item.status === "Approved"
-  ).length;
-
-  const rejectedCount = items.filter(
-    (item) => item.status === "Rejected"
-  ).length;
-
-  const approveItem = (id: number) => {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id
-          ? { ...item, status: "Approved" }
-          : item
-      )
-    );
-  };
-
-  const rejectItem = (id: number) => {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id
-          ? { ...item, status: "Rejected" }
-          : item
-      )
-    );
-  };
-
-  const resetData = () => {
-    setItems(initialData);
-    setSearch("");
-    setStatusFilter("All");
-  };
+  const confidenceColor = (c: number) =>
+    c >= 0.8 ? "text-green-600" : c >= 0.6 ? "text-yellow-600" : "text-red-600";
 
   return (
     <PageLayout>
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "#f8fafc",
-          padding: "32px",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1150,
-            margin: "0 auto",
-          }}
-        >
-          {/* Header */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: 28,
-              gap: 20,
-            }}
-          >
-            <div>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: "#0f172a",
-                }}
-              >
-                Price Review
-              </h1>
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">AI Reorder Recommendations</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              AI-suggested purchase quantities — every action requires human approval (NFR-16)
+            </p>
+          </div>
+          <button onClick={load} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Refresh</button>
+        </div>
 
-              <p
-                style={{
-                  marginTop: 7,
-                  color: "#64748b",
-                  fontSize: 14,
-                }}
-              >
-                Review AI-powered pricing recommendations
-                for your products
-              </p>
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+        {/* Summary */}
+        <div className="mb-6 grid grid-cols-3 gap-4">
+          {[
+            { label: "Pending Review", value: pending.length, color: "text-yellow-600" },
+            { label: "Accepted", value: accepted.length, color: "text-green-600" },
+            { label: "Rejected", value: rejected.length, color: "text-red-600" },
+          ].map(c => (
+            <div key={c.label} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-gray-500">{c.label}</p>
+              <p className={`mt-2 text-2xl font-bold ${c.color}`}>{loading ? "..." : c.value}</p>
             </div>
+          ))}
+        </div>
 
-            <button
-              type="button"
-              onClick={resetData}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                color: "#334155",
-                padding: "10px 16px",
-                borderRadius: 7,
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              Refresh
-            </button>
+        {loading ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+            <p className="text-sm text-gray-500">Loading AI recommendations...</p>
           </div>
-
-          {/* Summary Cards */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: 14,
-              marginBottom: 22,
-            }}
-          >
-            <SummaryCard
-              title="Total Recommendations"
-              value={items.length.toString()}
-              subtitle="AI pricing suggestions"
-            />
-
-            <SummaryCard
-              title="Pending Review"
-              value={pendingCount.toString()}
-              subtitle="Awaiting action"
-              valueColor="#ea580c"
-            />
-
-            <SummaryCard
-              title="Approved"
-              value={approvedCount.toString()}
-              subtitle="Approved prices"
-              valueColor="#16a34a"
-            />
-
-            <SummaryCard
-              title="Rejected"
-              value={rejectedCount.toString()}
-              subtitle="Rejected prices"
-              valueColor="#dc2626"
-            />
+        ) : recommendations.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-16 text-center">
+            <p className="text-4xl mb-3">✅</p>
+            <p className="text-gray-600 font-medium">No reorder recommendations at this time</p>
+            <p className="text-gray-400 text-sm mt-1">All products are above reorder levels</p>
           </div>
-
-          {/* Filters */}
-          <div
-            style={{
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 10,
-              padding: 14,
-              marginBottom: 18,
-              display: "flex",
-              gap: 10,
-            }}
-          >
-            <input
-              value={search}
-              onChange={(e) =>
-                setSearch(e.target.value)
-              }
-              placeholder="Search product or SKU..."
-              style={{
-                flex: 1,
-                height: 40,
-                border: "1px solid #cbd5e1",
-                borderRadius: 7,
-                padding: "0 12px",
-                outline: "none",
-                fontSize: 14,
-              }}
-            />
-
-            <select
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(
-                  e.target.value as
-                    | "All"
-                    | PriceStatus
-                )
-              }
-              style={{
-                height: 40,
-                minWidth: 150,
-                border: "1px solid #cbd5e1",
-                borderRadius: 7,
-                padding: "0 12px",
-                background: "#ffffff",
-                fontSize: 14,
-              }}
-            >
-              <option value="All">All Status</option>
-              <option value="Pending">Pending</option>
-              <option value="Approved">Approved</option>
-              <option value="Rejected">Rejected</option>
-            </select>
-          </div>
-
-          {/* Main Table */}
-          <section
-            style={{
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 10,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                padding: "18px 18px 14px",
-                borderBottom:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: 17,
-                  color: "#0f172a",
-                }}
-              >
-                Pricing Recommendations
-              </h2>
-
-              <p
-                style={{
-                  margin: "5px 0 0",
-                  fontSize: 13,
-                  color: "#64748b",
-                }}
-              >
-                AI-generated price recommendations
-                based on inventory and sales
-                performance.
-              </p>
-            </div>
-
-            <div style={{ overflowX: "auto" }}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  minWidth: 900,
-                }}
-              >
-                <thead>
-                  <tr
-                    style={{
-                      background: "#f8fafc",
-                    }}
-                  >
-                    <Th>Product</Th>
-                    <Th>Current Price</Th>
-                    <Th>Suggested Price</Th>
-                    <Th>Change</Th>
-                    <Th>Margin</Th>
-                    <Th>Status</Th>
-                    <Th>Action</Th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredItems.map((item) => (
-                    <tr key={item.id}>
-                      <Td>
-                        <div
-                          style={{
-                            fontWeight: 600,
-                            color: "#0f172a",
-                          }}
-                        >
-                          {item.product}
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 3,
-                            fontSize: 12,
-                            color: "#64748b",
-                          }}
-                        >
-                          SKU: {item.sku}
-                        </div>
-                      </Td>
-
-                      <Td>
-                        {formatCurrency(
-                          item.currentPrice
+        ) : (
+          <div className="space-y-4">
+            {recommendations.map(rec => {
+              const decision = decisions[rec.recommendation_id];
+              return (
+                <div key={rec.recommendation_id}
+                  className={`rounded-xl border bg-white p-5 shadow-sm transition ${decision === "accepted" ? "border-green-200 bg-green-50" : decision === "rejected" ? "border-red-100 opacity-60" : "border-gray-200"}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="font-mono text-sm text-gray-500">{rec.sku}</span>
+                        <h3 className="font-semibold text-gray-900">{rec.name}</h3>
+                        {decision && (
+                          <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${decision === "accepted" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            {decision}
+                          </span>
                         )}
-                      </Td>
-
-                      <Td>
-                        <strong>
-                          {formatCurrency(
-                            item.suggestedPrice
-                          )}
-                        </strong>
-                      </Td>
-
-                      <Td>
-                        <span
-                          style={{
-                            color:
-                              item.change >= 0
-                                ? "#16a34a"
-                                : "#dc2626",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {item.change >= 0
-                            ? "+"
-                            : ""}
-                          {item.change.toFixed(1)}%
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:grid-cols-4">
+                        <div><span className="text-gray-400">On Hand</span> <span className="font-medium text-gray-900 ml-1">{rec.on_hand}</span></div>
+                        <div><span className="text-gray-400">Days Cover</span> <span className="font-medium text-gray-900 ml-1">{rec.days_of_cover}d</span></div>
+                        <div><span className="text-gray-400">Suggested Qty</span> <span className="font-bold text-blue-600 ml-1">{rec.suggested_qty}</span></div>
+                        <div><span className="text-gray-400">Est. Cost</span> <span className="font-bold text-gray-900 ml-1">{inr(rec.estimated_cost)}</span></div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-4 text-xs text-gray-400">
+                        <span>Method: <span className="font-medium capitalize">{rec.forecast_method}</span></span>
+                        <span className={`font-medium ${confidenceColor(rec.forecast_confidence)}`}>
+                          Confidence: {(rec.forecast_confidence * 100).toFixed(0)}%
                         </span>
-                      </Td>
+                        {rec.requires_approval && (
+                          <span className="rounded-full bg-yellow-50 px-2 py-0.5 text-yellow-700 font-medium">Requires approval</span>
+                        )}
+                      </div>
+                    </div>
 
-                      <Td>
-                        {item.margin.toFixed(1)}%
-                      </Td>
-
-                      <Td>
-                        <StatusBadge
-                          status={item.status}
-                        />
-                      </Td>
-
-                      <Td>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 7,
-                          }}
+                    {/* Action buttons */}
+                    {!decision && (
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => decide(rec, "accepted")}
+                          disabled={deciding === rec.recommendation_id}
+                          className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                         >
-                          {item.status ===
-                            "Pending" && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  approveItem(item.id)
-                                }
-                                style={{
-                                  border:
-                                    "1px solid #bbf7d0",
-                                  background:
-                                    "#f0fdf4",
-                                  color:
-                                    "#15803d",
-                                  padding:
-                                    "6px 9px",
-                                  borderRadius: 6,
-                                  cursor:
-                                    "pointer",
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                Approve
-                              </button>
+                          {deciding === rec.recommendation_id ? "..." : "✓ Accept"}
+                        </button>
+                        <button
+                          onClick={() => decide(rec, "rejected")}
+                          disabled={deciding === rec.recommendation_id}
+                          className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                        >
+                          ✕ Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  rejectItem(item.id)
-                                }
-                                style={{
-                                  border:
-                                    "1px solid #fecaca",
-                                  background:
-                                    "#fef2f2",
-                                  color:
-                                    "#dc2626",
-                                  padding:
-                                    "6px 9px",
-                                  borderRadius: 6,
-                                  cursor:
-                                    "pointer",
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
-
-                          {item.status ===
-                            "Approved" && (
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "#16a34a",
-                                fontWeight: 600,
-                              }}
-                            >
-                              Approved
-                            </span>
-                          )}
-
-                          {item.status ===
-                            "Rejected" && (
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "#dc2626",
-                                fontWeight: 600,
-                              }}
-                            >
-                              Rejected
-                            </span>
-                          )}
-                        </div>
-                      </Td>
-                    </tr>
-                  ))}
-
-                  {filteredItems.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        style={{
-                          padding: 50,
-                          textAlign: "center",
-                          color: "#64748b",
-                        }}
-                      >
-                        No pricing recommendations
-                        found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div
-              style={{
-                padding: "12px 18px",
-                borderTop:
-                  "1px solid #e2e8f0",
-                color: "#64748b",
-                fontSize: 12,
-              }}
-            >
-              Showing {filteredItems.length} of{" "}
-              {items.length} recommendations
-            </div>
-          </section>
-
-          {/* Information Section */}
-          <section
-            style={{
-              marginTop: 18,
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 10,
-              padding: 18,
-            }}
-          >
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 16,
-                color: "#0f172a",
-              }}
-            >
-              How Price Review Works
-            </h3>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "repeat(3, 1fr)",
-                gap: 18,
-                marginTop: 16,
-              }}
-            >
-              <InfoCard
-                number="01"
-                title="AI Analysis"
-                text="The system analyses inventory, sales and product performance."
-              />
-
-              <InfoCard
-                number="02"
-                title="Price Suggestion"
-                text="A recommended selling price is generated for review."
-              />
-
-              <InfoCard
-                number="03"
-                title="Business Decision"
-                text="Reviewers can approve or reject the recommendation."
-              />
-            </div>
-          </section>
-        </div>
-      </main>
+        <p className="mt-6 text-center text-xs text-gray-400">
+          AI recommendations are suggestions only. All purchase actions require human approval per SRS NFR-16.
+        </p>
+      </div>
     </PageLayout>
-  );
-}
-
-function SummaryCard({
-  title,
-  value,
-  subtitle,
-  valueColor = "#0f172a",
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  valueColor?: string;
-}) {
-  return (
-    <div
-      style={{
-        background: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 10,
-        padding: 17,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 12,
-          color: "#64748b",
-        }}
-      >
-        {title}
-      </div>
-
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 25,
-          fontWeight: 700,
-          color: valueColor,
-        }}
-      >
-        {value}
-      </div>
-
-      <div
-        style={{
-          marginTop: 4,
-          fontSize: 11,
-          color: "#94a3b8",
-        }}
-      >
-        {subtitle}
-      </div>
-    </div>
-  );
-}
-
-function Th({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <th
-      style={{
-        textAlign: "left",
-        padding: "12px 14px",
-        fontSize: 11,
-        fontWeight: 700,
-        color: "#64748b",
-        borderBottom:
-          "1px solid #e2e8f0",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <td
-      style={{
-        padding: "14px",
-        fontSize: 13,
-        color: "#334155",
-        borderBottom:
-          "1px solid #f1f5f9",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </td>
-  );
-}
-
-function InfoCard({
-  number,
-  title,
-  text,
-}: {
-  number: string;
-  title: string;
-  text: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 12,
-      }}
-    >
-      <div
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 8,
-          background: "#eff6ff",
-          color: "#2563eb",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 12,
-          fontWeight: 700,
-          flexShrink: 0,
-        }}
-      >
-        {number}
-      </div>
-
-      <div>
-        <div
-          style={{
-            fontWeight: 600,
-            fontSize: 13,
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </div>
-
-        <div
-          style={{
-            marginTop: 4,
-            fontSize: 12,
-            lineHeight: 1.5,
-            color: "#64748b",
-          }}
-        >
-          {text}
-        </div>
-      </div>
-    </div>
   );
 }
