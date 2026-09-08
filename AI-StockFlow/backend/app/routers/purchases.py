@@ -434,7 +434,6 @@ def receive_purchase_order(
                 created_at=utcnow(),
             )
         )
-
     fully_received = all(
         (line.received_qty or 0) >= line.quantity
         for line in order.lines
@@ -445,6 +444,19 @@ def receive_purchase_order(
         if fully_received
         else "partial"
     )
+
+    # FR-FIN-05: Accounts Payable for received purchase orders
+    if fully_received:
+        supplier = (
+            scoped(db, Supplier, user.tenant_id)
+            .filter(Supplier.id == order.supplier_id)
+            .first()
+        )
+
+        if supplier:
+            terms = int(supplier.payment_terms_days or 30)
+            order.outstanding = order.total
+            order.due_date = order.order_date.date() + timedelta(days=terms)
 
     db.add(
         AuditLog(
@@ -467,7 +479,6 @@ def receive_purchase_order(
         "status": order.status,
         "received_lines": len(body.lines),
     }
-
 
 @router.get("/orders")
 def list_purchase_orders(

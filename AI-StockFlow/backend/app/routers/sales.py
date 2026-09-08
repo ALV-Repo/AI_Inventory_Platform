@@ -1,4 +1,4 @@
-﻿"""Sales and POS endpoints (SRS Â§3.3)."""
+"""Sales and POS endpoints (SRS §3.3)."""
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -74,7 +74,7 @@ def _next_number(db: Session, tenant_id: int, attempt: int = 0) -> str:
 
     Derived from the highest existing id rather than a row count, so deletions
     can never cause a reuse. A concurrent insert can still race to the same
-    number â€” the unique index on (tenant_id, order_number) catches that, and
+    number — the unique index on (tenant_id, order_number) catches that, and
     create_sale retries with a bumped sequence (NFR-05: atomic, no lost bills).
     """
     last_id = (
@@ -95,15 +95,12 @@ def create_sale(
     """Record a POS sale or sales order: prices it, taxes it, and posts stock atomically."""
     for attempt in range(3):
         try:
-            return _create_sale_once(body,
-        User,
-        Warehouse,
-db, attempt)
+            return _create_sale_once(body, user, db, attempt)
         except IntegrityError as exc:
             db.rollback()
             constraint = str(exc.orig).lower()
             if "idem" in constraint and body.idempotency_key:
-                # A concurrent replay of the same offline bill won the race â€”
+                # A concurrent replay of the same offline bill won the race —
                 # return the bill it created rather than erroring (NFR-05).
                 existing = (
                     scoped(db, SalesOrder, user.tenant_id)
@@ -118,7 +115,7 @@ db, attempt)
             # Otherwise it was an order-number collision; retry with a bumped sequence.
     raise HTTPException(
         status.HTTP_503_SERVICE_UNAVAILABLE,
-        "The store is very busy right now. The bill was not saved â€” try again.",
+        "The store is very busy right now. The bill was not saved — try again.",
     )
 
 
@@ -140,8 +137,8 @@ db: Session, attempt: int):
             }
 
     order = SalesOrder(
-        tenant_id=user.tenant_id,
-        order_number=_next_number(db, user.tenant_id, attempt),
+        tenant_id=int(db.query(User.tenant_id).filter(User.id == int(user.id)).scalar()),
+        order_number=_next_number(db, int(db.query(User.tenant_id).filter(User.id == int(user.id)).scalar()), attempt),
         customer_id=body.customer_id,
         warehouse_id=body.warehouse_id,
         channel=body.channel,
@@ -766,6 +763,9 @@ def convert_quotation(
         "reservation": "created",
         "total": order.total,
     }
+
+
+
 
 
 
