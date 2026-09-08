@@ -1,8 +1,19 @@
 """ORM entities (SRS §8.1). Every tenant-owned table carries tenant_id."""
 from datetime import datetime, timezone
-
+from sqlalchemy import UniqueConstraint
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -270,7 +281,69 @@ class SalesOrderLine(Base, TenantMixin):
     unit_cost = Column(Float, default=0.0)
 
     order = relationship("SalesOrder", back_populates="lines")
+class SalesReturn(Base, TenantMixin):
+    """Sales return / refund document."""
+    __tablename__ = "sales_returns"
 
+    id = Column(Integer, primary_key=True)
+    return_number = Column(String(40), nullable=False)
+    sales_order_id = Column(
+        Integer,
+        ForeignKey("sales_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
+    return_date = Column(DateTime, default=utcnow, index=True)
+    reason = Column(String(255))
+    refund_amount = Column(Float, default=0.0)
+    tax_amount = Column(Float, default=0.0)
+    total_amount = Column(Float, default=0.0)
+    status = Column(String(24), default="confirmed")
+    created_at = Column(DateTime, default=utcnow)
+
+    lines = relationship(
+        "SalesReturnLine",
+        back_populates="sales_return",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_sales_returns_tenant_number",
+            "tenant_id",
+            "return_number",
+            unique=True,
+        ),
+    )
+
+
+class SalesReturnLine(Base, TenantMixin):
+    """Individual returned item."""
+    __tablename__ = "sales_return_lines"
+
+    id = Column(Integer, primary_key=True)
+    return_id = Column(
+        Integer,
+        ForeignKey("sales_returns.id"),
+        nullable=False,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+    )
+    quantity = Column(Float, nullable=False)
+    unit_price = Column(Float, default=0.0)
+    gst_rate = Column(Float, default=18.0)
+    tax_amount = Column(Float, default=0.0)
+    line_total = Column(Float, default=0.0)
+
+    sales_return = relationship(
+        "SalesReturn",
+        back_populates="lines",
+    )
 
 class ForecastResult(Base, TenantMixin):
     """FR-AI-FOR-01..04."""
@@ -431,6 +504,14 @@ class ProductBOM(Base, TenantMixin):
     """Bill of materials / bundle definition (FR-INV-10)."""
     __tablename__ = "product_boms"
 
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "product_id",
+            name="uq_product_bom_tenant_product",
+        ),
+    )
+
     id = Column(Integer, primary_key=True)
 
     product_id = Column(
@@ -464,6 +545,14 @@ class ProductBOM(Base, TenantMixin):
 class ProductBOMLine(Base, TenantMixin):
     """Component required by a bundle/BOM."""
     __tablename__ = "product_bom_lines"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "bom_id",
+            "component_product_id",
+            name="uq_product_bom_line_component",
+        ),
+    )
 
     id = Column(Integer, primary_key=True)
 
