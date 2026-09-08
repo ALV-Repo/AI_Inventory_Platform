@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 
 type Employee = {
@@ -192,6 +192,20 @@ export default function EmployeeProfilePage({
    const initialEmployee = employeeData[id] || employeeData["1"];
 
 const [employee, setEmployee] = useState(initialEmployee);
+
+  useEffect(() => {
+    const savedEmployee = localStorage.getItem(
+      `stockflow-hr-employee-${id}`
+    );
+
+    if (savedEmployee) {
+      try {
+        setEmployee(JSON.parse(savedEmployee));
+      } catch {
+        // Ignore invalid saved data
+      }
+    }
+  }, [id]);
 const [showEdit, setShowEdit] = useState(false);
 
 const [editName, setEditName] = useState(employee.name);
@@ -201,14 +215,21 @@ const [editEmail, setEditEmail] = useState(employee.email);
 const [editPhone, setEditPhone] = useState(employee.phone);
 
 const handleSaveEmployee = () => {
-  setEmployee({
+  const updatedEmployee = {
     ...employee,
     name: editName,
     department: editDepartment,
     designation: editDesignation,
     email: editEmail,
     phone: editPhone,
-  });
+  };
+
+  setEmployee(updatedEmployee);
+
+  localStorage.setItem(
+    `stockflow-hr-employee-${id}`,
+    JSON.stringify(updatedEmployee)
+  );
 
   setShowEdit(false);
 };
