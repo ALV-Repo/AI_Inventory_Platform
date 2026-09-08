@@ -8,9 +8,11 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.routers import ai, auth, dashboard, inventory, purchases, sales, finance
+from app.routers import ai, auth, dashboard, inventory, purchases, sales, finance, reports
 from app.core.config import settings
 from app.core.database import Base, engine
+from app.core.security import hash_password
+from app.models.entities import Tenant, User
 from app.models import entities 
 
 logging.basicConfig(
@@ -128,6 +130,7 @@ for router in (
     dashboard.router,
     ai.router,
     finance.router,
+    reports.router,
 ):
     app.include_router(router, prefix=settings.API_V1)
 
