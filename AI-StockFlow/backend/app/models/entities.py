@@ -652,3 +652,36 @@ class Dispatch(Base, TenantMixin):
     dispatched_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     dispatched_at = Column(DateTime, default=utcnow)
     status = Column(String(20), default="dispatched")
+
+
+class SalesReturn(Base, TenantMixin):
+    """FR-SAL-06 — sales return / credit note."""
+    __tablename__ = "sales_returns"
+    id = Column(Integer, primary_key=True)
+    return_number = Column(String(40), nullable=False)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
+    return_date = Column(DateTime, default=utcnow)
+    reason = Column(String(255))
+    refund_amount = Column(Float, default=0.0)
+    tax_amount = Column(Float, default=0.0)
+    total_amount = Column(Float, default=0.0)
+    status = Column(String(24), default="pending")
+    created_at = Column(DateTime, default=utcnow)
+
+    __table_args__ = (
+        Index("ix_sales_returns_tenant_number", "tenant_id", "return_number", unique=True),
+    )
+
+
+class SalesReturnLine(Base, TenantMixin):
+    """Individual line in a sales return."""
+    __tablename__ = "sales_return_lines"
+    id = Column(Integer, primary_key=True)
+    return_id = Column(Integer, ForeignKey("sales_returns.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    quantity = Column(Float, nullable=False)
+    unit_price = Column(Float, default=0.0)
+    gst_rate = Column(Float, default=18.0)
+    line_total = Column(Float, default=0.0)

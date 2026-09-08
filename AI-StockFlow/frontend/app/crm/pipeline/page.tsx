@@ -1,350 +1,108 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import PageLayout from "../../../components/layout/PageLayout";
+import { api, inr } from "../../../lib/api";
 
-type Stage = "New" | "Contacted" | "Qualified" | "Proposal" | "Negotiation" | "Won" | "Lost";
-
-type Opportunity = {
-  id: string;
-  lead: string;
-  company: string;
-  stage: Stage;
+type PipelineItem = {
+  id: number;
+  customer_id: number;
+  title: string;
+  stage: string;
   value: number;
-  expectedClose: string;
-  owner: string;
+  expected_close_date?: string;
+  notes?: string;
+  created_at: string;
 };
 
-const initialOpportunities: Opportunity[] = [
-  {
-    id: "OPP-001",
-    lead: "Rahul Mehta",
-    company: "Apex Retail Solutions",
-    stage: "New",
-    value: 85000,
-    expectedClose: "2026-09-20",
-    owner: "Admin User",
-  },
-  {
-    id: "OPP-002",
-    lead: "Priya Shah",
-    company: "Green Valley Stores",
-    stage: "Contacted",
-    value: 65000,
-    expectedClose: "2026-09-25",
-    owner: "Sales Team",
-  },
-  {
-    id: "OPP-003",
-    lead: "Arjun Rao",
-    company: "Metro Office Supplies",
-    stage: "Qualified",
-    value: 120000,
-    expectedClose: "2026-09-30",
-    owner: "Admin User",
-  },
-  {
-    id: "OPP-004",
-    lead: "Sneha Patel",
-    company: "Sunrise Electronics",
-    stage: "Proposal",
-    value: 95000,
-    expectedClose: "2026-10-05",
-    owner: "Sales Team",
-  },
-];
+const STAGES = ["prospect", "proposal", "negotiation", "closed_won", "closed_lost"];
 
-const stages: Stage[] = [
-  "New",
-  "Contacted",
-  "Qualified",
-  "Proposal",
-  "Negotiation",
-  "Won",
-  "Lost",
-];
-
-const formatCurrency = (amount: number) =>
-  `₹${amount.toLocaleString("en-IN")}`;
+const stageColor = (s: string) => ({
+  prospect: "bg-gray-100 text-gray-700 border-gray-200",
+  proposal: "bg-blue-50 text-blue-700 border-blue-200",
+  negotiation: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  closed_won: "bg-green-50 text-green-700 border-green-200",
+  closed_lost: "bg-red-50 text-red-700 border-red-200",
+}[s] ?? "bg-gray-100 text-gray-700");
 
 export default function CRMPipelinePage() {
-  const [opportunities, setOpportunities] =
-    useState<Opportunity[]>(initialOpportunities);
-  const [stageFilter, setStageFilter] = useState<"All" | Stage>("All");
-  const [search, setSearch] = useState("");
+  const [kanban, setKanban] = useState<Record<string, PipelineItem[]>>({});
+  const [totalValue, setTotalValue] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [draggedOpportunity, setDraggedOpportunity] =
-  useState<string | null>(null);
+  useEffect(() => { load(); }, []);
 
-  const filteredOpportunities = useMemo(() => {
-    return opportunities.filter((opportunity) => {
-      const matchesSearch =
-        opportunity.lead.toLowerCase().includes(search.toLowerCase()) ||
-        opportunity.company.toLowerCase().includes(search.toLowerCase());
-
-      const matchesStage =
-        stageFilter === "All" || opportunity.stage === stageFilter;
-
-      return matchesSearch && matchesStage;
-    });
-  }, [opportunities, search, stageFilter]);
-
-  const pipelineValue = opportunities
-    .filter((item) => item.stage !== "Lost")
-    .reduce((sum, item) => sum + item.value, 0);
-
-  const wonValue = opportunities
-    .filter((item) => item.stage === "Won")
-    .reduce((sum, item) => sum + item.value, 0);
-
-  const closedOpportunities = opportunities.filter(
-    (item) => item.stage === "Won" || item.stage === "Lost"
-  );
-
-  const conversionRate =
-    closedOpportunities.length > 0
-      ? (opportunities.filter((item) => item.stage === "Won").length /
-          closedOpportunities.length) *
-        100
-      : 0;
-
-  function updateStage(id: string, stage: Stage) {
-    setOpportunities((current) =>
-      current.map((opportunity) =>
-        opportunity.id === id ? { ...opportunity, stage } : opportunity
-      )
-    );
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const data = await api.crm.pipeline();
+      setKanban(data.kanban);
+      setTotalValue(data.total_pipeline_value);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load pipeline.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function handleDragStart(id: string) {
-  setDraggedOpportunity(id);
-}
-
-function handleDrop(stage: Stage) {
-  if (!draggedOpportunity) return;
-
-  updateStage(draggedOpportunity, stage);
-  setDraggedOpportunity(null);
-}
+  const stageLabel = (s: string) => s.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase());
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">
-            CRM Sales Pipeline
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Manage opportunities, pipeline stages and conversion performance.
-          </p>
-        </div>
-
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-          <div className="rounded-xl border bg-white p-5">
-            <p className="text-xs font-medium uppercase text-slate-500">
-              Total Opportunities
-            </p>
-            <p className="mt-2 text-2xl font-bold">
-              {opportunities.length}
-            </p>
+    <PageLayout>
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Sales Pipeline</h1>
+            <p className="mt-1 text-sm text-gray-500">Kanban view of all open opportunities</p>
           </div>
-
-          <div className="rounded-xl border bg-white p-5">
-            <p className="text-xs font-medium uppercase text-slate-500">
-              Pipeline Value
-            </p>
-            <p className="mt-2 text-2xl font-bold">
-              {formatCurrency(pipelineValue)}
-            </p>
-          </div>
-
-          <div className="rounded-xl border bg-white p-5">
-            <p className="text-xs font-medium uppercase text-slate-500">
-              Won Value
-            </p>
-            <p className="mt-2 text-2xl font-bold text-green-600">
-              {formatCurrency(wonValue)}
-            </p>
-          </div>
-
-          <div className="rounded-xl border bg-white p-5">
-            <p className="text-xs font-medium uppercase text-slate-500">
-              Conversion Rate
-            </p>
-            <p className="mt-2 text-2xl font-bold text-blue-600">
-              {conversionRate.toFixed(1)}%
-            </p>
+          <div className="rounded-xl border border-gray-200 bg-white px-6 py-3 shadow-sm">
+            <p className="text-sm text-gray-500">Total Pipeline Value</p>
+            <p className="text-xl font-bold text-blue-600">{inr(totalValue)}</p>
           </div>
         </div>
 
-        <div className="mb-6 rounded-xl border bg-white p-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search lead or company..."
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-            <select
-              value={stageFilter}
-              onChange={(e) =>
-                setStageFilter(e.target.value as "All" | Stage)
-              }
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="All">All Stages</option>
-              {stages.map((stage) => (
-                <option key={stage} value={stage}>
-                  {stage}
-                </option>
-              ))}
-            </select>
+        {loading ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+            <p className="text-sm text-gray-500">Loading pipeline...</p>
           </div>
-        </div>
-
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-7">
-          {stages.map((stage) => {
-            const stageItems = opportunities.filter(
-              (item) => item.stage === stage
-            );
-
-            const value = stageItems.reduce(
-              (sum, item) => sum + item.value,
-              0
-            );
-
-            return (
-              <div
-  key={stage}
-  onDragOver={(e) => e.preventDefault()}
-  onDrop={() => handleDrop(stage)}
-  className="min-h-[220px] rounded-xl border bg-white p-4"
->
-                <p className="text-xs font-semibold text-slate-500">
-                  {stage}
-                </p>
-                <div className="mt-4 space-y-3">
-  {stageItems.map((opportunity) => (
-    <div
-      key={opportunity.id}
-      draggable
-      onDragStart={() => handleDragStart(opportunity.id)}
-      className="cursor-grab rounded-lg border bg-slate-50 p-3 shadow-sm hover:shadow-md"
-    >
-      <p className="font-semibold text-slate-900">
-        {opportunity.lead}
-      </p>
-
-      <p className="mt-1 text-xs text-slate-500">
-        {opportunity.company}
-      </p>
-
-      <p className="mt-2 text-sm font-semibold">
-        {formatCurrency(opportunity.value)}
-      </p>
-
-      <p className="mt-1 text-xs text-slate-500">
-        Close: {opportunity.expectedClose}
-      </p>
-
-      <p className="mt-1 text-xs text-slate-500">
-        Owner: {opportunity.owner}
-      </p>
-    </div>
-  ))}
-</div>
-                <p className="mt-2 text-xl font-bold">
-                  {stageItems.length}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {formatCurrency(value)}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="overflow-hidden rounded-xl border bg-white">
-          <div className="border-b p-4">
-            <h2 className="font-semibold text-slate-900">
-              Opportunity Pipeline
-            </h2>
-            <p className="text-xs text-slate-500">
-              Track stage, opportunity value and expected close date.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Lead</th>
-                  <th className="px-4 py-3">Company</th>
-                  <th className="px-4 py-3">Stage</th>
-                  <th className="px-4 py-3">Value</th>
-                  <th className="px-4 py-3">Expected Close</th>
-                  <th className="px-4 py-3">Owner</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredOpportunities.map((opportunity) => (
-                  <tr key={opportunity.id} className="border-t">
-                    <td className="px-4 py-3">
-                      <div className="font-semibold">
-                        {opportunity.lead}
+        ) : (
+          <div className="grid grid-cols-5 gap-4 overflow-x-auto pb-4">
+            {STAGES.map(stage => {
+              const items = kanban[stage] ?? [];
+              const stageValue = items.reduce((a, i) => a + (i.value || 0), 0);
+              return (
+                <div key={stage} className="min-w-[200px]">
+                  <div className={`mb-3 rounded-lg border px-3 py-2 ${stageColor(stage)}`}>
+                    <p className="text-xs font-semibold uppercase tracking-wide">{stageLabel(stage)}</p>
+                    <p className="text-sm font-bold mt-0.5">{items.length} · {inr(stageValue)}</p>
+                  </div>
+                  <div className="space-y-2">
+                    {items.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-gray-200 p-4 text-center">
+                        <p className="text-xs text-gray-400">No items</p>
                       </div>
-                      <div className="text-xs text-slate-400">
-                        {opportunity.id}
+                    ) : items.map(item => (
+                      <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                        <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                        <p className="mt-1 text-xs text-gray-500">Customer #{item.customer_id}</p>
+                        <p className="mt-2 text-sm font-bold text-blue-600">{inr(item.value)}</p>
+                        {item.expected_close_date && (
+                          <p className="mt-1 text-xs text-gray-400">Close: {new Date(item.expected_close_date).toLocaleDateString("en-IN")}</p>
+                        )}
                       </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {opportunity.company}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <select
-                        value={opportunity.stage}
-                        onChange={(e) =>
-                          updateStage(
-                            opportunity.id,
-                            e.target.value as Stage
-                          )
-                        }
-                        className="rounded border px-2 py-1 text-xs"
-                      >
-                        {stages.map((stage) => (
-                          <option key={stage} value={stage}>
-                            {stage}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-
-                    <td className="px-4 py-3 font-semibold">
-                      {formatCurrency(opportunity.value)}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {opportunity.expectedClose}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {opportunity.owner}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
-          <div className="border-t p-3 text-xs text-slate-500">
-            Showing {filteredOpportunities.length} of{" "}
-            {opportunities.length} opportunities
-          </div>
-        </div>
+        )}
       </div>
-    </main>
+    </PageLayout>
   );
 }

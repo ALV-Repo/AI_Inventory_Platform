@@ -1,268 +1,113 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import PageLayout from "../../../components/layout/PageLayout";
+import { api, inr } from "../../../lib/api";
 
-type Transaction = {
-  id: string;
-  date: string;
-  description: string;
-  category: string;
-  type: "Income" | "Expense";
-  amount: number;
+type PL = {
+  period: { from: string; to: string };
+  revenue: number; gst: number; net_sales: number;
+  cogs: number; gross_profit: number; expenses: number; net_profit: number;
 };
 
-const initialTransactions: Transaction[] = [
-  {
-    id: "TXN-001",
-    date: "2026-09-01",
-    description: "Product Sales",
-    category: "Sales",
-    type: "Income",
-    amount: 125000,
-  },
-  {
-    id: "TXN-002",
-    date: "2026-09-02",
-    description: "Office Supplies",
-    category: "Operations",
-    type: "Expense",
-    amount: 12500,
-  },
-  {
-    id: "TXN-003",
-    date: "2026-09-03",
-    description: "Warehouse Operating Expense",
-    category: "Warehouse",
-    type: "Expense",
-    amount: 32500,
-  },
-  {
-    id: "TXN-004",
-    date: "2026-09-04",
-    description: "Product Sales",
-    category: "Sales",
-    type: "Income",
-    amount: 98500,
-  },
-  {
-    id: "TXN-005",
-    date: "2026-09-05",
-    description: "Employee Payroll",
-    category: "HR",
-    type: "Expense",
-    amount: 72500,
-  },
-  {
-    id: "TXN-006",
-    date: "2026-09-06",
-    description: "Internet Bill",
-    category: "Utilities",
-    type: "Expense",
-    amount: 2500,
-  },
-];
-
-const formatCurrency = (amount: number) =>
-  `₹${amount.toLocaleString("en-IN")}`;
-
 export default function ProfitLossPage() {
-  const [transactions, setTransactions] =
-    useState<Transaction[]>(initialTransactions);
-  const [period, setPeriod] = useState("This Month");
-  const [search, setSearch] = useState("");
+  const [pl, setPL] = useState<PL | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [days, setDays] = useState(30);
 
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter((transaction) =>
-      `${transaction.description} ${transaction.category}`
-        .toLowerCase()
-        .includes(search.toLowerCase())
-    );
-  }, [transactions, search]);
+  useEffect(() => { load(); }, [days]);
 
-  const income = useMemo(
-    () =>
-      filteredTransactions
-        .filter((transaction) => transaction.type === "Income")
-        .reduce((sum, transaction) => sum + transaction.amount, 0),
-    [filteredTransactions]
-  );
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const today = new Date();
+      const from = new Date(today);
+      from.setDate(from.getDate() - days);
+      const data = await api.finance.profitLoss(
+        from.toISOString().split("T")[0],
+        today.toISOString().split("T")[0]
+      );
+      setPL(data as PL);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load P&L.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const expenses = useMemo(
-    () =>
-      filteredTransactions
-        .filter((transaction) => transaction.type === "Expense")
-        .reduce((sum, transaction) => sum + transaction.amount, 0),
-    [filteredTransactions]
-  );
-
-  const grossProfit = income - expenses;
-  const profitMargin = income > 0 ? (grossProfit / income) * 100 : 0;
-
-  const expenseBreakdown = useMemo(() => {
-    const breakdown: Record<string, number> = {};
-
-    filteredTransactions
-      .filter((transaction) => transaction.type === "Expense")
-      .forEach((transaction) => {
-        breakdown[transaction.category] =
-          (breakdown[transaction.category] || 0) + transaction.amount;
-      });
-
-    return Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
-  }, [filteredTransactions]);
-
-  const addIncome = () => {
-    const newTransaction: Transaction = {
-      id: `TXN-${String(transactions.length + 1).padStart(3, "0")}`,
-      date: new Date().toISOString().split("T")[0],
-      description: "Additional Sales Income",
-      category: "Sales",
-      type: "Income",
-      amount: 10000,
-    };
-
-    setTransactions((current) => [newTransaction, ...current]);
-  };
+  const financeLinks = [
+    { label: "Overview", href: "/finance" },
+    { label: "P&L", href: "/finance/profit-loss" },
+    { label: "Aging", href: "/finance/aging" },
+    { label: "Expenses", href: "/finance/expenses" },
+    { label: "GST", href: "/finance/gst-summary" },
+    { label: "Payments", href: "/finance/payments" },
+  ];
 
   return (
-    <main className="p-6 space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Profit & Loss</h1>
-          <p className="text-sm text-gray-500">
-            Track income, expenses and profitability
-          </p>
+    <PageLayout>
+      <div className="mx-auto max-w-4xl px-6 py-8">
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">Profit & Loss</h1>
+          <div className="flex gap-2">
+            {[7, 30, 90].map(d => (
+              <button key={d} onClick={() => setDays(d)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${days === d ? "bg-blue-600 text-white" : "border border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                {d}d
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex gap-3">
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="rounded-lg border px-3 py-2"
-          >
-            <option>This Month</option>
-            <option>Last Month</option>
-            <option>This Quarter</option>
-            <option>This Year</option>
-          </select>
-
-          <button
-            onClick={addIncome}
-            className="rounded-lg bg-black px-4 py-2 text-white"
-          >
-            + Add Income
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="rounded-xl border bg-white p-5">
-          <p className="text-sm text-gray-500">Total Income</p>
-          <h2 className="mt-2 text-2xl font-bold">
-            {formatCurrency(income)}
-          </h2>
+        <div className="mb-6 flex gap-2 flex-wrap">
+          {financeLinks.map(({ label, href }) => (
+            <Link key={href} href={href} className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${href === "/finance/profit-loss" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>
+              {label}
+            </Link>
+          ))}
         </div>
 
-        <div className="rounded-xl border bg-white p-5">
-          <p className="text-sm text-gray-500">Total Expenses</p>
-          <h2 className="mt-2 text-2xl font-bold">
-            {formatCurrency(expenses)}
-          </h2>
-        </div>
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-        <div className="rounded-xl border bg-white p-5">
-          <p className="text-sm text-gray-500">Net Profit</p>
-          <h2 className="mt-2 text-2xl font-bold">
-            {formatCurrency(grossProfit)}
-          </h2>
-        </div>
-
-        <div className="rounded-xl border bg-white p-5">
-          <p className="text-sm text-gray-500">Profit Margin</p>
-          <h2 className="mt-2 text-2xl font-bold">
-            {profitMargin.toFixed(1)}%
-          </h2>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="rounded-xl border bg-white p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">P&L Statement</h2>
-              <p className="text-sm text-gray-500">{period}</p>
+        {loading ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+            <p className="text-sm text-gray-500">Loading P&L...</p>
+          </div>
+        ) : pl && (
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-gray-200 px-6 py-4 bg-gray-50">
+              <h2 className="font-semibold text-gray-900">Statement — Last {days} days</h2>
             </div>
-
-            <input
-              type="text"
-              placeholder="Search transactions..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b">
-                <tr>
-                  <th className="px-3 py-3">Date</th>
-                  <th className="px-3 py-3">Description</th>
-                  <th className="px-3 py-3">Category</th>
-                  <th className="px-3 py-3">Type</th>
-                  <th className="px-3 py-3 text-right">Amount</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredTransactions.map((transaction) => (
-                  <tr key={transaction.id} className="border-b">
-                    <td className="px-3 py-3">{transaction.date}</td>
-                    <td className="px-3 py-3">{transaction.description}</td>
-                    <td className="px-3 py-3">{transaction.category}</td>
-                    <td className="px-3 py-3">{transaction.type}</td>
-                    <td className="px-3 py-3 text-right font-medium">
-                      {formatCurrency(transaction.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="rounded-xl border bg-white p-5">
-          <h2 className="text-lg font-semibold">Expense Breakdown</h2>
-          <p className="mb-4 text-sm text-gray-500">
-            Expenses by category
-          </p>
-
-          <div className="space-y-4">
-            {expenseBreakdown.map(([category, amount]) => {
-              const percentage =
-                expenses > 0 ? (amount / expenses) * 100 : 0;
-
-              return (
-                <div key={category}>
-                  <div className="mb-1 flex justify-between text-sm">
-                    <span>{category}</span>
-                    <span className="font-medium">
-                      {formatCurrency(amount)}
-                    </span>
-                  </div>
-
-                  <div className="h-2 rounded-full bg-gray-200">
-                    <div
-                      className="h-2 rounded-full bg-black"
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
+            <div className="divide-y divide-gray-100">
+              {[
+                { label: "Revenue (Gross)", value: pl.revenue, indent: false, bold: false },
+                { label: "Less: GST Collected", value: -pl.gst, indent: true, bold: false },
+                { label: "Net Sales", value: pl.net_sales, indent: false, bold: true },
+                { label: "Less: Cost of Goods Sold", value: -pl.cogs, indent: true, bold: false },
+                { label: "Gross Profit", value: pl.gross_profit, indent: false, bold: true, color: pl.gross_profit >= 0 ? "text-green-600" : "text-red-600" },
+                { label: "Less: Operating Expenses", value: -pl.expenses, indent: true, bold: false },
+                { label: "Net Profit", value: pl.net_profit, indent: false, bold: true, color: pl.net_profit >= 0 ? "text-green-600" : "text-red-600", large: true },
+              ].map((row, i) => (
+                <div key={i} className={`flex items-center justify-between px-6 py-4 ${row.large ? "bg-gray-50" : ""}`}>
+                  <span className={`text-sm ${row.indent ? "pl-6 text-gray-500" : ""} ${row.bold ? "font-semibold text-gray-900" : "text-gray-600"}`}>
+                    {row.label}
+                  </span>
+                  <span className={`font-${row.bold ? "bold" : "medium"} ${row.color ?? "text-gray-900"} ${row.large ? "text-xl" : "text-sm"}`}>
+                    {inr(Math.abs(row.value))}
+                  </span>
                 </div>
-              );
-            })}
+              ))}
+            </div>
+            <div className="border-t border-gray-200 px-6 py-3 text-xs text-gray-400">
+              Gross margin: {pl.net_sales > 0 ? ((pl.gross_profit / pl.net_sales) * 100).toFixed(1) : 0}% · Net margin: {pl.net_sales > 0 ? ((pl.net_profit / pl.net_sales) * 100).toFixed(1) : 0}%
+            </div>
           </div>
-        </section>
+        )}
       </div>
-    </main>
+    </PageLayout>
   );
 }

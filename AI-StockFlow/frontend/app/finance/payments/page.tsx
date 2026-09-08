@@ -1,526 +1,137 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import PageLayout from "../../../components/layout/PageLayout";
+import { api, inr, fmtDate } from "../../../lib/api";
 
-type Payment = {
-  id: string;
-  party: string;
-  type: "Customer" | "Supplier";
-  reference: string;
-  amount: number;
-  mode: "Cash" | "UPI" | "Card" | "Bank Transfer";
-  date: string;
-  status: "Completed" | "Pending";
-};
-
-const initialPayments: Payment[] = [
-  {
-    id: "PAY-1001",
-    party: "Apex Retail Solutions",
-    type: "Customer",
-    reference: "INV-2026-041",
-    amount: 68500,
-    mode: "Bank Transfer",
-    date: "15/08/2026",
-    status: "Completed",
-  },
-  {
-    id: "PAY-1002",
-    party: "Tech Supplies India",
-    type: "Supplier",
-    reference: "PO-00005",
-    amount: 87500,
-    mode: "Bank Transfer",
-    date: "14/08/2026",
-    status: "Completed",
-  },
-  {
-    id: "PAY-1003",
-    party: "Green Valley Stores",
-    type: "Customer",
-    reference: "INV-2026-038",
-    amount: 56000,
-    mode: "UPI",
-    date: "13/08/2026",
-    status: "Completed",
-  },
-  {
-    id: "PAY-1004",
-    party: "Office Mart Suppliers",
-    type: "Supplier",
-    reference: "PO-00006",
-    amount: 32500,
-    mode: "UPI",
-    date: "12/08/2026",
-    status: "Pending",
-  },
+const financeLinks = [
+  { label: "Overview", href: "/finance" },
+  { label: "P&L", href: "/finance/profit-loss" },
+  { label: "Aging", href: "/finance/aging" },
+  { label: "Expenses", href: "/finance/expenses" },
+  { label: "GST", href: "/finance/gst-summary" },
+  { label: "Payments", href: "/finance/payments" },
 ];
 
+type Transaction = {
+  id: number; transaction_type: string; amount: number;
+  payment_mode: string; reference_type?: string;
+  transaction_date: string; notes?: string;
+};
+
+const typeColor = (t: string) =>
+  t === "receipt" ? "bg-green-50 text-green-700" :
+  t === "payment" ? "bg-red-50 text-red-700" :
+  "bg-gray-100 text-gray-700";
+
 export default function PaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [showAddPayment, setShowAddPayment] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
 
-  const [party, setParty] = useState("");
-  const [type, setType] = useState<"Customer" | "Supplier">("Customer");
-  const [reference, setReference] = useState("");
-  const [amount, setAmount] = useState("");
-  const [mode, setMode] = useState<Payment["mode"]>("Cash");
-  const [date, setDate] = useState("2026-09-07");
+  useEffect(() => { load(); }, [typeFilter]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("stockflow-payments");
-
-    if (saved) {
-      setPayments(JSON.parse(saved));
-    } else {
-      setPayments(initialPayments);
-      localStorage.setItem(
-        "stockflow-payments",
-        JSON.stringify(initialPayments)
-      );
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const data = await api.finance.transactions({
+        transaction_type: typeFilter === "all" ? undefined : typeFilter,
+      });
+      setTransactions(data as Transaction[]);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load payments.");
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }
 
-  useEffect(() => {
-    if (payments.length > 0) {
-      localStorage.setItem("stockflow-payments", JSON.stringify(payments));
-    }
-  }, [payments]);
-
-  const filteredPayments = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return payments.filter((payment) => {
-      const matchesSearch =
-        !query ||
-        payment.party.toLowerCase().includes(query) ||
-        payment.reference.toLowerCase().includes(query) ||
-        payment.id.toLowerCase().includes(query);
-
-      const matchesType =
-        typeFilter === "All" || payment.type === typeFilter;
-
-      const matchesStatus =
-        statusFilter === "All" || payment.status === statusFilter;
-
-      return matchesSearch && matchesType && matchesStatus;
-    });
-  }, [payments, search, typeFilter, statusFilter]);
-
-  const totalReceived = payments
-    .filter(
-      (payment) =>
-        payment.type === "Customer" && payment.status === "Completed"
-    )
-    .reduce((sum, payment) => sum + payment.amount, 0);
-
-  const totalPaid = payments
-    .filter(
-      (payment) =>
-        payment.type === "Supplier" && payment.status === "Completed"
-    )
-    .reduce((sum, payment) => sum + payment.amount, 0);
-
-  const pendingAmount = payments
-    .filter((payment) => payment.status === "Pending")
-    .reduce((sum, payment) => sum + payment.amount, 0);
-
-  const clearForm = () => {
-    setParty("");
-    setType("Customer");
-    setReference("");
-    setAmount("");
-    setMode("Cash");
-    setDate("2026-09-07");
-  };
-
-  const handleAddPayment = () => {
-    if (!party.trim() || !amount || Number(amount) <= 0) {
-      alert("Please enter party name and a valid amount.");
-      return;
-    }
-
-    const newPayment: Payment = {
-      id: `PAY-${Date.now()}`,
-      party: party.trim(),
-      type,
-      reference: reference.trim() || "Manual Payment",
-      amount: Number(amount),
-      mode,
-      date: new Date(date).toLocaleDateString("en-GB"),
-      status: "Completed",
-    };
-
-    setPayments((current) => [newPayment, ...current]);
-    setShowAddPayment(false);
-    clearForm();
-
-    alert("Payment recorded successfully.");
-  };
-
-  const markCompleted = (id: string) => {
-    setPayments((current) =>
-      current.map((payment) =>
-        payment.id === id
-          ? { ...payment, status: "Completed" }
-          : payment
-      )
-    );
-  };
+  const totalReceipts = transactions.filter(t => t.transaction_type === "receipt").reduce((a, t) => a + t.amount, 0);
+  const totalPayments = transactions.filter(t => t.transaction_type === "payment").reduce((a, t) => a + t.amount, 0);
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Payment Management
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Record and track customer receipts and supplier payments.
-            </p>
-          </div>
-
-          <button
-            onClick={() => setShowAddPayment(true)}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            + Add Payment
-          </button>
+    <PageLayout>
+      <div className="mx-auto max-w-5xl px-6 py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Payments & Receipts</h1>
+          <p className="mt-1 text-sm text-gray-500">All financial transactions</p>
         </div>
 
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase text-slate-400">
-              Customer Receipts
-            </p>
-            <p className="mt-2 text-2xl font-bold text-green-600">
-              ₹{totalReceived.toLocaleString("en-IN")}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Completed customer payments
-            </p>
-          </div>
+        <div className="mb-6 flex gap-2 flex-wrap">
+          {financeLinks.map(({ label, href }) => (
+            <Link key={href} href={href} className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${href === "/finance/payments" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>
+              {label}
+            </Link>
+          ))}
+        </div>
 
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase text-slate-400">
-              Supplier Payments
-            </p>
-            <p className="mt-2 text-2xl font-bold text-orange-600">
-              ₹{totalPaid.toLocaleString("en-IN")}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Completed supplier payments
-            </p>
-          </div>
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase text-slate-400">
-              Pending Payments
-            </p>
-            <p className="mt-2 text-2xl font-bold text-red-600">
-              ₹{pendingAmount.toLocaleString("en-IN")}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Payments requiring attention
-            </p>
+        <div className="mb-6 grid grid-cols-2 gap-4">
+          <div className="rounded-xl border border-green-200 bg-green-50 p-5">
+            <p className="text-sm text-green-600">Total Receipts</p>
+            <p className="mt-2 text-2xl font-bold text-green-700">{inr(totalReceipts)}</p>
+          </div>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-5">
+            <p className="text-sm text-red-600">Total Payments</p>
+            <p className="mt-2 text-2xl font-bold text-red-700">{inr(totalPayments)}</p>
           </div>
         </div>
 
-        <div className="mb-5 rounded-xl border bg-white p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-3">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search party, reference or payment ID..."
-              className="rounded-lg border px-3 py-2 text-sm outline-none focus:border-blue-500"
-            />
-
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="All">All Types</option>
-              <option value="Customer">Customer</option>
-              <option value="Supplier">Supplier</option>
-            </select>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="All">All Status</option>
-              <option value="Completed">Completed</option>
-              <option value="Pending">Pending</option>
-            </select>
-          </div>
-
-          {(search || typeFilter !== "All" || statusFilter !== "All") && (
-            <button
-              onClick={() => {
-                setSearch("");
-                setTypeFilter("All");
-                setStatusFilter("All");
-              }}
-              className="mt-3 text-xs font-medium text-blue-600"
-            >
-              Clear filters
+        <div className="mb-5 flex gap-2">
+          {["all", "receipt", "payment"].map(f => (
+            <button key={f} onClick={() => setTypeFilter(f)}
+              className={`rounded-lg px-4 py-2 text-sm font-medium capitalize transition ${typeFilter === f ? "bg-blue-600 text-white" : "border border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+              {f}
             </button>
-          )}
+          ))}
+          <button onClick={load} className="ml-auto rounded-lg border border-gray-300 px-4 text-sm text-gray-600 hover:bg-gray-50">Refresh</button>
         </div>
 
-        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-          <div className="border-b px-5 py-4">
-            <h2 className="font-semibold text-slate-900">
-              Payment Records
-            </h2>
-            <p className="text-xs text-slate-500">
-              Customer collections and supplier settlements
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          {loading ? (
+            <div className="py-16 text-center">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+              <p className="text-sm text-gray-500">Loading transactions...</p>
+            </div>
+          ) : transactions.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-4xl mb-3">💳</p>
+              <p className="text-gray-500 text-sm">No transactions found</p>
+            </div>
+          ) : (
+            <table className="w-full text-left">
+              <thead className="border-b border-gray-200 bg-gray-50">
                 <tr>
-                  <th className="px-5 py-3">Payment</th>
-                  <th className="px-5 py-3">Party</th>
-                  <th className="px-5 py-3">Type</th>
-                  <th className="px-5 py-3">Reference</th>
-                  <th className="px-5 py-3">Date</th>
-                  <th className="px-5 py-3">Mode</th>
-                  <th className="px-5 py-3">Amount</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Action</th>
+                  {["Date", "Type", "Reference", "Payment Mode", "Notes", "Amount"].map(h => (
+                    <th key={h} className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
+                  ))}
                 </tr>
               </thead>
-
-              <tbody className="divide-y">
-                {filteredPayments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-slate-50">
-                    <td className="px-5 py-4">
-                      <div className="font-semibold text-slate-900">
-                        {payment.id}
-                      </div>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      {payment.party}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span
-                        className={
-                          payment.type === "Customer"
-                            ? "text-green-600"
-                            : "text-orange-600"
-                        }
-                      >
-                        {payment.type}
+              <tbody className="divide-y divide-gray-100">
+                {transactions.map(t => (
+                  <tr key={t.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm text-gray-600">{fmtDate(t.transaction_date)}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${typeColor(t.transaction_type)}`}>
+                        {t.transaction_type}
                       </span>
                     </td>
-
-                    <td className="px-5 py-4 text-slate-600">
-                      {payment.reference}
-                    </td>
-
-                    <td className="px-5 py-4 text-slate-600">
-                      {payment.date}
-                    </td>
-
-                    <td className="px-5 py-4 text-slate-600">
-                      {payment.mode}
-                    </td>
-
-                    <td className="px-5 py-4 font-semibold">
-                      ₹{payment.amount.toLocaleString("en-IN")}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span
-                        className={
-                          payment.status === "Completed"
-                            ? "rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700"
-                            : "rounded-full bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-700"
-                        }
-                      >
-                        {payment.status}
-                      </span>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      {payment.status === "Pending" && (
-                        <button
-                          onClick={() => markCompleted(payment.id)}
-                          className="text-xs font-semibold text-blue-600 hover:underline"
-                        >
-                          Mark Paid
-                        </button>
-                      )}
+                    <td className="px-6 py-4 text-sm text-gray-600">{t.reference_type ?? "-"}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600 capitalize">{t.payment_mode}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500 max-w-[160px] truncate">{t.notes ?? "-"}</td>
+                    <td className={`px-6 py-4 text-sm font-bold ${t.transaction_type === "receipt" ? "text-green-600" : "text-red-600"}`}>
+                      {t.transaction_type === "receipt" ? "+" : "-"}{inr(t.amount)}
                     </td>
                   </tr>
                 ))}
-
-                {filteredPayments.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-5 py-10 text-center text-sm text-slate-500"
-                    >
-                      No payments found.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
-          </div>
-
-          <div className="border-t px-5 py-3 text-xs text-slate-500">
-            Showing {filteredPayments.length} of {payments.length} payments
-          </div>
+          )}
         </div>
       </div>
-
-      {showAddPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <div>
-                <h2 className="font-semibold text-slate-900">
-                  Add Payment
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Record a customer receipt or supplier payment.
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setShowAddPayment(false);
-                  clearForm();
-                }}
-                className="text-xl text-slate-400 hover:text-slate-700"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="space-y-4 p-6">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">
-                  Party
-                </label>
-                <input
-                  value={party}
-                  onChange={(e) => setParty(e.target.value)}
-                  placeholder="Customer or supplier name"
-                  className="w-full rounded-lg border px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    Type
-                  </label>
-                  <select
-                    value={type}
-                    onChange={(e) =>
-                      setType(e.target.value as "Customer" | "Supplier")
-                    }
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  >
-                    <option value="Customer">Customer Receipt</option>
-                    <option value="Supplier">Supplier Payment</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    Amount
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0"
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">
-                  Reference
-                </label>
-                <input
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="Invoice / PO / transaction reference"
-                  className="w-full rounded-lg border px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    Payment Mode
-                  </label>
-                  <select
-                    value={mode}
-                    onChange={(e) =>
-                      setMode(e.target.value as Payment["mode"])
-                    }
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  >
-                    <option>Cash</option>
-                    <option>UPI</option>
-                    <option>Card</option>
-                    <option>Bank Transfer</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    Payment Date
-                  </label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 border-t px-6 py-4">
-              <button
-                onClick={() => {
-                  setShowAddPayment(false);
-                  clearForm();
-                }}
-                className="rounded-lg border px-4 py-2 text-sm"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={handleAddPayment}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                Save Payment
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </main>
+    </PageLayout>
   );
 }
