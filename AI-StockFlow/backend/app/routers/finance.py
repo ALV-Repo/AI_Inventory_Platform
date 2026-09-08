@@ -417,8 +417,6 @@ def aging_bucket(days: int) -> str:
     if days <= 90:
         return "61-90"
     return "90+"
-
-
 @router.get("/aging")
 def aging(
     as_of: date | None = None,
@@ -427,8 +425,8 @@ def aging(
 ):
     as_of = as_of or date.today()
 
-    customers = scoped(db, Customer, user.tenant_id).all()
-    suppliers = scoped(db, Supplier, user.tenant_id).all()
+    sales_orders = scoped(db, SalesOrder, user.tenant_id).all()
+    purchase_orders = scoped(db, PurchaseOrder, user.tenant_id).all()
 
     ar = {
         "0-30": 0.0,
@@ -437,16 +435,18 @@ def aging(
         "90+": 0.0,
     }
 
-    for customer in customers:
-        outstanding = float(customer.outstanding or 0)
+    for order in sales_orders:
+        outstanding = float(order.outstanding or 0)
 
         if outstanding <= 0:
             continue
 
-        terms = int(getattr(customer, "payment_terms_days", 30) or 30)
-        # Customer model does not currently expose invoice due dates.
-        # Use payment terms as a conservative aging basis.
-        bucket = aging_bucket(terms)
+        # Use the invoice/order due date when available.
+        # If no due date exists, fall back to the order date.
+        due_date = order.due_date or order.order_date.date()
+
+        days_overdue = max((as_of - due_date).days, 0)
+        bucket = aging_bucket(days_overdue)
         ar[bucket] += outstanding
 
     ap = {
@@ -456,15 +456,18 @@ def aging(
         "90+": 0.0,
     }
 
-    for supplier in suppliers:
-        # Supplier outstanding is not guaranteed in the base model.
-        outstanding = float(getattr(supplier, "outstanding", 0) or 0)
+    for order in purchase_orders:
+        outstanding = float(order.outstanding or 0)
 
         if outstanding <= 0:
             continue
 
-        terms = int(getattr(supplier, "payment_terms_days", 30) or 30)
-        bucket = aging_bucket(terms)
+        # Use the bill/PO due date when available.
+        # If no due date exists, fall back to the PO order date.
+        due_date = order.due_date or order.order_date
+
+        days_overdue = max((as_of - due_date).days, 0)
+        bucket = aging_bucket(days_overdue)
         ap[bucket] += outstanding
 
     return {
@@ -481,7 +484,6 @@ def aging(
         "ap_total": round(sum(ap.values()), 2),
         "reminder_status": "ready",
     }
-
 
 @router.get("/payment-reminders")
 def payment_reminders(
@@ -625,15 +627,18 @@ class AllocationIn(BaseModel):
     document_type: str
     document_id: int
     allocated_amount: float = Field(gt=0)
-
-
 @router.post("/allocations")
 def create_allocation(
     body: AllocationIn,
     user: User = Depends(require("finance:write")),
     db: Session = Depends(get_db),
 ):
-    from app.models.entities import FinanceAllocation, FinanceTransaction
+    from app.models.entities import (
+        FinanceAllocation,
+        FinanceTransaction,
+        PurchaseOrder,
+        SalesOrder,
+    )
 
     transaction = (
         scoped(db, FinanceTransaction, user.tenant_id)
@@ -644,12 +649,83 @@ def create_allocation(
     if not transaction:
         raise HTTPException(404, "Finance transaction not found")
 
+    document_type = body.document_type.lower().strip()
+
+    if document_type == "sales_order":
+        document = (
+            scoped(db, SalesOrder, user.tenant_id)
+            .filter(SalesOrder.id == body.document_id)
+            .first()
+        )
+
+    elif document_type == "purchase_order":
+        document = (
+            scoped(db, PurchaseOrder, user.tenant_id)
+            .filter(PurchaseOrder.id == body.document_id)
+            .first()
+        )
+
+    else:
+        raise HTTPException(
+            400,
+            "document_type must be 'sales_order' or 'purchase_order'",
+        )
+
+    if not document:
+        raise HTTPException(404, "Finance document not found")
+
+    outstanding = float(document.outstanding or 0)
+
+    if outstanding <= 0:
+        raise HTTPException(
+            400,
+            "Finance document has no outstanding balance",
+        )
+
+    allocated_amount = float(body.allocated_amount)
+
+    existing_allocated = (
+        db.query(FinanceAllocation)
+        .filter(
+            FinanceAllocation.tenant_id == user.tenant_id,
+            FinanceAllocation.transaction_id == transaction.id,
+        )
+        .with_entities(
+            func.coalesce(func.sum(FinanceAllocation.allocated_amount), 0)
+        )
+        .scalar()
+        or 0
+    )
+
+    transaction_remaining = (
+        float(transaction.amount) - float(existing_allocated)
+    )
+
+    if allocated_amount > transaction_remaining:
+        raise HTTPException(
+            400,
+            f"Allocation exceeds transaction balance. "
+            f"Remaining: {transaction_remaining:.2f}",
+        )
+
+    if allocated_amount > outstanding:
+        raise HTTPException(
+            400,
+            f"Allocation exceeds document outstanding balance. "
+            f"Outstanding: {outstanding:.2f}",
+        )
+
+    document.outstanding = round(
+        outstanding - allocated_amount,
+        2,
+    )
+
     allocation = FinanceAllocation(
         tenant_id=user.tenant_id,
-        transaction_id=body.transaction_id,
-        document_type=body.document_type,
-        document_id=body.document_id,
-        allocated_amount=body.allocated_amount,
+        transaction_id=transaction.id,
+        document_type=document_type,
+        document_id=document.id,
+        allocated_amount=allocated_amount,
     )
 
     db.add(allocation)
@@ -662,9 +738,8 @@ def create_allocation(
         "document_type": allocation.document_type,
         "document_id": allocation.document_id,
         "allocated_amount": allocation.allocated_amount,
+        "document_outstanding": document.outstanding,
     }
-
-
 @router.get("/allocations")
 def list_allocations(
     transaction_id: int | None = None,

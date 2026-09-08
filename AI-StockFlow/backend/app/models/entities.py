@@ -84,6 +84,7 @@ class Customer(Base, TenantMixin):
     phone = Column(String(32))
     email = Column(String(180))
     credit_limit = Column(Float, default=0.0)
+    payment_terms_days = Column(Integer, default=30)
     outstanding = Column(Float, default=0.0)
 class Quotation(Base, TenantMixin):
     """Sales quotation (FR-SAL-01)."""
@@ -211,6 +212,8 @@ class PurchaseOrder(Base, TenantMixin):
     subtotal = Column(Float, default=0.0)
     tax_amount = Column(Float, default=0.0)
     total = Column(Float, default=0.0)
+    due_date = Column(Date)
+    outstanding = Column(Float, default=0.0)
     created_by_ai = Column(Boolean, default=False)        # FR-AI-PUR-01
     ai_reasoning = Column(JSON)                           # FR-AI-PUR-03
     created_at = Column(DateTime, default=utcnow)
@@ -245,6 +248,8 @@ class SalesOrder(Base, TenantMixin):
     discount = Column(Float, default=0.0)
     tax_amount = Column(Float, default=0.0)
     total = Column(Float, default=0.0)
+    due_date = Column(Date)
+    outstanding = Column(Float, default=0.0)
     cogs = Column(Float, default=0.0)                     # for gross profit (FR-RPT-01)
     payment_mode = Column(String(24), default="cash")
     idempotency_key = Column(String(64))   
