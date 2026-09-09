@@ -24,6 +24,7 @@ from app.routers import (
     finance,
     reports,
     vision,
+    voice,
 )
 
 logging.basicConfig(
@@ -172,6 +173,7 @@ for router in (
     finance.router,
     reports.router,
     vision.router,
+    voice.router,
 ):
     app.include_router(router, prefix=settings.API_V1)
 
