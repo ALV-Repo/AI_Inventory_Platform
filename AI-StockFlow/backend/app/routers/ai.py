@@ -11,6 +11,7 @@ from app.core.security import require
 from app.models.entities import (
     AIRecommendation,
     AuditLog,
+    Customer,
     ForecastResult,
     Product,
     PurchaseOrder,
@@ -587,13 +588,58 @@ def health_score(
         .with_entities(func.avg(Supplier.on_time_rate)).scalar()
     ) or 0.9
 
+    # Receivables overdue ratio: overdue outstanding / total outstanding.
+    total_receivables = 0.0
+    overdue_receivables = 0.0
+    as_of = now.date()
+
+    for order in scoped(db, SalesOrder, user.tenant_id).all():
+        outstanding = float(order.outstanding or 0)
+        if outstanding <= 0:
+            continue
+
+        total_receivables += outstanding
+        due_date = order.due_date or order.order_date.date()
+        if due_date < as_of:
+            overdue_receivables += outstanding
+
+    receivables_overdue_ratio = (
+        overdue_receivables / total_receivables
+        if total_receivables > 0
+        else 0.0
+    )
+
+    # Customer repeat rate: customers with 2+ sales / customers with at least 1 sale.
+    customer_order_counts = (
+        scoped(db, SalesOrder, user.tenant_id)
+        .filter(SalesOrder.customer_id.isnot(None))
+        .with_entities(
+            SalesOrder.customer_id,
+            func.count(SalesOrder.id),
+        )
+        .group_by(SalesOrder.customer_id)
+        .all()
+    )
+
+    active_customers = len(customer_order_counts)
+    repeat_customers = sum(
+        1 for _, order_count in customer_order_counts
+        if order_count >= 2
+    )
+
+    customer_repeat_rate = (
+        repeat_customers / active_customers
+        if active_customers > 0
+        else 0.0
+    )
+
     return business_health_score(
         stockout_rate=out_of_stock / total_products,
         dead_stock_ratio=(dead["summary"]["non_moving"] + dead["summary"]["slow_moving"]) / total_value,
         revenue_growth_pct=growth,
-        receivables_overdue_ratio=0.1,
+        receivables_overdue_ratio=receivables_overdue_ratio,
         supplier_on_time_rate=float(on_time),
-        customer_repeat_rate=0.45,
+        customer_repeat_rate=customer_repeat_rate,
     )
 # ------------------------------------------------------------------
 # Forecast Accuracy / MAPE (FR-AI-FOR-02)
