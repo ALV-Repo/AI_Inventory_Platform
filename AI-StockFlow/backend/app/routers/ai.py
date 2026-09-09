@@ -343,26 +343,34 @@ def dead_stock(
             daily_demand=float(sold_90) / 90,
         )
         summary[c.velocity_class] += c.capital_locked
-
         if c.velocity_class != "fast_moving":
             items.append({
-                "product_id": p.id, "sku": p.sku, "name": p.name,
-                "on_hand": on_hand, "capital_locked": c.capital_locked,
+                "product_id": p.id,
+                "sku": p.sku,
+                "name": p.name,
+                "on_hand": on_hand,
+                "capital_locked": c.capital_locked,
                 "velocity_class": c.velocity_class,
-                "days_since_last_sale": days_since if last_sale else None,
+                "days_since_last_sale": days_since,
                 "recommended_action": c.recommended_action,
                 "suggested_discount_pct": c.suggested_discount_pct,
             })
 
     items.sort(key=lambda i: i["capital_locked"], reverse=True)
+
     return {
         "summary": {k: round(v, 2) for k, v in summary.items()},
         "total_locked_in_slow_or_dead": round(
-            summary["slow_moving"] + summary["non_moving"] + summary["overstocked"], 2
+            summary["slow_moving"]
+            + summary["non_moving"]
+            + summary["overstocked"],
+            2,
         ),
         "items": items,
     }
 
+
+            
 
 # ------------------------------------------------------------------ pricing
 class PriceRequest(BaseModel):
