@@ -1,24 +1,36 @@
 """AI StockFlow API entry point (SRS §7.2 — modular monolith, API-first)."""
+
 import logging
+import os
 import time
 import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.routers import ai, auth, dashboard, inventory, purchases, sales, finance, reports
+
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.core.security import hash_password
 from app.models.entities import Tenant, User
-from app.models import entities 
+from app.routers import (
+    ai,
+    auth,
+    dashboard,
+    inventory,
+    purchases,
+    sales,
+    finance,
+    reports,
+    vision,
+)
 
 logging.basicConfig(
     level=logging.INFO,
     format='{"time":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}',
 )
+
 log = logging.getLogger("stockflow")
 
 
@@ -28,10 +40,13 @@ async def lifespan(app: FastAPI):
     # Alembic in the CI/CD pipeline and AUTO_CREATE_SCHEMA must be false.
     if settings.AUTO_CREATE_SCHEMA:
         Base.metadata.create_all(bind=engine)
+
     if settings.SEED_DEMO_DATA:
         from app.services.seed import seed_demo_tenant
+
         seed_demo_tenant()
         log.info("Demo tenant seeded")
+
     yield
 
 
@@ -61,8 +76,11 @@ app.add_middleware(
 # This is the last line of defence; the real per-tenant limits live at the
 # ingress/API gateway (see deploy/k8s/ingress.yaml). Auth endpoints get a
 # tighter budget because they are the brute-force target.
+
 _hits: dict[str, deque] = defaultdict(deque)
 _AUTH_LIMIT = 20  # per minute per IP
+
+
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
     # Test suites make many authentication requests from the same IP.
@@ -96,32 +114,54 @@ async def rate_limit(request: Request, call_next):
         window.append(now)
 
     return await call_next(request)
+
+
 @app.middleware("http")
 async def observability(request: Request, call_next):
     """Request id + latency logging (NFR-13)."""
+
     request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
     started = time.perf_counter()
+
     response = await call_next(request)
+
     elapsed_ms = (time.perf_counter() - started) * 1000
+
     response.headers["x-request-id"] = request_id
     response.headers["x-response-time-ms"] = f"{elapsed_ms:.1f}"
+
     log.info(
         "%s %s %s %.1fms rid=%s",
-        request.method, request.url.path, response.status_code, elapsed_ms, request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+        request_id,
     )
+
     return response
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception(request: Request, exc: Exception):
     """Never leak internals to the client (SRS §9)."""
-    log.exception("Unhandled error on %s %s", request.method, request.url.path)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Something went wrong on our side. Try again in a moment."},
+
+    log.exception(
+        "Unhandled error on %s %s",
+        request.method,
+        request.url.path,
     )
 
-from app.routers import ai, auth, dashboard, inventory, purchases, sales
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Something went wrong on our side. Try again in a moment."
+        },
+    )
+
+
+# --------------------------------------------------------------- routers
+
 for router in (
     auth.router,
     inventory.router,
@@ -131,22 +171,41 @@ for router in (
     ai.router,
     finance.router,
     reports.router,
+    vision.router,
 ):
     app.include_router(router, prefix=settings.API_V1)
+
 
 @app.get("/health", tags=["Ops"])
 def health():
     """Liveness probe (NFR-13)."""
-    return {"status": "ok", "version": app.version}
+
+    return {
+        "status": "ok",
+        "version": app.version,
+    }
 
 
 @app.get("/health/ready", tags=["Ops"])
 def readiness():
     """Readiness probe — confirms the database is reachable."""
+
     from sqlalchemy import text
+
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        return {"status": "ready", "database": "up"}
+
+        return {
+            "status": "ready",
+            "database": "up",
+        }
+
     except Exception:
-        return JSONResponse(status_code=503, content={"status": "not_ready", "database": "down"})
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "database": "down",
+            },
+        )
