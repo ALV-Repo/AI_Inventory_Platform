@@ -151,6 +151,7 @@ class Product(Base, TenantMixin):
     attributes = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utcnow)
+
     stock_items = relationship("StockItem", back_populates="product")
 
     parent = relationship(
@@ -252,7 +253,7 @@ class SalesOrder(Base, TenantMixin):
     outstanding = Column(Float, default=0.0)
     cogs = Column(Float, default=0.0)                     # for gross profit (FR-RPT-01)
     payment_mode = Column(String(24), default="cash")
-    idempotency_key = Column(String(64))   
+    idempotency_key = Column(String(64))
     irn = Column(String(64), nullable=True)
     irn_status = Column(String(24), default="not_required")
                    # NFR-05 offline POS sync
@@ -632,4 +633,14 @@ class FinanceAllocation(Base, TenantMixin):
     document_type = Column(String(40), nullable=False)
     document_id = Column(Integer, nullable=False)
     allocated_amount = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+class CopilotConversation(Base, TenantMixin):
+    """Copilot conversation session (FR-AI-COP-02)."""
+    __tablename__ = "copilot_conversations"
+
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)

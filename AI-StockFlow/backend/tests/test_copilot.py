@@ -357,12 +357,17 @@ def test_answer_question_uses_rule_fallback(
     monkeypatch.setattr(
         copilot,
         "_call_llm",
-        lambda question, facts: None,
+        lambda question, facts, history=None: None,
     )
+
+    user = db.query(User).filter(
+        User.tenant_id == tenant.id
+    ).first()
 
     result = copilot.answer_question(
         db=db,
         tenant_id=tenant.id,
+        user_id=user.id,
         role="owner",
         question="What is my inventory value?",
     )

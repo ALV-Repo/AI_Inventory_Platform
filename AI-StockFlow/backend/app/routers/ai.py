@@ -1,6 +1,6 @@
 """AI endpoints (SRS §4). All results are tenant-scoped and human-approved."""
 from datetime import date, datetime, timedelta, timezone
-
+from app.services.copilot import answer_question
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -494,6 +494,7 @@ def decide_recommendation(
 # ------------------------------------------------------------------ copilot
 class CopilotQuestion(BaseModel):
     question: str = Field(min_length=3, max_length=500)
+    conversation_id: str | None = None
 
 
 @router.post("/copilot")
@@ -503,7 +504,14 @@ def copilot(
     db: Session = Depends(get_db),
 ):
     """Answer a business question from this tenant's data only (FR-AI-COP-01..03)."""
-    return answer_question(db=db, tenant_id=user.tenant_id, role=user.role, question=body.question)
+    return answer_question(
+        db=db,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        role=user.role,
+        question=body.question,
+        conversation_id=body.conversation_id,
+    )
 
 
 # ------------------------------------------------------------------ health score
