@@ -444,25 +444,32 @@ def decide_recommendation(
     rec.acted_at = datetime.now(timezone.utc)
 
     draft_po_id = None
+
     if body.decision == "accepted" and rec.rec_type == "reorder":
         payload = rec.payload or {}
+
         product = (
             scoped(db, Product, user.tenant_id)
             .filter(Product.id == rec.product_id)
             .first()
         )
+
         supplier = (
             scoped(db, Supplier, user.tenant_id)
             .filter(Supplier.is_active.is_(True))
             .order_by(Supplier.lead_time_days)
             .first()
         )
+
         if product and supplier and payload.get("suggested_qty"):
             po_count = scoped(db, PurchaseOrder, user.tenant_id).count()
 
             warehouse = (
                 scoped(db, Warehouse, user.tenant_id)
-                .filter(Warehouse.code == "WH-MAIN", Warehouse.is_active.is_(True))
+                .filter(
+                    Warehouse.code == "WH-MAIN",
+                    Warehouse.is_active.is_(True),
+                )
                 .first()
             )
 
@@ -483,22 +490,45 @@ def decide_recommendation(
                 subtotal=payload.get("estimated_cost", 0),
                 total=payload.get("estimated_cost", 0),
             )
+
             db.add(po)
             db.flush()
-            db.add(PurchaseOrderLine(
-                tenant_id=user.tenant_id, po_id=po.id, product_id=product.id,
-                quantity=payload["suggested_qty"],
-                unit_price=product.cost_price, gst_rate=product.gst_rate,
-            ))
+
+            db.add(
+                PurchaseOrderLine(
+                    tenant_id=user.tenant_id,
+                    po_id=po.id,
+                    product_id=product.id,
+                    quantity=payload["suggested_qty"],
+                    unit_price=product.cost_price,
+                    gst_rate=product.gst_rate,
+                )
+            )
+
             draft_po_id = po.id
 
-        db.add(AuditLog(
-            tenant_id=user.tenant_id, user_id=user.id, action=f"ai.recommendation.{body.decision}",
-            entity_type="ai_recommendation", entity_id=rec.id,
-            details={"type": rec.rec_type, "draft_po_id": draft_po_id},
-        ))
-        db.commit()
-        return {"id": rec.id, "status": rec.status, "draft_po_id": draft_po_id}
+    # Audit every AI recommendation decision, including price suggestions.
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action=f"ai.recommendation.{body.decision}",
+            entity_type="ai_recommendation",
+            entity_id=rec.id,
+            details={
+                "type": rec.rec_type,
+                "draft_po_id": draft_po_id,
+            },
+        )
+    )
+
+    db.commit()
+
+    return {
+        "id": rec.id,
+        "status": rec.status,
+        "draft_po_id": draft_po_id,
+    }
 # ------------------------------------------------------------------ copilot
 class CopilotQuestion(BaseModel):
     question: str = Field(min_length=3, max_length=500)
