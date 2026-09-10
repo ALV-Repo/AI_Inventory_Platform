@@ -14,6 +14,8 @@ from app.core.security import require
 from app.models.entities import (
     AuditLog,
     Customer,
+    DeliveryNote,
+    DeliveryNoteLine,
     Product,
     ProductBOM,
     Quotation,
@@ -64,6 +66,18 @@ class SalesReturnIn(BaseModel):
     warehouse_id: int | None = None
     reason: str | None = None
     lines: list[SalesReturnLineIn] = Field(min_length=1)
+
+
+class DeliveryNoteLineIn(BaseModel):
+    product_id: int
+    quantity: float = Field(gt=0)
+
+
+class DeliveryNoteIn(BaseModel):
+    sales_order_id: int
+    delivery_address: str | None = None
+    notes: str | None = None
+    lines: list[DeliveryNoteLineIn] = Field(min_length=1)
 
 
 class QuotationLineIn(BaseModel):
@@ -563,6 +577,237 @@ def create_sales_return(
         "total_amount": sales_return.total_amount,
         "tax_amount": sales_return.tax_amount,
         "status": sales_return.status,
+    }
+
+
+@router.post(
+    "/delivery-notes",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_delivery_note(
+    body: DeliveryNoteIn,
+    user: User = Depends(require("sales:write")),
+    db: Session = Depends(get_db),
+):
+    """Create a delivery note / challan for a sales order (FR-SAL-08)."""
+    order = (
+        scoped(db, SalesOrder, user.tenant_id)
+        .filter(SalesOrder.id == body.sales_order_id)
+        .first()
+    )
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sales order not found.",
+        )
+
+    if not order.lines:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sales order has no line items.",
+        )
+
+    delivery_lines = []
+
+    for item in body.lines:
+        original = next(
+            (line for line in order.lines if line.product_id == item.product_id),
+            None,
+        )
+
+        if not original:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Product {item.product_id} was not sold in this order.",
+            )
+
+        delivered_quantity = (
+            db.query(func.coalesce(func.sum(DeliveryNoteLine.quantity), 0))
+            .join(
+                DeliveryNote,
+                DeliveryNote.id == DeliveryNoteLine.delivery_note_id,
+            )
+            .filter(
+                DeliveryNote.tenant_id == user.tenant_id,
+                DeliveryNote.sales_order_id == order.id,
+                DeliveryNoteLine.product_id == item.product_id,
+            )
+            .scalar()
+            or 0
+        )
+
+        remaining = float(original.quantity) - float(delivered_quantity)
+
+        if item.quantity > remaining:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Delivery quantity exceeds remaining quantity "
+                    f"for product {item.product_id}. Remaining: {remaining}"
+                ),
+            )
+
+        delivery_lines.append(
+            {
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+            }
+        )
+
+    last_id = (
+        scoped(db, DeliveryNote, user.tenant_id)
+        .with_entities(func.max(DeliveryNote.id))
+        .scalar()
+        or 0
+    )
+
+    delivery_number = (
+        f"DN-{datetime.now(timezone.utc).strftime('%Y%m')}-{last_id + 1:05d}"
+    )
+
+    delivery_note = DeliveryNote(
+        tenant_id=user.tenant_id,
+        delivery_number=delivery_number,
+        sales_order_id=order.id,
+        customer_id=order.customer_id,
+        warehouse_id=order.warehouse_id,
+        delivery_date=datetime.now(timezone.utc),
+        status="confirmed",
+        delivery_address=body.delivery_address,
+        notes=body.notes,
+        created_by=user.id,
+    )
+
+    db.add(delivery_note)
+    db.flush()
+
+    for item in delivery_lines:
+        db.add(
+            DeliveryNoteLine(
+                tenant_id=user.tenant_id,
+                delivery_note_id=delivery_note.id,
+                product_id=item["product_id"],
+                quantity=item["quantity"],
+            )
+        )
+
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action="sales.delivery_note.create",
+            entity_type="delivery_note",
+            entity_id=delivery_note.id,
+            details={
+                "delivery_number": delivery_note.delivery_number,
+                "sales_order_id": order.id,
+                "lines": len(delivery_lines),
+            },
+        )
+    )
+
+    db.commit()
+    db.refresh(delivery_note)
+
+    return {
+        "id": delivery_note.id,
+        "delivery_number": delivery_note.delivery_number,
+        "sales_order_id": delivery_note.sales_order_id,
+        "customer_id": delivery_note.customer_id,
+        "warehouse_id": delivery_note.warehouse_id,
+        "delivery_date": delivery_note.delivery_date,
+        "status": delivery_note.status,
+        "delivery_address": delivery_note.delivery_address,
+        "notes": delivery_note.notes,
+        "lines": [
+            {
+                "product_id": line.product_id,
+                "quantity": line.quantity,
+            }
+            for line in delivery_note.lines
+        ],
+    }
+
+
+@router.get("/delivery-notes")
+def list_delivery_notes(
+    limit: int = 50,
+    user: User = Depends(require("sales:read")),
+    db: Session = Depends(get_db),
+):
+    """List tenant-scoped delivery notes / challans."""
+    rows = (
+        scoped(db, DeliveryNote, user.tenant_id)
+        .order_by(DeliveryNote.delivery_date.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "id": note.id,
+            "delivery_number": note.delivery_number,
+            "sales_order_id": note.sales_order_id,
+            "customer_id": note.customer_id,
+            "warehouse_id": note.warehouse_id,
+            "delivery_date": note.delivery_date,
+            "status": note.status,
+            "delivery_address": note.delivery_address,
+            "notes": note.notes,
+            "created_by": note.created_by,
+            "lines": [
+                {
+                    "id": line.id,
+                    "product_id": line.product_id,
+                    "quantity": line.quantity,
+                }
+                for line in note.lines
+            ],
+        }
+        for note in rows
+    ]
+
+
+@router.get("/delivery-notes/{delivery_note_id}")
+def get_delivery_note(
+    delivery_note_id: int,
+    user: User = Depends(require("sales:read")),
+    db: Session = Depends(get_db),
+):
+    """Get a single delivery note / challan."""
+    note = (
+        scoped(db, DeliveryNote, user.tenant_id)
+        .filter(DeliveryNote.id == delivery_note_id)
+        .first()
+    )
+
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Delivery note not found.",
+        )
+
+    return {
+        "id": note.id,
+        "delivery_number": note.delivery_number,
+        "sales_order_id": note.sales_order_id,
+        "customer_id": note.customer_id,
+        "warehouse_id": note.warehouse_id,
+        "delivery_date": note.delivery_date,
+        "status": note.status,
+        "delivery_address": note.delivery_address,
+        "notes": note.notes,
+        "created_by": note.created_by,
+        "created_at": note.created_at,
+        "lines": [
+            {
+                "id": line.id,
+                "product_id": line.product_id,
+                "quantity": line.quantity,
+            }
+            for line in note.lines
+        ],
     }
 
 
