@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type CountStatus =
   | "Pending"
@@ -173,6 +173,24 @@ export default function CycleCountPage() {
 
   const [items, setItems] =
     useState<CountItem[]>(initialItems);
+
+    useEffect(() => {
+  try {
+    const storedItems = localStorage.getItem("inventory-cycle-counts");
+
+    if (!storedItems) {
+      return;
+    }
+
+    const savedItems: CountItem[] = JSON.parse(storedItems);
+
+    if (Array.isArray(savedItems)) {
+      setItems(savedItems);
+    }
+  } catch {
+    // Keep initial items if saved data is invalid.
+  }
+}, []);
 
   /* =========================
      FILTERS
@@ -361,21 +379,28 @@ export default function CycleCountPage() {
       countedQuantity -
       selectedItem.expectedQty;
 
-    setItems((currentItems) =>
-      currentItems.map((item) =>
-        item.id === selectedItem.id
-          ? {
-              ...item,
-              countedQty: countedQuantity,
-              variance,
-              status: manageStatus,
-              notes: manageNotes,
-              countedBy: "Admin User",
-              countDate: "20 Aug 2026",
-            }
-          : item
-      )
-    );
+    setItems((currentItems) => {
+  const updatedItems = currentItems.map((item) =>
+    item.id === selectedItem.id
+      ? {
+          ...item,
+          countedQty: countedQuantity,
+          variance,
+          status: manageStatus,
+          notes: manageNotes,
+          countedBy: "Admin User",
+          countDate: "20 Aug 2026",
+        }
+      : item
+  );
+
+  localStorage.setItem(
+    "inventory-cycle-counts",
+    JSON.stringify(updatedItems)
+  );
+
+  return updatedItems;
+});
 
     setSelectedItem(null);
 
@@ -417,10 +442,19 @@ export default function CycleCountPage() {
       notes: newNotes,
     };
 
-    setItems((currentItems) => [
-      newItem,
-      ...currentItems,
-    ]);
+    setItems((currentItems) => {
+  const updatedItems = [
+    newItem,
+    ...currentItems,
+  ];
+
+  localStorage.setItem(
+    "inventory-cycle-counts",
+    JSON.stringify(updatedItems)
+  );
+
+  return updatedItems;
+});
 
     setShowCreateModal(false);
 

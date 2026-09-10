@@ -24,6 +24,8 @@ type Product = {
   sku: string;
   price: number;
   stock: number;
+  category: string;
+  gstRate?: number;
 };
 
 type CartItem = Product & {
@@ -76,7 +78,7 @@ type OfflineSale = {
    ========================================================= */
 
 const DEFAULT_WAREHOUSE_ID = 1;
-const TAX_RATE = 18;
+const DEFAULT_TAX_RATE = 18;
 
 /* =========================================================
    HELPERS
@@ -153,9 +155,17 @@ function normalizeProduct(
         : availableValue;
 
   const price = Number(priceValue);
-  const stock = Number(stockValue);
+const stock = Number(stockValue);
 
-  return {
+const gstRate = Number(
+  rawProduct.gst_rate ??
+    rawProduct.tax_rate ??
+    rawProduct.gstRate ??
+    rawProduct.taxRate ??
+    18
+);
+
+return {
     id,
     name,
     sku,
@@ -165,6 +175,13 @@ function normalizeProduct(
     stock: Number.isFinite(stock)
       ? Math.max(0, stock)
       : 0,
+    category:
+      typeof product.category === "string"
+        ? product.category
+        : "",
+        gstRate: Number.isFinite(gstRate)
+  ? gstRate
+  : 18,
   };
 }
 
@@ -300,12 +317,15 @@ const [queueLoaded, setQueueLoaded] =
 const [syncingQueue, setSyncingQueue] =
   useState(false);
 
-  /* =========================================================
-     SEARCH
+    /* =========================================================
+     SEARCH / CATEGORY
      ========================================================= */
 
   const [search, setSearch] =
     useState("");
+
+  const [selectedCategory, setSelectedCategory] =
+    useState("All");
 
   /* =========================================================
      CART
@@ -320,6 +340,8 @@ const [syncingQueue, setSyncingQueue] =
 
   const [customer, setCustomer] =
     useState("");
+
+    const [customerPhone, setCustomerPhone] = useState("");
 
     const selectedCreditCustomer = creditCustomers.find(
   (item) => item.name.toLowerCase() === customer.trim().toLowerCase()
@@ -366,7 +388,8 @@ const [
   receiptNumber: string;
   date: string;
   customer: string;
-  paymentMethod: string;
+customerPhone: string;
+paymentMethod: string;
   items: {
     name: string;
     quantity: number;
@@ -661,7 +684,7 @@ useEffect(() => {
   }
 }, [isOnline, queueLoaded]);
 
-  /* =========================================================
+    /* =========================================================
      FILTER PRODUCTS
      ========================================================= */
 
@@ -670,20 +693,24 @@ useEffect(() => {
       const query =
         search.trim().toLowerCase();
 
-      if (!query) {
-        return products;
-      }
-
-      return products.filter(
-        (product) =>
+      return products.filter((product) => {
+        const matchesSearch =
+          !query ||
           product.name
             .toLowerCase()
             .includes(query) ||
           product.sku
             .toLowerCase()
-            .includes(query)
-      );
-    }, [products, search]);
+            .includes(query);
+
+        const matchesCategory =
+          selectedCategory === "All" ||
+          product.category.trim().toLowerCase() ===
+            selectedCategory.toLowerCase();
+
+        return matchesSearch && matchesCategory;
+      });
+    }, [products, search, selectedCategory]);
 
   /* =========================================================
      CART CALCULATIONS
@@ -699,10 +726,17 @@ useEffect(() => {
   }, [cart]);
 
   const taxAmount = useMemo(() => {
-    return Math.round(
-      subtotal * (TAX_RATE / 100)
-    );
-  }, [subtotal]);
+  return Math.round(
+    cart.reduce(
+      (sum, item) =>
+        sum +
+        item.price *
+          item.quantity *
+          ((item.gstRate ?? DEFAULT_TAX_RATE) / 100),
+      0
+    )
+  );
+}, [cart]);
 
   const discountAmount = useMemo(() => {
   return Math.min(
@@ -882,10 +916,12 @@ const total = useMemo(() => {
      ========================================================= */
 
   function clearCart() {
-    setCart([]);
-    setSaleError(null);
-    setShowSuccess(false);
-  }
+  setCart([]);
+  setCustomer("");
+  setCustomerPhone("");
+  setSaleError(null);
+  setShowSuccess(false);
+}
 
   /* =========================================================
      VALIDATE CART BEFORE SALE
@@ -983,7 +1019,7 @@ try {
             product_id: item.id,
             quantity: item.quantity,
             unit_price: item.price,
-            tax_rate: TAX_RATE,
+            tax_rate: item.gstRate ?? DEFAULT_TAX_RATE,
           })
         ),
       },
@@ -999,6 +1035,7 @@ try {
   receiptNumber: `POS-${Date.now()}`,
   date: new Date().toLocaleString("en-IN"),
   customer: customer || "Walk-in Customer",
+  customerPhone,
   paymentMethod,
   items: cart.map((item) => ({
     name: item.name,
@@ -1013,9 +1050,8 @@ try {
 });
 
 setCart([]);
-
 setCustomer("");
-
+setCustomerPhone("");
 setPaymentMethod("Cash");
 
 setOfflineSaleQueued(true);
@@ -1057,7 +1093,7 @@ return;
             product_id: item.id,
             quantity: item.quantity,
             unit_price: item.price,
-            tax_rate: TAX_RATE,
+            tax_rate: item.gstRate ?? DEFAULT_TAX_RATE,
           })
         ),
       };
@@ -1089,8 +1125,9 @@ return;
       ? createdSale.id
       : `POS-${Date.now()}`,
   date: new Date().toLocaleString("en-IN"),
-  customer: customer || "Walk-in Customer",
-  paymentMethod,
+customer: customer || "Walk-in Customer",
+customerPhone,
+paymentMethod,
   items: cart.map((item) => ({
     name: item.name,
     quantity: item.quantity,
@@ -1373,7 +1410,7 @@ setShowReceipt(true);
               </div>
 
               <div className="mt-1 text-[10px] text-slate-400">
-                Including 18% GST
+                Including GST
               </div>
 
             </div>
@@ -1417,21 +1454,39 @@ setShowReceipt(true);
 
                 {/* Search */}
 
-                <div className="mt-4">
+<div className="mt-4">
 
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(event) =>
-                      setSearch(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Search product or SKU..."
-                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  />
+  <input
+    type="text"
+    value={search}
+    onChange={(event) =>
+      setSearch(event.target.value)
+    }
 
-                </div>
+    placeholder="Search product or SKU..."
+    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+  />
+
+  <div className="mt-3 flex flex-wrap gap-2">
+    {["All", "Electronics", "Toys", "Fashion", "Office"].map(
+      (category) => (
+        <button
+          key={category}
+          type="button"
+          onClick={() => setSelectedCategory(category)}
+          className={`rounded-md px-3 py-1.5 text-[10px] font-medium transition ${
+            selectedCategory === category
+              ? "bg-blue-600 text-white"
+              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          {category}
+        </button>
+      )
+    )}
+  </div>
+
+</div>
 
               </div>
 
@@ -1765,6 +1820,22 @@ setShowReceipt(true);
                     className="h-9 w-full rounded-md border border-slate-200 px-3 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   />
 
+                  <div className="mt-2">
+  <label className="mb-1 block text-[9px] font-medium text-slate-600">
+    Customer Phone
+  </label>
+
+  <input
+    type="tel"
+    value={customerPhone}
+    onChange={(event) =>
+      setCustomerPhone(event.target.value)
+    }
+    placeholder="Phone number (optional)"
+    className="h-9 w-full rounded-md border border-slate-200 px-3 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+  />
+</div>
+
                 </div>
 
                 <div className="mt-2 text-[9px]">
@@ -1913,7 +1984,7 @@ setShowReceipt(true);
 
                 <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
                   <span>
-                    GST ({TAX_RATE}%)
+                    GST (Product Rates)
                   </span>
 
                   <span className="font-medium text-slate-900">
@@ -2001,12 +2072,19 @@ setShowReceipt(true);
                 </div>
 
                 <div className="mt-1 flex justify-between">
-                  <span>Customer</span>
-                  <span>{lastReceipt.customer}</span>
-                </div>
+  <span>Customer</span>
+  <span>{lastReceipt.customer}</span>
+</div>
 
-                <div className="mt-1 flex justify-between">
-                  <span>Payment</span>
+{lastReceipt.customerPhone && (
+  <div className="mt-1 flex justify-between">
+    <span>Phone</span>
+    <span>{lastReceipt.customerPhone}</span>
+  </div>
+)}
+
+<div className="mt-1 flex justify-between">
+  <span>Payment</span>
                   <span>{lastReceipt.paymentMethod}</span>
                 </div>
               </div>
@@ -2046,7 +2124,7 @@ setShowReceipt(true);
                 </div>
 
                 <div className="mt-1 flex justify-between">
-                  <span>GST ({TAX_RATE}%)</span>
+                  <span>GST (Product Rates)</span>
                   <span>
                     {formatCurrency(lastReceipt.tax)}
                   </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type TransferStatus =
   | "Pending Approval"
@@ -110,6 +110,24 @@ export default function TransferWorkflowPage() {
   const [transfers, setTransfers] =
     useState<Transfer[]>(initialTransfers);
 
+    useEffect(() => {
+  try {
+    const storedTransfers = localStorage.getItem("inventory-transfers");
+
+    if (!storedTransfers) {
+      return;
+    }
+
+    const savedTransfers: Transfer[] = JSON.parse(storedTransfers);
+
+    if (Array.isArray(savedTransfers)) {
+      setTransfers(savedTransfers);
+    }
+  } catch {
+    // Keep initial transfers if saved data is invalid.
+  }
+}, []);
+
   const [showCreateForm, setShowCreateForm] =
     useState(false);
 
@@ -200,10 +218,19 @@ export default function TransferWorkflowPage() {
       status: "Pending Approval",
     };
 
-    setTransfers((prev) => [
-      newTransfer,
-      ...prev,
-    ]);
+    setTransfers((prev) => {
+  const updatedTransfers = [
+    newTransfer,
+    ...prev,
+  ];
+
+  localStorage.setItem(
+    "inventory-transfers",
+    JSON.stringify(updatedTransfers)
+  );
+
+  return updatedTransfers;
+});
 
     setShowCreateForm(false);
 
@@ -216,29 +243,182 @@ export default function TransferWorkflowPage() {
   };
 
   const updateTransferStatus = (
-    id: string,
-    newStatus: TransferStatus
-  ) => {
-    setTransfers((prev) =>
-      prev.map((transfer) =>
-        transfer.id === id
-          ? {
-              ...transfer,
-              status: newStatus,
-            }
-          : transfer
-      )
+  id: string,
+  newStatus: TransferStatus
+) => {
+  setTransfers((prev) => {
+    const currentTransfer = prev.find(
+      (transfer) => transfer.id === id
     );
 
-    setSelectedTransfer((prev) =>
-      prev
+    if (!currentTransfer) {
+      return prev;
+    }
+
+    if (
+      newStatus === "Received" &&
+      currentTransfer.status !== "Dispatched"
+    ) {
+      return prev;
+    }
+
+    if (
+      newStatus === "Received" &&
+      currentTransfer.status === "Dispatched"
+    ) {
+      try {
+        const storedProducts =
+          localStorage.getItem("inventory-products");
+
+        if (!storedProducts) {
+          alert("Inventory products could not be found.");
+          return prev;
+        }
+
+        const inventoryProducts = JSON.parse(storedProducts);
+
+        if (!Array.isArray(inventoryProducts)) {
+          alert("Inventory data is invalid.");
+          return prev;
+        }
+
+        const sourceIndex = inventoryProducts.findIndex(
+          (item) =>
+            String(item.sku || item.code || "").trim().toLowerCase() ===
+              currentTransfer.sku.trim().toLowerCase() &&
+            String(item.warehouse || "")
+              .trim()
+              .toLowerCase() ===
+              currentTransfer.fromWarehouse
+                .trim()
+                .toLowerCase()
+        );
+
+        if (sourceIndex === -1) {
+          alert(
+            `Product ${currentTransfer.sku} was not found in ${currentTransfer.fromWarehouse}.`
+          );
+          return prev;
+        }
+
+        const sourceProduct = inventoryProducts[sourceIndex];
+        const sourceStock = Number(
+          sourceProduct.onHand ??
+            sourceProduct.on_hand ??
+            sourceProduct.available ??
+            0
+        );
+
+        if (sourceStock < currentTransfer.quantity) {
+          alert(
+            `Insufficient stock in ${currentTransfer.fromWarehouse}. Available: ${sourceStock}, Required: ${currentTransfer.quantity}.`
+          );
+          return prev;
+        }
+
+        const updatedProducts = [...inventoryProducts];
+
+        updatedProducts[sourceIndex] = {
+          ...sourceProduct,
+          onHand: sourceStock - currentTransfer.quantity,
+          on_hand: sourceStock - currentTransfer.quantity,
+          available: Math.max(
+            sourceStock - currentTransfer.quantity,
+            0
+          ),
+        };
+
+        const destinationIndex = updatedProducts.findIndex(
+          (item) =>
+            String(item.sku || item.code || "")
+              .trim()
+              .toLowerCase() ===
+              currentTransfer.sku.trim().toLowerCase() &&
+            String(item.warehouse || "")
+              .trim()
+              .toLowerCase() ===
+              currentTransfer.toWarehouse
+                .trim()
+                .toLowerCase()
+        );
+
+        if (destinationIndex !== -1) {
+          const destinationProduct =
+            updatedProducts[destinationIndex];
+
+          const destinationStock = Number(
+            destinationProduct.onHand ??
+              destinationProduct.on_hand ??
+              destinationProduct.available ??
+              0
+          );
+
+          updatedProducts[destinationIndex] = {
+            ...destinationProduct,
+            onHand:
+              destinationStock + currentTransfer.quantity,
+            on_hand:
+              destinationStock + currentTransfer.quantity,
+            available:
+              destinationStock + currentTransfer.quantity,
+          };
+        } else {
+          const newId =
+            Math.max(
+              0,
+              ...updatedProducts.map(
+                (item) => Number(item.id) || 0
+              )
+            ) + 1;
+
+          updatedProducts.push({
+            ...sourceProduct,
+            id: newId,
+            warehouse: currentTransfer.toWarehouse,
+            onHand: currentTransfer.quantity,
+            on_hand: currentTransfer.quantity,
+            available: currentTransfer.quantity,
+            reserved: 0,
+          });
+        }
+
+        localStorage.setItem(
+          "inventory-products",
+          JSON.stringify(updatedProducts)
+        );
+      } catch {
+        alert("Failed to update inventory stock.");
+        return prev;
+      }
+    }
+
+    const updatedTransfers = prev.map((transfer) =>
+      transfer.id === id
         ? {
-            ...prev,
+            ...transfer,
             status: newStatus,
           }
-        : null
+        : transfer
     );
-  };
+
+    localStorage.setItem(
+      "inventory-transfers",
+      JSON.stringify(updatedTransfers)
+    );
+
+    return updatedTransfers;
+  });
+
+  setSelectedTransfer((prev) =>
+    prev
+      ? {
+          ...prev,
+          status: newStatus,
+        }
+      : null
+  );
+};
+
     return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl">

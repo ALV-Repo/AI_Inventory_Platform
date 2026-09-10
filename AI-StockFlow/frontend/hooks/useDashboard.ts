@@ -239,6 +239,18 @@ interface UseDashboardResult
     days: number
   ) => void;
 
+  customStartDate: string;
+
+  setCustomStartDate: (
+    date: string
+  ) => void;
+
+  customEndDate: string;
+
+  setCustomEndDate: (
+    date: string
+  ) => void;
+
   refresh: () => Promise<void>;
 }
 
@@ -704,6 +716,16 @@ export function useDashboard(): UseDashboardResult {
   ] =
     useState(30);
 
+    const [
+  customStartDate,
+  setCustomStartDate,
+] = useState("");
+
+const [
+  customEndDate,
+  setCustomEndDate,
+] = useState("");
+
   /* =======================================================
      LOAD DASHBOARD
      ======================================================= */
@@ -745,7 +767,11 @@ export function useDashboard(): UseDashboardResult {
               fetchJson<
                 BackendDashboardResponse
               >(
-                `${BASE_URL}/dashboard/summary?days=${period}`,
+                `${BASE_URL}/dashboard/summary?days=${period}${
+  customStartDate && customEndDate
+    ? `&start_date=${customStartDate}&end_date=${customEndDate}`
+    : ""
+}`,
                 token
               ),
 
@@ -865,7 +891,7 @@ export function useDashboard(): UseDashboardResult {
           setLoading(false);
         }
       },
-      [period]
+      [period, customStartDate, customEndDate]
     );
 
   /* =======================================================
@@ -883,23 +909,20 @@ export function useDashboard(): UseDashboardResult {
      ======================================================= */
 
   return {
-    summary,
-
-    reorderSuggestions,
-
-    deadStock,
-
-    loading,
-
-    error,
-
-    period,
-
-    setPeriod,
-
-    refresh:
-      loadDashboard,
-  };
+  summary,
+  reorderSuggestions,
+  deadStock,
+  loading,
+  error,
+  period,
+  setPeriod,
+  customStartDate,
+  setCustomStartDate,
+  customEndDate,
+  setCustomEndDate,
+  refresh:
+    loadDashboard,
+};
 }
 
 export default useDashboard;

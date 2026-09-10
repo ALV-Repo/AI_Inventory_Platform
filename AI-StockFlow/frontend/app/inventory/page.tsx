@@ -38,6 +38,17 @@ type Product = {
   reserved: number;
   reorderPoint: number;
   unitCost: number;
+  costPrice?: number;
+  transportCost?: number;
+  mrp?: number;
+  discountType?: "Percentage" | "Fixed";
+  discountValue?: number;
+  sellingPrice?: number;
+  gstRate?: number;
+
+  supplierName?: string;
+  supplierContact?: string;
+  supplierEmail?: string;
 
   productType?: "Simple" | "Variable";
   parentId?: number | null;
@@ -135,11 +146,122 @@ function mapInventoryProduct(
     ),
 
     unitCost: Number(
-      item.unit_cost ??
-        item.cost_price ??
-        item.price ??
-        0
-    ),
+  item.unit_cost ??
+    item.cost_price ??
+    item.price ??
+  0
+),
+
+costPrice: Number(
+  item.cost_price ??
+    item.costPrice ??
+    item.unit_cost ??
+    0
+),
+
+transportCost: Number(
+  item.transport_cost ??
+    item.transportCost ??
+    0
+),
+
+mrp: Number(
+  item.mrp ??
+    item.maximum_retail_price ??
+    item.selling_price ??
+    item.sellingPrice ??
+    item.sale_price ??
+    item.price ??
+    0
+),
+
+discountType:
+  item.discount_type === "Fixed"
+    ? "Fixed"
+    : "Percentage",
+
+discountValue: Number(
+  item.discount_value ??
+    item.discount ??
+    0
+),
+
+sellingPrice: Number(
+  item.selling_price ??
+    item.sellingPrice ??
+    item.sale_price ??
+    item.price ??
+    0
+),
+
+gstRate: Number(
+  (
+    item as InventoryProduct & {
+      gst_rate?: number;
+      tax_rate?: number;
+      gstRate?: number;
+      taxRate?: number;
+    }
+  ).gst_rate ??
+    (
+      item as InventoryProduct & {
+        gst_rate?: number;
+        tax_rate?: number;
+        gstRate?: number;
+        taxRate?: number;
+      }
+    ).tax_rate ??
+    (
+      item as InventoryProduct & {
+        gst_rate?: number;
+        tax_rate?: number;
+        gstRate?: number;
+        taxRate?: number;
+      }
+    ).gstRate ??
+    (
+      item as InventoryProduct & {
+        gst_rate?: number;
+        tax_rate?: number;
+        gstRate?: number;
+        taxRate?: number;
+      }
+    ).taxRate ??
+        18
+  ),
+
+  supplierName:
+    (item as InventoryProduct & {
+      supplier_name?: string;
+      supplierName?: string;
+    }).supplier_name ??
+    (item as InventoryProduct & {
+      supplier_name?: string;
+      supplierName?: string;
+    }).supplierName ??
+    "",
+
+  supplierContact:
+    (item as InventoryProduct & {
+      supplier_contact?: string;
+      supplierContact?: string;
+    }).supplier_contact ??
+    (item as InventoryProduct & {
+      supplier_contact?: string;
+      supplierContact?: string;
+    }).supplierContact ??
+    "",
+
+  supplierEmail:
+    (item as InventoryProduct & {
+      supplier_email?: string;
+      supplierEmail?: string;
+    }).supplier_email ??
+    (item as InventoryProduct & {
+      supplier_email?: string;
+      supplierEmail?: string;
+    }).supplierEmail ??
+    "",
   };
 }
 
@@ -177,6 +299,8 @@ export default function InventoryPage() {
   const [products, setProducts] =
     useState<Product[]>([]);
 
+    const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+
   /*
    * Convert API products into the Product shape
    * used by the existing UI.
@@ -192,23 +316,53 @@ export default function InventoryPage() {
     const storedProducts =
       localStorage.getItem("inventory-products");
 
-    const localProducts: Product[] =
-      storedProducts
-        ? JSON.parse(storedProducts)
-        : [];
+    if (storedProducts) {
+  const localProducts: Product[] =
+    JSON.parse(storedProducts);
 
-    const mergedProducts = [
-      ...mappedProducts,
-      ...localProducts.filter(
-        (localProduct) =>
-          !mappedProducts.some(
-            (apiProduct) =>
-              apiProduct.id === localProduct.id
-          )
-      ),
-    ];
+  const normalizedProducts =
+    localProducts.map((product) => {
+      const mrp =
+        Number(product.mrp) > 0
+          ? Number(product.mrp)
+          : Number(product.sellingPrice) > 0
+            ? Number(product.sellingPrice)
+            : Number(product.unitCost);
 
-    setProducts(mergedProducts);
+      const discountValue =
+        Number(product.discountValue ?? 0);
+
+      const discountType =
+        product.discountType ?? "Percentage";
+
+      const sellingPrice =
+        Number(product.sellingPrice) > 0
+          ? Number(product.sellingPrice)
+          : discountType === "Percentage"
+            ? mrp - (mrp * discountValue) / 100
+            : mrp - discountValue;
+
+      return {
+        ...product,
+        mrp,
+        sellingPrice: Math.max(sellingPrice, 0),
+      };
+    });
+
+  setProducts(normalizedProducts);
+
+  localStorage.setItem(
+    "inventory-products",
+    JSON.stringify(normalizedProducts)
+  );
+} else {
+      setProducts(mappedProducts);
+
+      localStorage.setItem(
+        "inventory-products",
+        JSON.stringify(mappedProducts)
+      );
+    }
   } catch {
     setProducts(mappedProducts);
   }
@@ -249,8 +403,18 @@ export default function InventoryPage() {
       warehouse: "Main Store",
       quantity: "",
       reorderPoint: "10",
-      unitCost: "",
-    });
+unitCost: "",
+costPrice: "",
+transportCost: "",
+mrp: "",
+discountType: "Percentage" as
+  | "Percentage"
+  | "Fixed",
+discountValue: "",
+supplierName: "",
+supplierContact: "",
+supplierEmail: "",
+});
 
   const [newVariants, setNewVariants] =
     useState<ProductVariant[]>([]);
@@ -264,6 +428,23 @@ export default function InventoryPage() {
 
   const [editingProduct, setEditingProduct] =
     useState<Product | null>(null);
+
+    const [showMassEdit, setShowMassEdit] =
+  useState(false);
+
+const [massEditField, setMassEditField] =
+  useState<
+    | "category"
+    | "warehouse"
+    | "reorderPoint"
+    | "costPrice"
+    | "mrp"
+    | "discountType"
+    | "discountValue"
+  >("category");
+
+const [massEditValue, setMassEditValue] =
+  useState("");
 
   // --------------------------------------------------
   // STOCK ADJUSTMENT
@@ -483,6 +664,22 @@ export default function InventoryPage() {
       newProduct.unitCost
     );
 
+    const costPrice = Number(newProduct.costPrice);
+const transportCost = Number(newProduct.transportCost);
+const totalProductCost = costPrice + transportCost;
+const mrp = Number(newProduct.mrp);
+const discountValue = Number(newProduct.discountValue);
+
+const calculatedMrp = Math.max(
+  mrp,
+  totalProductCost
+);
+
+const sellingPrice =
+  newProduct.discountType === "Percentage"
+    ? calculatedMrp - (calculatedMrp * discountValue) / 100
+    : calculatedMrp - discountValue;
+
     if (
       (newProduct.productType ===
         "Simple" &&
@@ -495,6 +692,36 @@ export default function InventoryPage() {
       );
       return;
     }
+
+    if (
+  !Number.isFinite(costPrice) ||
+  !Number.isFinite(transportCost) ||
+  !Number.isFinite(mrp) ||
+  !Number.isFinite(discountValue) ||
+  costPrice < 0 ||
+  transportCost < 0 ||
+  mrp < 0 ||
+  discountValue < 0
+) {
+  alert("Please enter valid pricing values.");
+  return;
+}
+
+if (
+  newProduct.discountType === "Percentage" &&
+  discountValue > 100
+) {
+  alert("Percentage discount cannot exceed 100%.");
+  return;
+}
+
+if (
+  newProduct.discountType === "Fixed" &&
+  discountValue > mrp
+) {
+  alert("Fixed discount cannot be greater than MRP.");
+  return;
+}
 
     if (
       newProduct.productType ===
@@ -593,7 +820,21 @@ export default function InventoryPage() {
           0
         ),
 
-      variants:
+       costPrice: Math.max(costPrice, 0),
+transportCost: Math.max(transportCost, 0),
+mrp: Math.max(calculatedMrp, 0),
+discountType: newProduct.discountType,
+discountValue: Math.max(discountValue, 0),
+sellingPrice: Math.max(sellingPrice, 0),
+
+supplierName:
+  newProduct.supplierName.trim(),
+supplierContact:
+  newProduct.supplierContact.trim(),
+supplierEmail:
+  newProduct.supplierEmail.trim(),
+
+variants:
         newProduct.productType ===
         "Variable"
           ? newVariants
@@ -615,19 +856,28 @@ export default function InventoryPage() {
 });
 
     setNewProduct({
-      name: "",
-      sku: "",
-      productType:
-        "Simple",
-      category:
-        "Electronics",
-      warehouse:
-        "Main Store",
-      quantity: "",
-      reorderPoint:
-        "10",
-      unitCost: "",
-    });
+  name: "",
+  sku: "",
+  productType:
+    "Simple",
+  category:
+    "Electronics",
+  warehouse:
+    "Main Store",
+  quantity: "",
+  reorderPoint:
+    "10",
+  unitCost: "",
+costPrice: "",
+transportCost: "",
+mrp: "",
+discountType:
+  "Percentage",
+  discountValue: "",
+  supplierName: "",
+  supplierContact: "",
+  supplierEmail: "",
+});
 
     setNewVariants([]);
 
@@ -636,6 +886,386 @@ export default function InventoryPage() {
     alert(
       "Product added successfully."
     );
+  }
+
+    // --------------------------------------------------
+  // EXPORT PRODUCTS
+  // --------------------------------------------------
+
+  function handleExportProducts() {
+    const headers = [
+      "SKU",
+      "Product Name",
+      "Product Type",
+      "Category",
+      "Warehouse",
+      "Quantity",
+      "Reorder Point",
+      "Unit Cost",
+"Cost Price",
+"Transport Cost",
+"MRP",
+      "Discount Type",
+      "Discount Value",
+      "Selling Price",
+      "GST Rate",
+      "Supplier Name",
+      "Supplier Contact",
+      "Supplier Email",
+    ];
+
+    const rows = products.map((product) => [
+      product.sku,
+      product.name,
+      product.productType ?? "Simple",
+      product.category,
+      product.warehouse,
+      product.onHand ?? 0,
+      product.reorderPoint ?? 0,
+      product.unitCost ?? 0,
+product.costPrice ?? 0,
+product.transportCost ?? 0,
+product.mrp ?? 0,
+      product.discountType ?? "Percentage",
+      product.discountValue ?? 0,
+      product.sellingPrice ?? 0,
+      product.gstRate ?? 18,
+      product.supplierName ?? "",
+      product.supplierContact ?? "",
+      product.supplierEmail ?? "",
+    ]);
+
+    const escapeCsvValue = (value: unknown) =>
+      `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+    const csv = [
+      headers.map(escapeCsvValue).join(","),
+      ...rows.map((row) =>
+        row.map(escapeCsvValue).join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `inventory-products-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  }
+
+    // --------------------------------------------------
+  // DOWNLOAD IMPORT TEMPLATE
+  // --------------------------------------------------
+
+  function handleDownloadTemplate() {
+    const headers = [
+      "SKU",
+      "Product Name",
+      "Product Type",
+      "Category",
+      "Warehouse",
+      "Quantity",
+      "Reorder Point",
+      "Unit Cost",
+"Cost Price",
+"Transport Cost",
+"MRP",
+      "Discount Type",
+      "Discount Value",
+      "Selling Price",
+      "GST Rate",
+      "Supplier Name",
+      "Supplier Contact",
+      "Supplier Email",
+    ];
+
+    const exampleRow = [
+      "SKU-001",
+      "Sample Product",
+      "Simple",
+      "Electronics",
+      "Main Store",
+      "10",
+      "5",
+      "500",
+"50",
+"699",
+      "Percentage",
+      "10",
+      "629.10",
+      "18",
+      "ABC Suppliers",
+      "9876543210",
+      "supplier@example.com",
+    ];
+
+    const escapeCsvValue = (value: unknown) =>
+      `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+    const csv = [
+      headers.map(escapeCsvValue).join(","),
+      exampleRow.map(escapeCsvValue).join(","),
+    ].join("\n");
+
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "inventory-import-template.csv";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  }
+
+    // --------------------------------------------------
+  // IMPORT PRODUCTS
+  // --------------------------------------------------
+
+  function handleImportProducts(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+
+      const parseCsvRow = (row: string) => {
+        const values: string[] = [];
+        let current = "";
+        let insideQuotes = false;
+
+        for (let i = 0; i < row.length; i++) {
+          const char = row[i];
+
+          if (char === '"') {
+            if (insideQuotes && row[i + 1] === '"') {
+              current += '"';
+              i++;
+            } else {
+              insideQuotes = !insideQuotes;
+            }
+          } else if (char === "," && !insideQuotes) {
+            values.push(current.trim());
+            current = "";
+          } else {
+            current += char;
+          }
+        }
+
+        values.push(current.trim());
+
+        return values;
+      };
+
+      const lines = text
+        .split(/\r?\n/)
+        .filter((line) => line.trim());
+
+      if (lines.length < 2) {
+        alert("The CSV file does not contain any products.");
+        return;
+      }
+
+      const headers = parseCsvRow(lines[0]);
+
+      const headerIndex = (name: string) =>
+        headers.findIndex(
+          (header) =>
+            header.trim().toLowerCase() === name.toLowerCase()
+        );
+
+      const skuIndex = headerIndex("SKU");
+      const nameIndex = headerIndex("Product Name");
+
+      if (skuIndex === -1 || nameIndex === -1) {
+        alert(
+          "Invalid CSV file. SKU and Product Name columns are required."
+        );
+        return;
+      }
+
+      const importedProducts = lines
+        .slice(1)
+        .map((line) => parseCsvRow(line))
+        .filter(
+          (row) =>
+            row[skuIndex]?.trim() &&
+            row[nameIndex]?.trim()
+        );
+
+      if (importedProducts.length === 0) {
+        alert("No valid products were found in the CSV file.");
+        return;
+      }
+
+      const getValue = (
+        row: string[],
+        column: string
+      ) => {
+        const index = headerIndex(column);
+        return index >= 0 ? row[index] ?? "" : "";
+      };
+
+      const getNumber = (
+        row: string[],
+        column: string,
+        fallback = 0
+      ) => {
+        const value = Number(getValue(row, column));
+        return Number.isFinite(value) ? value : fallback;
+      };
+
+      setProducts((currentProducts) => {
+        const updatedProducts = [...currentProducts];
+
+        importedProducts.forEach((row, index) => {
+          const sku = getValue(row, "SKU").trim();
+
+          const importedProduct: Product = {
+            id:
+              Date.now() +
+              index,
+            name: getValue(
+              row,
+              "Product Name"
+            ).trim(),
+            sku,
+            productType:
+  (getValue(
+    row,
+    "Product Type"
+  ) || "Simple") as "Simple" | "Variable",
+            category:
+              getValue(
+                row,
+                "Category"
+              ) || "Electronics",
+            warehouse:
+              getValue(
+                row,
+                "Warehouse"
+              ) || "Main Store",
+            onHand: getNumber(
+              row,
+              "Quantity"
+            ),
+            reorderPoint: getNumber(
+              row,
+              "Reorder Point"
+            ),
+            unitCost: getNumber(
+  row,
+  "Unit Cost"
+),
+costPrice: getNumber(
+  row,
+  "Cost Price"
+),
+transportCost: getNumber(
+  row,
+  "Transport Cost"
+),
+mrp: getNumber(
+  row,
+  "MRP"
+),
+            discountType:
+  (getValue(
+    row,
+    "Discount Type"
+  ) || "Percentage") as "Percentage" | "Fixed",
+            discountValue: getNumber(
+              row,
+              "Discount Value"
+            ),
+            sellingPrice: getNumber(
+              row,
+              "Selling Price"
+            ),
+            gstRate: getNumber(
+              row,
+              "GST Rate",
+              18
+            ),
+            supplierName:
+              getValue(
+                row,
+                "Supplier Name"
+              ).trim(),
+            supplierContact:
+              getValue(
+                row,
+                "Supplier Contact"
+              ).trim(),
+            supplierEmail:
+              getValue(
+                row,
+                "Supplier Email"
+              ).trim(),
+            reserved: 0,
+            variants: [],
+          };
+
+          const existingIndex =
+            updatedProducts.findIndex(
+              (product) =>
+                product.sku.toLowerCase() ===
+                sku.toLowerCase()
+            );
+
+          if (existingIndex >= 0) {
+            updatedProducts[existingIndex] = {
+              ...updatedProducts[existingIndex],
+              ...importedProduct,
+              id: updatedProducts[existingIndex].id,
+            };
+          } else {
+            updatedProducts.push(
+              importedProduct
+            );
+          }
+        });
+
+        localStorage.setItem(
+          "inventory-products",
+          JSON.stringify(updatedProducts)
+        );
+
+        return updatedProducts;
+      });
+
+      alert(
+        `${importedProducts.length} product(s) imported successfully.`
+      );
+
+      event.target.value = "";
+    };
+
+    reader.readAsText(file);
   }
 
   // --------------------------------------------------
@@ -707,24 +1337,105 @@ export default function InventoryPage() {
       return;
     }
 
-    setProducts(
-      (current) =>
-        current.map(
-          (product) =>
-            product.id ===
-            editingProduct.id
-              ? {
-                  ...editingProduct,
-                  name:
-                    editingProduct.name.trim(),
-                  sku:
-                    editingProduct.sku
-                      .trim()
-                      .toUpperCase(),
-                }
-              : product
-        )
-    );
+        if (
+  !Number.isFinite(
+    editingProduct.costPrice ?? 0
+  ) ||
+  !Number.isFinite(
+    editingProduct.transportCost ?? 0
+  ) ||
+  !Number.isFinite(
+    editingProduct.mrp ?? 0
+  ) ||
+  !Number.isFinite(
+    editingProduct.discountValue ?? 0
+  ) ||
+  (editingProduct.costPrice ?? 0) < 0 ||
+  (editingProduct.transportCost ?? 0) < 0 ||
+  (editingProduct.mrp ?? 0) < 0 ||
+  (editingProduct.discountValue ?? 0) < 0
+) {
+  alert(
+    "Please enter valid pricing values."
+  );
+  return;
+}
+
+    if (
+      editingProduct.discountType ===
+        "Percentage" &&
+      (editingProduct.discountValue ?? 0) > 100
+    ) {
+      alert(
+        "Percentage discount cannot exceed 100%."
+      );
+      return;
+    }
+
+    if (
+      editingProduct.discountType === "Fixed" &&
+      (editingProduct.discountValue ?? 0) >
+        (editingProduct.mrp ?? 0)
+    ) {
+      alert(
+        "Fixed discount cannot be greater than MRP."
+      );
+      return;
+    }
+
+    const costPrice = editingProduct.costPrice ?? 0;
+const transportCost = editingProduct.transportCost ?? 0;
+const totalProductCost = costPrice + transportCost;
+
+const mrp = Math.max(
+  editingProduct.mrp ?? 0,
+  totalProductCost
+);
+
+const discountValue =
+  editingProduct.discountValue ?? 0;
+
+    const sellingPrice =
+      editingProduct.discountType ===
+      "Percentage"
+        ? mrp - (mrp * discountValue) / 100
+        : mrp - discountValue;
+
+    setProducts((current) => {
+  const updatedProducts = current.map(
+    (product) =>
+      product.id === editingProduct.id
+        ? {
+            ...editingProduct,
+            ...editingProduct,
+name: editingProduct.name.trim(),
+sku: editingProduct.sku
+  .trim()
+  .toUpperCase(),
+onHand: Number(editingProduct.onHand),
+costPrice:
+  editingProduct.costPrice ?? 0,
+transportCost:
+  editingProduct.transportCost ?? 0,
+mrp: mrp,
+            discountType:
+              editingProduct.discountType ??
+              "Percentage",
+            discountValue:
+              editingProduct.discountValue ?? 0,
+            sellingPrice:
+              Math.max(sellingPrice, 0),
+          }
+        : product
+  );
+
+  localStorage.setItem(
+    "inventory-products",
+    JSON.stringify(updatedProducts)
+  );
+
+  return updatedProducts;
+});
 
     setShowEditProduct(false);
 
@@ -732,6 +1443,235 @@ export default function InventoryPage() {
 
     alert(
       "Product updated successfully."
+    );
+  }
+
+    // --------------------------------------------------
+  // MASS EDIT PRODUCTS
+  // --------------------------------------------------
+
+  function handleMassEdit() {
+    if (selectedProductIds.length === 0) {
+      return;
+    }
+
+    if (!massEditValue.trim()) {
+      alert("Please enter or select a value.");
+      return;
+    }
+
+    let updatedProducts: Product[] = [];
+
+    if (
+      massEditField === "discountType" &&
+      massEditValue !== "Percentage" &&
+      massEditValue !== "Fixed"
+    ) {
+      alert("Please select a valid discount type.");
+      return;
+    }
+
+    if (
+      massEditField !== "category" &&
+      massEditField !== "warehouse" &&
+      massEditField !== "discountType"
+    ) {
+      const numericValue = Number(massEditValue);
+
+      if (!Number.isFinite(numericValue) || numericValue < 0) {
+        alert("Please enter a valid non-negative number.");
+        return;
+      }
+    }
+
+    updatedProducts = products.map((product) => {
+      if (
+        !selectedProductIds.includes(
+          product.id.toString()
+        )
+      ) {
+        return product;
+      }
+
+      if (massEditField === "category") {
+        return {
+          ...product,
+          category: massEditValue,
+        };
+      }
+
+      if (massEditField === "warehouse") {
+        return {
+          ...product,
+          warehouse: massEditValue,
+        };
+      }
+
+      if (massEditField === "reorderPoint") {
+        return {
+          ...product,
+          reorderPoint: Number(massEditValue),
+        };
+      }
+
+      if (massEditField === "costPrice") {
+        return {
+          ...product,
+          costPrice: Number(massEditValue),
+          unitCost: Number(massEditValue),
+        };
+      }
+
+      if (massEditField === "mrp") {
+        const mrp = Number(massEditValue);
+        const discountValue =
+          product.discountValue ?? 0;
+
+        const sellingPrice =
+          product.discountType === "Percentage"
+            ? mrp - (mrp * discountValue) / 100
+            : mrp - discountValue;
+
+        return {
+          ...product,
+          mrp,
+          sellingPrice: Math.max(sellingPrice, 0),
+        };
+      }
+
+      if (massEditField === "discountType") {
+        const discountType =
+          massEditValue as
+            | "Percentage"
+            | "Fixed";
+
+        const mrp = product.mrp ?? 0;
+        const discountValue =
+          product.discountValue ?? 0;
+
+        if (
+          discountType === "Percentage" &&
+          discountValue > 100
+        ) {
+          return product;
+        }
+
+        if (
+          discountType === "Fixed" &&
+          discountValue > mrp
+        ) {
+          return product;
+        }
+
+        const sellingPrice =
+          discountType === "Percentage"
+            ? mrp - (mrp * discountValue) / 100
+            : mrp - discountValue;
+
+        return {
+          ...product,
+          discountType,
+          sellingPrice: Math.max(
+            sellingPrice,
+            0
+          ),
+        };
+      }
+
+      if (massEditField === "discountValue") {
+        const discountValue =
+          Number(massEditValue);
+        const mrp = product.mrp ?? 0;
+        const discountType =
+          product.discountType ?? "Percentage";
+
+        if (
+          discountType === "Percentage" &&
+          discountValue > 100
+        ) {
+          return product;
+        }
+
+        if (
+          discountType === "Fixed" &&
+          discountValue > mrp
+        ) {
+          return product;
+        }
+
+        const sellingPrice =
+          discountType === "Percentage"
+            ? mrp -
+              (mrp * discountValue) / 100
+            : mrp - discountValue;
+
+        return {
+          ...product,
+          discountValue,
+          sellingPrice: Math.max(
+            sellingPrice,
+            0
+          ),
+        };
+      }
+
+      return product;
+    });
+
+    setProducts(updatedProducts);
+
+    localStorage.setItem(
+      "inventory-products",
+      JSON.stringify(updatedProducts)
+    );
+    const updatedCount = selectedProductIds.length;
+
+    setShowMassEdit(false);
+    setMassEditValue("");
+    setSelectedProductIds([]);
+
+    alert(
+  `${updatedCount} product(s) updated successfully.`
+);
+  }
+
+    // --------------------------------------------------
+  // MASS DELETE PRODUCTS
+  // --------------------------------------------------
+
+  function handleMassDelete() {
+    if (selectedProductIds.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedProductIds.length} selected product(s)?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const selectedIds = new Set(selectedProductIds);
+
+    const updatedProducts = products.filter(
+      (product) =>
+        !selectedIds.has(product.id.toString())
+    );
+
+    setProducts(updatedProducts);
+
+    localStorage.setItem(
+      "inventory-products",
+      JSON.stringify(updatedProducts)
+    );
+
+    const deletedCount = selectedProductIds.length;
+
+    setSelectedProductIds([]);
+
+    alert(
+      `${deletedCount} product(s) deleted successfully.`
     );
   }
 
@@ -790,36 +1730,37 @@ export default function InventoryPage() {
       return;
     }
 
-    setProducts(
-      (current) =>
-        current.map(
-          (product) => {
-            if (
-              product.id !==
-              selectedProduct.id
-            ) {
-              return product;
-            }
+    setProducts((current) => {
+  const updatedProducts = current.map(
+    (product) => {
+      if (
+        product.id !== selectedProduct.id
+      ) {
+        return product;
+      }
 
-            const newOnHand =
-              adjustmentType ===
-              "increase"
-                ? product.onHand +
-                  quantity
-                : Math.max(
-                    product.onHand -
-                      quantity,
-                    0
-                  );
+      const newOnHand =
+        adjustmentType === "increase"
+          ? product.onHand + quantity
+          : Math.max(
+              product.onHand - quantity,
+              0
+            );
 
-            return {
-              ...product,
-              onHand:
-                newOnHand,
-            };
-          }
-        )
-    );
+      return {
+        ...product,
+        onHand: newOnHand,
+      };
+    }
+  );
+
+  localStorage.setItem(
+    "inventory-products",
+    JSON.stringify(updatedProducts)
+  );
+
+  return updatedProducts;
+});
 
     setShowAdjustment(false);
 
@@ -1181,6 +2122,32 @@ export default function InventoryPage() {
               </button>
 
               <button
+  type="button"
+  onClick={handleExportProducts}
+  className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-xs font-semibold text-green-700 hover:bg-green-100"
+>
+  Export Products
+</button>
+
+<label className="cursor-pointer rounded-lg border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-semibold text-purple-700 hover:bg-purple-100">
+  Import Products
+  <input
+    type="file"
+    accept=".csv,text/csv"
+    onChange={handleImportProducts}
+    className="hidden"
+  />
+</label>
+
+<button
+  type="button"
+  onClick={handleDownloadTemplate}
+  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+>
+  Download Template
+</button>
+
+              <button
                 type="button"
                 onClick={() =>
                   setShowAddProduct(true)
@@ -1470,13 +2437,49 @@ export default function InventoryPage() {
                   products
                 </p>
 
-              </div>
+                </div>
 
-              <div className="flex gap-2 text-[10px]">
+  {selectedProductIds.length > 0 && (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-semibold text-gray-600">
+        {selectedProductIds.length} selected
+      </span>
 
-                <span className="rounded-full bg-green-100 px-2.5 py-1 font-semibold text-green-700">
-                  Healthy
-                </span>
+      <button
+  type="button"
+  onClick={() => {
+    setMassEditField("category");
+    setMassEditValue("");
+    setShowMassEdit(true);
+  }}
+  className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100"
+>
+  Mass Edit
+</button>
+
+      <button
+  type="button"
+  onClick={handleMassDelete}
+  className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-semibold text-red-700 hover:bg-red-100"
+>
+  Mass Delete
+</button>
+
+      <button
+        type="button"
+        onClick={() => setSelectedProductIds([])}
+        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-50"
+      >
+        Clear
+      </button>
+    </div>
+  )}
+
+  <div className="flex gap-2 text-[10px]">
+
+    <span className="rounded-full bg-green-100 px-2.5 py-1 font-semibold text-green-700">
+      Healthy
+    </span>
 
                 <span className="rounded-full bg-orange-100 px-2.5 py-1 font-semibold text-orange-700">
                   Low Stock
@@ -1498,9 +2501,29 @@ export default function InventoryPage() {
 
                   <tr className="border-b border-gray-200 bg-gray-50 text-left">
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
-                      Product
-                    </th>
+  <th className="px-4 py-3">
+    <input
+      type="checkbox"
+      checked={
+        products.length > 0 &&
+        selectedProductIds.length === products.length
+      }
+      onChange={(e) => {
+        if (e.target.checked) {
+          setSelectedProductIds(
+            products.map((product) => product.id.toString())
+          );
+        } else {
+          setSelectedProductIds([]);
+        }
+      }}
+      className="h-4 w-4 rounded border-gray-300"
+    />
+  </th>
+
+  <th className="px-4 py-3 font-semibold text-gray-600">
+    Product
+  </th>
 
                     <th className="px-4 py-3 font-semibold text-gray-600">
                       Type
@@ -1531,12 +2554,32 @@ export default function InventoryPage() {
                     </th>
 
                     <th className="px-4 py-3 font-semibold text-gray-600">
-                      Unit Cost
-                    </th>
+  Cost Price
+</th>
+
+<th className="px-4 py-3 font-semibold text-gray-600">
+  Transport Cost
+</th>
+
+<th className="px-4 py-3 font-semibold text-gray-600">
+  MRP
+</th>
+
+<th className="px-4 py-3 font-semibold text-gray-600">
+  Discount
+</th>
+
+<th className="px-4 py-3 font-semibold text-gray-600">
+  Selling Price
+</th>
 
                     <th className="px-4 py-3 font-semibold text-gray-600">
-                      Actions
-                    </th>
+  Supplier
+</th>
+
+<th className="px-4 py-3 font-semibold text-gray-600">
+  Actions
+</th>
 
                   </tr>
 
@@ -1553,16 +2596,40 @@ export default function InventoryPage() {
                         );
 
                       return (
-                        <tr
-                          key={
-                            product.id
-                          }
-                          className="border-b border-gray-100 transition hover:bg-gray-50"
-                        >
+  <tr
+    key={product.id}
+    className="border-b border-gray-100 transition hover:bg-gray-50"
+  >
 
-                          {/* PRODUCT */}
+    {/* SELECT */}
 
-                          <td className="px-4 py-3">
+    <td className="px-4 py-3">
+      <input
+        type="checkbox"
+        checked={selectedProductIds.includes(
+          product.id.toString()
+        )}
+        onChange={(e) => {
+          if (e.target.checked) {
+            setSelectedProductIds((current) => [
+              ...current,
+              product.id.toString(),
+            ]);
+          } else {
+            setSelectedProductIds((current) =>
+              current.filter(
+                (id) => id !== product.id.toString()
+              )
+            );
+          }
+        }}
+        className="h-4 w-4 rounded border-gray-300"
+      />
+    </td>
+
+    {/* PRODUCT */}
+
+    <td className="px-4 py-3">
 
                             <p className="font-semibold text-[#12213a]">
                               {
@@ -1655,15 +2722,65 @@ export default function InventoryPage() {
 
                           </td>
 
-                          {/* UNIT COST */}
+                          {/* COST PRICE */}
 
-                          <td className="px-4 py-3 font-medium text-gray-700">
-                            {formatCurrency(
-                              product.unitCost
-                            )}
-                          </td>
+<td className="px-4 py-3 font-medium text-gray-700">
+  {formatCurrency(
+    product.costPrice ?? product.unitCost
+  )}
+</td>
 
-                          {/* ACTIONS */}
+{/* TRANSPORT COST */}
+
+<td className="px-4 py-3 font-medium text-gray-700">
+  {formatCurrency(product.transportCost ?? 0)}
+</td>
+
+{/* MRP */}
+
+<td className="px-4 py-3 font-medium text-gray-700">
+  {formatCurrency(product.mrp ?? 0)}
+</td>
+
+{/* DISCOUNT */}
+
+<td className="px-4 py-3 text-gray-600">
+  {product.discountValue != null
+    ? product.discountType === "Percentage"
+      ? `${product.discountValue}%`
+      : formatCurrency(product.discountValue)
+    : "—"}
+</td>
+
+{/* SELLING PRICE */}
+
+<td className="px-4 py-3 font-semibold text-green-700">
+  {formatCurrency(
+    product.sellingPrice ?? product.mrp ?? product.unitCost
+  )}
+</td>
+
+{/* SUPPLIER */}
+
+<td className="px-4 py-3">
+  <div className="font-medium text-gray-700">
+    {product.supplierName || "—"}
+  </div>
+
+  {product.supplierContact && (
+    <div className="mt-0.5 text-[10px] text-gray-400">
+      {product.supplierContact}
+    </div>
+  )}
+
+  {product.supplierEmail && (
+    <div className="mt-0.5 text-[10px] text-gray-400">
+      {product.supplierEmail}
+    </div>
+  )}
+</td>
+
+{/* ACTIONS */}
 
                           <td className="px-4 py-3">
 
@@ -1743,7 +2860,7 @@ export default function InventoryPage() {
                     <tr>
 
                       <td
-                        colSpan={10}
+                        colSpan={13}
                         className="px-4 py-12 text-center"
                       >
 
@@ -1772,6 +2889,135 @@ export default function InventoryPage() {
         </div>
 
       </main>
+
+      {/* =================================================
+    MASS EDIT MODAL
+================================================= */}
+{showMassEdit && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+      <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+        <div>
+          <h2 className="text-sm font-semibold text-[#12213a]">
+            Mass Edit Products
+          </h2>
+          <p className="mt-1 text-[10px] text-gray-400">
+            Updating {selectedProductIds.length} selected product(s)
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowMassEdit(false)}
+          className="text-lg text-gray-400 hover:text-gray-700"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="space-y-4 p-5">
+        <div>
+          <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+            Field to update
+          </label>
+
+          <select
+            value={massEditField}
+            onChange={(e) => {
+              setMassEditField(
+                e.target.value as typeof massEditField
+              );
+              setMassEditValue("");
+            }}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+          >
+            <option value="category">Category</option>
+            <option value="warehouse">Warehouse</option>
+            <option value="reorderPoint">Reorder Point</option>
+            <option value="costPrice">Cost Price</option>
+            <option value="mrp">MRP</option>
+            <option value="discountType">Discount Type</option>
+            <option value="discountValue">Discount Value</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+            New value
+          </label>
+
+          {massEditField === "category" ? (
+            <select
+              value={massEditValue}
+              onChange={(e) => setMassEditValue(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+            >
+              <option value="">Select category</option>
+              {categories
+                .filter((category) => category !== "All")
+                .map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+            </select>
+          ) : massEditField === "warehouse" ? (
+            <select
+              value={massEditValue}
+              onChange={(e) => setMassEditValue(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+            >
+              <option value="">Select warehouse</option>
+              {warehouses.map((warehouse) => (
+                <option key={warehouse} value={warehouse}>
+                  {warehouse}
+                </option>
+              ))}
+            </select>
+          ) : massEditField === "discountType" ? (
+            <select
+              value={massEditValue}
+              onChange={(e) => setMassEditValue(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+            >
+              <option value="">Select discount type</option>
+              <option value="Percentage">Percentage</option>
+              <option value="Fixed">Fixed Amount</option>
+            </select>
+          ) : (
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={massEditValue}
+              onChange={(e) => setMassEditValue(e.target.value)}
+              placeholder="Enter new value"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+            />
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setShowMassEdit(false)}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-[10px] font-semibold text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+
+                    <button
+            type="button"
+            onClick={handleMassEdit}
+            className="rounded-md bg-blue-600 px-4 py-2 text-[10px] font-semibold text-white hover:bg-blue-700"
+          >
+            Apply Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
             {/* =================================================
           ADD PRODUCT MODAL
@@ -2329,8 +3575,177 @@ export default function InventoryPage() {
 
               </div>
 
-              {/* BUTTONS */}
+              {/* COST PRICE */}
 
+              <div>
+
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Cost Price
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newProduct.costPrice}
+                  onChange={(e) =>
+                    setNewProduct((current) => ({
+                      ...current,
+                      costPrice: e.target.value,
+                    }))
+                  }
+                  placeholder="0.00"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                />
+
+              </div>
+
+              {/* MRP */}
+
+              <div>
+
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  MRP
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newProduct.mrp}
+                  onChange={(e) =>
+                    setNewProduct((current) => ({
+                      ...current,
+                      mrp: e.target.value,
+                    }))
+                  }
+                  placeholder="0.00"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                />
+
+              </div>
+
+              {/* DISCOUNT TYPE */}
+
+              <div>
+
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Discount Type
+                </label>
+
+                <select
+                  value={newProduct.discountType}
+                  onChange={(e) =>
+                    setNewProduct((current) => ({
+                      ...current,
+                      discountType:
+                        e.target.value as
+                          | "Percentage"
+                          | "Fixed",
+                    }))
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                >
+                  <option value="Percentage">
+                    Percentage
+                  </option>
+
+                  <option value="Fixed">
+                    Fixed Amount
+                  </option>
+                </select>
+
+              </div>
+
+              {/* DISCOUNT VALUE */}
+
+              <div>
+
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Discount Value
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newProduct.discountValue}
+                  onChange={(e) =>
+                    setNewProduct((current) => ({
+                      ...current,
+                      discountValue: e.target.value,
+                    }))
+                  }
+                  placeholder="0.00"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                />
+
+                            </div>
+
+              {/* SUPPLIER DETAILS */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <h3 className="mb-3 text-sm font-semibold text-[#12213a]">
+                  Supplier Details
+                </h3>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Supplier Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newProduct.supplierName ?? ""}
+                      onChange={(e) =>
+                        setNewProduct((current) => ({
+                          ...current,
+                          supplierName: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter supplier name"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Supplier Contact
+                    </label>
+                    <input
+                      type="tel"
+                      value={newProduct.supplierContact ?? ""}
+                      onChange={(e) =>
+                        setNewProduct((current) => ({
+                          ...current,
+                          supplierContact: e.target.value,
+                        }))
+                      }
+                      placeholder="Phone number"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Supplier Email
+                    </label>
+                    <input
+                      type="email"
+                      value={newProduct.supplierEmail ?? ""}
+                      onChange={(e) =>
+                        setNewProduct((current) => ({
+                          ...current,
+                          supplierEmail: e.target.value,
+                        }))
+                      }
+                      placeholder="supplier@example.com"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* BUTTONS */}
               <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
 
                 <button
@@ -2367,7 +3782,7 @@ export default function InventoryPage() {
         editingProduct && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
 
-            <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
 
               {/* HEADER */}
 
@@ -2671,429 +4086,268 @@ export default function InventoryPage() {
 
                 </div>
 
-                {/* VARIABLE PRODUCT INFO */}
-
-                {editingProduct.productType ===
-                  "Variable" && (
-                  <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-
-                    <p className="text-xs font-semibold text-blue-800">
-                      Variable Product
-                    </p>
-
-                    <p className="mt-1 text-[11px] text-blue-700">
-                      This product contains individual variants.
-                      Variant-level editing can be connected
-                      to the backend variant API later.
-                    </p>
-
-                    {editingProduct.variants &&
-                      editingProduct.variants.length >
-                        0 && (
-                        <div className="mt-3 space-y-2">
-
-                          {editingProduct.variants.map(
-                            (
-                              variant,
-                              index
-                            ) => (
-                              <div
-                                key={
-                                  variant.id
-                                }
-                                className="rounded-md border border-blue-100 bg-white p-2"
-                              >
-
-                                <div className="flex items-center justify-between">
-
-                                  <span className="text-[11px] font-semibold text-gray-700">
-                                    Variant{" "}
-                                    {index +
-                                      1}
-                                  </span>
-
-                                  <span className="font-mono text-[10px] text-gray-500">
-                                    {
-                                      variant.sku
-                                    }
-                                  </span>
-
-                                </div>
-
-                                <p className="mt-1 text-[10px] text-gray-500">
-
-                                  {variant.size
-                                    ? `Size: ${variant.size}`
-                                    : ""}
-
-                                  {variant.size &&
-                                  variant.color
-                                    ? " · "
-                                    : ""}
-
-                                  {variant.color
-                                    ? `Color: ${variant.color}`
-                                    : ""}
-
-                                  {" · Stock: "}
-                                  {
-                                    variant.onHand
-                                  }
-
-                                </p>
-
-                              </div>
-                            )
-                          )}
-
-                        </div>
-                      )}
-
-                  </div>
-                )}
-
-                {/* BUTTONS */}
-
-                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditProduct(false);
-                      setEditingProduct(null);
-                    }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
-                  >
-                    Save Changes
-                  </button>
-
-                </div>
-
-              </form>
-
-            </div>
-
-          </div>
-        )}
-
-              {/* =================================================
-          EDIT PRODUCT MODAL
-      ================================================= */}
-
-      {showEditProduct &&
-        editingProduct && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-            <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-
-              {/* HEADER */}
-
-              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-
-                <div>
-
-                  <h2 className="text-lg font-bold text-[#12213a]">
-                    Edit Product
-                  </h2>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    Update product and inventory details.
-                  </p>
-
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEditProduct(false);
-                    setEditingProduct(null);
-                  }}
-                  className="text-xl text-gray-400 hover:text-gray-700"
-                >
-                  ×
-                </button>
-
-              </div>
-
-              {/* FORM */}
-
-              <form
-                onSubmit={handleEditProduct}
-                className="space-y-4 p-5"
-              >
-
-                {/* PRODUCT NAME */}
-
-                <div>
-
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
-                    Product Name
-                  </label>
-
-                  <input
-                    type="text"
-                    value={
-                      editingProduct.name
-                    }
-                    onChange={(e) =>
-                      setEditingProduct(
-                        (current) =>
-                          current
-                            ? {
-                                ...current,
-                                name:
-                                  e.target.value,
-                              }
-                            : current
-                      )
-                    }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                    required
-                  />
-
-                </div>
-
-                {/* SKU */}
-
-                <div>
-
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
-                    SKU
-                  </label>
-
-                  <input
-                    type="text"
-                    value={
-                      editingProduct.sku
-                    }
-                    onChange={(e) =>
-                      setEditingProduct(
-                        (current) =>
-                          current
-                            ? {
-                                ...current,
-                                sku:
-                                  e.target.value,
-                              }
-                            : current
-                      )
-                    }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
-                    required
-                  />
-
-                </div>
-
-                {/* CATEGORY / WAREHOUSE */}
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-
-                  {/* CATEGORY */}
-
-                  <div>
-
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Category
-                    </label>
-
-                    <select
-                      value={
-                        editingProduct.category
-                      }
-                      onChange={(e) =>
-                        setEditingProduct(
-                          (current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  category:
-                                    e.target.value,
-                                }
-                              : current
-                        )
-                      }
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                    >
-
-                      {categories
-                        .filter(
-                          (item) =>
-                            item !== "All"
-                        )
-                        .map(
-                          (item) => (
-                            <option
-                              key={item}
-                              value={item}
-                            >
-                              {item}
-                            </option>
-                          )
-                        )}
-
-                    </select>
-
-                  </div>
-
-                  {/* WAREHOUSE */}
-
-                  <div>
-
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Warehouse
-                    </label>
-
-                    <select
-                      value={
-                        editingProduct.warehouse
-                      }
-                      onChange={(e) =>
-                        setEditingProduct(
-                          (current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  warehouse:
-                                    e.target.value,
-                                }
-                              : current
-                        )
-                      }
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                    >
-
-                      {warehouses.map(
-                        (item) => (
-                          <option
-                            key={item}
-                            value={item}
-                          >
-                            {item}
-                          </option>
-                        )
-                      )}
-
-                    </select>
-
-                  </div>
-
-                </div>
-
-                {/* STOCK / REORDER POINT */}
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-
-                  {/* CURRENT STOCK */}
-
-                  <div>
-
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Current Stock
-                    </label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      value={
-                        editingProduct.onHand
-                      }
-                      onChange={(e) =>
-                        setEditingProduct(
-                          (current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  onHand:
-                                    Number(
-                                      e.target.value
-                                    ),
-                                }
-                              : current
-                        )
-                      }
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      required
-                    />
-
-                  </div>
-
-                  {/* REORDER POINT */}
-
-                  <div>
-
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Reorder Point
-                    </label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      value={
-                        editingProduct.reorderPoint
-                      }
-                      onChange={(e) =>
-                        setEditingProduct(
-                          (current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  reorderPoint:
-                                    Number(
-                                      e.target.value
-                                    ),
-                                }
-                              : current
-                        )
-                      }
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                      required
-                    />
-
-                  </div>
-
-                </div>
-
-                {/* UNIT COST */}
-
-                <div>
-
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
-                    Unit Cost
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={
-                      editingProduct.unitCost
-                    }
-                    onChange={(e) =>
-                      setEditingProduct(
-                        (current) =>
-                          current
-                            ? {
-                                ...current,
-                                unitCost:
-                                  Number(
-                                    e.target.value
-                                  ),
-                              }
-                            : current
-                      )
-                    }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                    required
-                  />
-
-                </div>
+{/* COST PRICE */}
+
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    Cost Price
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={editingProduct.costPrice ?? ""}
+    onChange={(e) =>
+      setEditingProduct(
+        (current) =>
+          current
+            ? {
+                ...current,
+                costPrice:
+                  e.target.value === ""
+                    ? undefined
+                    : Number(e.target.value),
+              }
+            : current
+      )
+    }
+    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    placeholder="Enter cost price"
+  />
+</div>
+
+{/* TRANSPORT COST */}
+
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    Transport Cost
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={editingProduct.transportCost ?? ""}
+    onChange={(e) =>
+      setEditingProduct(
+        (current) =>
+          current
+            ? {
+                ...current,
+                transportCost:
+                  e.target.value === ""
+                    ? undefined
+                    : Number(e.target.value),
+              }
+            : current
+      )
+    }
+    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    placeholder="Enter transport cost"
+  />
+</div>
+
+{/* MRP */}
+
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    MRP
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={editingProduct.mrp ?? ""}
+    onChange={(e) =>
+      setEditingProduct(
+        (current) =>
+          current
+            ? {
+                ...current,
+                mrp:
+                  e.target.value === ""
+                    ? undefined
+                    : Number(e.target.value),
+              }
+            : current
+      )
+    }
+    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    placeholder="Enter MRP"
+  />
+</div>
+
+{/* DISCOUNT TYPE */}
+
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    Discount Type
+  </label>
+
+  <select
+    value={
+      editingProduct.discountType ??
+      "Percentage"
+    }
+    onChange={(e) =>
+      setEditingProduct(
+        (current) =>
+          current
+            ? {
+                ...current,
+                discountType:
+                  e.target.value as
+                    | "Percentage"
+                    | "Fixed",
+              }
+            : current
+      )
+    }
+    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+  >
+    <option value="Percentage">
+      Percentage
+    </option>
+    <option value="Fixed">
+      Fixed Amount
+    </option>
+  </select>
+</div>
+
+{/* DISCOUNT VALUE */}
+
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    Discount Value
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={editingProduct.discountValue ?? ""}
+    onChange={(e) =>
+      setEditingProduct(
+        (current) =>
+          current
+            ? {
+                ...current,
+                discountValue:
+                  e.target.value === ""
+                    ? undefined
+                    : Number(e.target.value),
+              }
+            : current
+      )
+    }
+        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+/>
+</div>
+
+{/* GST RATE */}
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    GST Rate (%)
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    max="100"
+    step="0.01"
+    value={editingProduct.gstRate ?? 18}
+    onChange={(e) =>
+      setEditingProduct(
+        (current) =>
+          current
+            ? {
+                ...current,
+                gstRate:
+                  e.target.value === ""
+                    ? 0
+                    : Number(e.target.value),
+              }
+            : current
+      )
+    }
+    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    placeholder="Enter GST rate"
+  />
+</div>
+
+{/* SUPPLIER NAME */}
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    Supplier Name
+  </label>
+
+  <input
+    type="text"
+    value={editingProduct.supplierName ?? ""}
+    onChange={(e) =>
+      setEditingProduct((current) =>
+        current
+          ? {
+              ...current,
+              supplierName: e.target.value,
+            }
+          : current
+      )
+    }
+    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    placeholder="Enter supplier name"
+  />
+</div>
+
+{/* SUPPLIER CONTACT */}
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    Supplier Contact
+  </label>
+
+  <input
+    type="text"
+    value={editingProduct.supplierContact ?? ""}
+    onChange={(e) =>
+      setEditingProduct((current) =>
+        current
+          ? {
+              ...current,
+              supplierContact: e.target.value,
+            }
+          : current
+      )
+    }
+    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    placeholder="Enter supplier contact"
+  />
+</div>
+
+{/* SUPPLIER EMAIL */}
+<div>
+  <label className="mb-1 block text-xs font-semibold text-gray-700">
+    Supplier Email
+  </label>
+
+  <input
+    type="email"
+    value={editingProduct.supplierEmail ?? ""}
+    onChange={(e) =>
+      setEditingProduct((current) =>
+        current
+          ? {
+              ...current,
+              supplierEmail: e.target.value,
+            }
+          : current
+      )
+    }
+    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    placeholder="Enter supplier email"
+  />
+</div>
 
                 {/* VARIABLE PRODUCT INFO */}
 

@@ -8,6 +8,7 @@ type UserRole = "Manager" | "Accountant" | "Cashier";
 
 type SalesData = {
   month: string;
+  date: string;
   sales: number;
   revenue: number;
   orders: number;
@@ -30,12 +31,54 @@ type LowStock = {
 };
 
 const salesData: SalesData[] = [
-  { month: "Mar", sales: 145, revenue: 1850000, orders: 120, units: 820 },
-  { month: "Apr", sales: 168, revenue: 2140000, orders: 142, units: 910 },
-  { month: "May", sales: 182, revenue: 2390000, orders: 156, units: 980 },
-  { month: "Jun", sales: 205, revenue: 2650000, orders: 174, units: 1120 },
-  { month: "Jul", sales: 228, revenue: 2980000, orders: 192, units: 1260 },
-  { month: "Aug", sales: 248, revenue: 3240000, orders: 205, units: 1380 },
+  {
+    month: "Mar",
+    date: "2026-03-01",
+    sales: 145,
+    revenue: 1850000,
+    orders: 120,
+    units: 820,
+  },
+  {
+    month: "Apr",
+    date: "2026-04-01",
+    sales: 168,
+    revenue: 2140000,
+    orders: 142,
+    units: 910,
+  },
+  {
+    month: "May",
+    date: "2026-05-01",
+    sales: 182,
+    revenue: 2390000,
+    orders: 156,
+    units: 980,
+  },
+  {
+    month: "Jun",
+    date: "2026-06-01",
+    sales: 205,
+    revenue: 2650000,
+    orders: 174,
+    units: 1120,
+  },
+  {
+    month: "Jul",
+    date: "2026-07-01",
+    sales: 228,
+    revenue: 2980000,
+    orders: 192,
+    units: 1260,
+  },
+  {
+    month: "Aug",
+    date: "2026-08-01",
+    sales: 248,
+    revenue: 3240000,
+    orders: 205,
+    units: 1380,
+  },
 ];
 
 const topProducts: Product[] = [
@@ -120,51 +163,74 @@ export default function ReportsPage() {
   const [dateRange, setDateRange] =
     useState("Last 6 Months");
 
+    const [customStartDate, setCustomStartDate] =
+  useState("");
+
+const [customEndDate, setCustomEndDate] =
+  useState("");
+
   const [role, setRole] =
     useState<UserRole>("Manager");
 
   const [message, setMessage] =
     useState("");
 
-  const totalSales = useMemo(
-    () =>
-      salesData.reduce(
-        (total, item) => total + item.sales,
-        0
-      ),
-    []
-  );
+  const filteredSalesData = useMemo(() => {
+  if (
+    dateRange !== "Custom Range" ||
+    !customStartDate ||
+    !customEndDate
+  ) {
+    return salesData;
+  }
 
-  const totalRevenue = useMemo(
-    () =>
-      salesData.reduce(
-        (total, item) => total + item.revenue,
-        0
-      ),
-    []
-  );
+  return salesData.filter((item) => {
+    return (
+      item.date >= customStartDate &&
+      item.date <= customEndDate
+    );
+  });
+}, [dateRange, customStartDate, customEndDate]);
 
-  const totalOrders = useMemo(
-    () =>
-      salesData.reduce(
-        (total, item) => total + item.orders,
-        0
-      ),
-    []
-  );
+const totalSales = useMemo(
+  () =>
+    filteredSalesData.reduce(
+      (total, item) => total + item.sales,
+      0
+    ),
+  [filteredSalesData]
+);
 
-  const totalUnits = useMemo(
-    () =>
-      salesData.reduce(
-        (total, item) => total + item.units,
-        0
-      ),
-    []
-  );
+const totalRevenue = useMemo(
+  () =>
+    filteredSalesData.reduce(
+      (total, item) => total + item.revenue,
+      0
+    ),
+  [filteredSalesData]
+);
+
+const totalOrders = useMemo(
+  () =>
+    filteredSalesData.reduce(
+      (total, item) => total + item.orders,
+      0
+    ),
+  [filteredSalesData]
+);
+
+const totalUnits = useMemo(
+  () =>
+    filteredSalesData.reduce(
+      (total, item) => total + item.units,
+      0
+    ),
+  [filteredSalesData]
+);
 
   const maxSales = Math.max(
-    ...salesData.map((item) => item.sales)
-  );
+  ...filteredSalesData.map((item) => item.sales)
+);
 
   const paidValue = Math.round(totalRevenue * 0.76);
   const outstanding = Math.round(totalRevenue * 0.24);
@@ -188,7 +254,7 @@ export default function ReportsPage() {
   const handleExport = () => {
     const csv = [
       ["Month", "Sales", "Revenue", "Orders", "Units"],
-      ...salesData.map((item) => [
+      ...filteredSalesData.map((item) => [
         item.month,
         item.sales,
         item.revenue,
@@ -365,24 +431,61 @@ export default function ReportsPage() {
                   className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs"
                 >
                   <option>Last 7 Days</option>
-                  <option>Last 30 Days</option>
-                  <option>Last 3 Months</option>
-                  <option>Last 6 Months</option>
-                  <option>This Year</option>
+<option>Last 30 Days</option>
+<option>Last 3 Months</option>
+<option>Last 6 Months</option>
+<option>This Year</option>
+<option>Custom Range</option>
                 </select>
               </div>
 
               <div className="flex items-end">
-                <div className="w-full rounded-md bg-slate-50 px-3 py-2.5">
-                  <p className="text-[9px] uppercase text-slate-400">
-                    Current Report
-                  </p>
+  {dateRange === "Custom Range" ? (
+    <div className="grid w-full grid-cols-2 gap-2">
+      <div>
+        <label className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+          Start Date
+        </label>
 
-                  <p className="mt-1 text-xs font-semibold">
-                    {reportType}
-                  </p>
-                </div>
-              </div>
+        <input
+          type="date"
+          value={customStartDate}
+          onChange={(e) =>
+            setCustomStartDate(e.target.value)
+          }
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs"
+          aria-label="Custom report start date"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+          End Date
+        </label>
+
+        <input
+          type="date"
+          value={customEndDate}
+          onChange={(e) =>
+            setCustomEndDate(e.target.value)
+          }
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs"
+          aria-label="Custom report end date"
+        />
+      </div>
+    </div>
+  ) : (
+    <div className="w-full rounded-md bg-slate-50 px-3 py-2.5">
+      <p className="text-[9px] uppercase text-slate-400">
+        Current Report
+      </p>
+
+      <p className="mt-1 text-xs font-semibold">
+        {reportType}
+      </p>
+    </div>
+  )}
+</div>
             </div>
           </section>
 
@@ -448,10 +551,10 @@ export default function ReportsPage() {
               </section>
 
               <SalesTrend
-                salesData={salesData}
-                maxSales={maxSales}
-                dateRange={dateRange}
-              />
+  salesData={filteredSalesData}
+  maxSales={maxSales}
+  dateRange={dateRange}
+/>
 
               <section className="mb-5 grid gap-5 lg:grid-cols-2">
                 <TopProducts />
@@ -518,7 +621,7 @@ export default function ReportsPage() {
               />
 
               <SalesTrend
-                salesData={salesData}
+                salesData={filteredSalesData}
                 maxSales={maxSales}
                 dateRange={dateRange}
               />
@@ -636,7 +739,7 @@ export default function ReportsPage() {
                 </thead>
 
                 <tbody>
-                  {salesData.map((item) => (
+                  {filteredSalesData.map((item) => (
                     <tr
                       key={item.month}
                       className="border-b border-slate-100 hover:bg-slate-50"
@@ -1015,7 +1118,7 @@ function SalesTrend({
 
       <div className="p-5">
         <div className="flex h-64 items-end gap-3 sm:gap-5">
-          {salesData.map((item) => {
+          {salesData.map((item, index) => {
             const height =
               (item.sales / maxSales) * 100;
 
@@ -1030,11 +1133,14 @@ function SalesTrend({
 
                 <div className="flex h-44 w-full items-end justify-center">
                   <div
-                    className="w-full max-w-12 rounded-t-md bg-blue-600 transition-all hover:bg-blue-700"
-                    style={{
-                      height: `${height}%`,
-                    }}
-                  />
+  className="w-full max-w-12 rounded-t-md bg-blue-600 transition-all hover:bg-blue-700"
+ style={{
+  height: `${height}%`,
+  transformOrigin: "bottom",
+  animation: "chartBarGrow 700ms ease-out both",
+  animationDelay: `${index * 100}ms`,
+}}
+/>
                 </div>
 
                 <span className="text-[9px] font-medium text-slate-400">
@@ -1098,16 +1204,16 @@ function TopProducts() {
             </div>
 
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-blue-600"
-                style={{
-                  width: `${Math.min(
-                    (product.units / 1240) * 100,
-                    100
-                  )}%`,
-                }}
-              />
-            </div>
+  <div
+    className="h-full rounded-full bg-blue-600 transition-all duration-700 ease-out"
+    style={{
+      width: `${Math.min(
+        (product.units / 1240) * 100,
+        100
+      )}%`,
+    }}
+  />
+</div>
           </div>
         ))}
       </div>

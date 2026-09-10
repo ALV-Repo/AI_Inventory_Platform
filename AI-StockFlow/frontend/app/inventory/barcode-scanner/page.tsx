@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 type Product = {
   id: number;
@@ -175,6 +179,80 @@ function formatCurrency(value: number) {
 }
 
 export default function BarcodeScannerPage() {
+
+    useEffect(() => {
+    try {
+      const storedProducts =
+        localStorage.getItem("inventory-products");
+
+      if (!storedProducts) {
+        return;
+      }
+
+      const inventoryProducts =
+        JSON.parse(storedProducts);
+
+      if (!Array.isArray(inventoryProducts)) {
+        return;
+      }
+
+      const scannerProducts: Product[] =
+        inventoryProducts.map((item) => ({
+          id: Number(item.id ?? 0),
+          name: item.name ?? "",
+          sku: item.sku ?? "",
+          category:
+            item.category ?? "Uncategorized",
+          warehouse:
+            item.warehouse ?? "Main Store",
+          stock: Number(
+            item.onHand ??
+              item.on_hand ??
+              item.quantity ??
+              0
+          ),
+          price: Number(
+            item.sellingPrice ??
+              item.selling_price ??
+              item.sale_price ??
+              item.price ??
+              item.unitCost ??
+              item.unit_cost ??
+              0
+          ),
+          status:
+            Number(
+              item.onHand ??
+                item.on_hand ??
+                item.quantity ??
+                0
+            ) === 0
+              ? "Out of Stock"
+              : Number(
+                    item.onHand ??
+                      item.on_hand ??
+                      item.quantity ??
+                      0
+                  ) <= 5
+                ? "Low Stock"
+                : "Healthy",
+        }));
+
+      // Keep the scanner product list in sync
+      // with the Inventory page.
+      products.splice(
+        0,
+        products.length,
+        ...scannerProducts
+      );
+
+      setSelectedProduct(null);
+    } catch {
+      // Keep the existing hardcoded products
+      // if localStorage cannot be read.
+    }
+  }, []);
+
   const [barcode, setBarcode] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(
     null
@@ -192,6 +270,26 @@ export default function BarcodeScannerPage() {
   const [message, setMessage] = useState("");
 
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+  try {
+    const storedHistory =
+      localStorage.getItem("barcode-scan-history");
+
+    if (!storedHistory) {
+      return;
+    }
+
+    const savedHistory: ScanRecord[] =
+      JSON.parse(storedHistory);
+
+    if (Array.isArray(savedHistory)) {
+      setScanHistory(savedHistory);
+    }
+  } catch {
+    // Keep the existing scan history if saved data is invalid.
+  }
+}, []);
 
   const handleScan = () => {
     const value = barcode.trim().toLowerCase();
@@ -224,36 +322,130 @@ export default function BarcodeScannerPage() {
   };
 
   const handleInventoryAction = () => {
-    if (!selectedProduct) {
-      setMessage("Please scan or select a product first.");
+  if (!selectedProduct) {
+    setMessage("Please scan or select a product first.");
+    return;
+  }
+
+  if (quantity <= 0) {
+    setMessage("Quantity must be greater than 0.");
+    return;
+  }
+
+  const storedProducts =
+    localStorage.getItem("inventory-products");
+
+  if (!storedProducts) {
+    setMessage(
+      "Inventory data is not available. Please open the Inventory page first."
+    );
+    return;
+  }
+
+  try {
+    const inventoryProducts =
+      JSON.parse(storedProducts);
+
+    if (!Array.isArray(inventoryProducts)) {
+      setMessage("Invalid inventory data.");
       return;
     }
 
-    if (quantity <= 0) {
-      setMessage("Quantity must be greater than 0.");
+    const inventoryProduct =
+      inventoryProducts.find(
+        (item) =>
+          String(item.id) ===
+            String(selectedProduct.id) ||
+          String(item.sku).toLowerCase() ===
+            selectedProduct.sku.toLowerCase()
+      );
+
+    if (!inventoryProduct) {
+      setMessage(
+        "Product was not found in the saved inventory."
+      );
       return;
     }
 
-    if (action === "Stock Out" && quantity > selectedProduct.stock) {
-      setMessage("Stock out quantity cannot exceed available stock.");
+    const currentStock = Number(
+      inventoryProduct.onHand ??
+        inventoryProduct.on_hand ??
+        inventoryProduct.quantity ??
+        selectedProduct.stock ??
+        0
+    );
+
+    if (
+      action === "Stock Out" &&
+      quantity > currentStock
+    ) {
+      setMessage(
+        "Stock out quantity cannot exceed available stock."
+      );
       return;
     }
 
     const updatedStock =
       action === "Stock In"
-        ? selectedProduct.stock + quantity
-        : selectedProduct.stock - quantity;
+        ? currentStock + quantity
+        : currentStock - quantity;
 
-    setSelectedProduct({
-      ...selectedProduct,
-      stock: updatedStock,
-      status:
-        updatedStock === 0
-          ? "Out of Stock"
-          : updatedStock <= 5
-          ? "Low Stock"
-          : "Healthy",
-    });
+    const updatedProducts =
+      inventoryProducts.map((item) => {
+        const isSelectedProduct =
+          String(item.id) ===
+            String(selectedProduct.id) ||
+          String(item.sku).toLowerCase() ===
+            selectedProduct.sku.toLowerCase();
+
+        if (!isSelectedProduct) {
+          return item;
+        }
+
+        const reserved = Number(
+          item.reserved ?? 0
+        );
+
+        return {
+          ...item,
+          onHand: updatedStock,
+          on_hand: updatedStock,
+          available: Math.max(
+            updatedStock - reserved,
+            0
+          ),
+        };
+      });
+
+    localStorage.setItem(
+      "inventory-products",
+      JSON.stringify(updatedProducts)
+    );
+
+    const updatedStatus: Product["status"] =
+  updatedStock === 0
+    ? "Out of Stock"
+    : updatedStock <= 5
+    ? "Low Stock"
+    : "Healthy";
+
+const updatedScannerProduct: Product = {
+  ...selectedProduct,
+  stock: updatedStock,
+  status: updatedStatus,
+};
+
+    setSelectedProduct(updatedScannerProduct);
+
+    products.splice(
+      0,
+      products.length,
+      ...products.map((product) =>
+        product.id === selectedProduct.id
+          ? updatedScannerProduct
+          : product
+      )
+    );
 
     const newRecord: ScanRecord = {
       id: Date.now(),
@@ -262,18 +454,40 @@ export default function BarcodeScannerPage() {
       warehouse: selectedProduct.warehouse,
       action,
       quantity,
-      date: "20 Aug 2026",
+      date: new Date().toLocaleDateString(
+        "en-GB",
+        {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }
+      ),
       user: "Admin User",
     };
 
-    setScanHistory((previous) => [newRecord, ...previous]);
+    const updatedHistory = [
+  newRecord,
+  ...scanHistory,
+];
+
+setScanHistory(updatedHistory);
+
+localStorage.setItem(
+  "barcode-scan-history",
+  JSON.stringify(updatedHistory)
+);
 
     setMessage(
       `${action} completed successfully for ${selectedProduct.name}.`
     );
 
     setQuantity(1);
-  };
+  } catch {
+    setMessage(
+      "Unable to update inventory. Please try again."
+    );
+  }
+};
 
   const filteredHistory = useMemo(() => {
     const value = search.trim().toLowerCase();

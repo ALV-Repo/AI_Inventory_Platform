@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 type Warehouse = {
   id: number;
@@ -65,6 +69,82 @@ export default function WarehousePage() {
   const [warehouses, setWarehouses] =
     useState<Warehouse[]>(initialWarehouses);
 
+    const [inventoryProducts, setInventoryProducts] =
+  useState<
+    Array<{
+      id: number;
+      name: string;
+      sku: string;
+      warehouse: string;
+      storageLocation: string;
+      onHand: number;
+      reserved: number;
+    }>
+  >([]);
+
+  useEffect(() => {
+  try {
+    const storedProducts =
+      localStorage.getItem("inventory-products");
+
+    if (!storedProducts) {
+      return;
+    }
+
+    const products = JSON.parse(storedProducts);
+
+    if (!Array.isArray(products)) {
+      return;
+    }
+
+    const mappedProducts = products.map((item) => ({
+      id: Number(item.id ?? 0),
+      name: item.name ?? item.product_name ?? "",
+      sku: item.sku ?? item.code ?? "",
+      warehouse:
+        item.warehouse ??
+        item.warehouse_name ??
+        "Main Store",
+        storageLocation:
+  item.storageLocation ??
+  item.storage_location ??
+  item.location ??
+  "Not assigned",
+      onHand: Number(
+        item.onHand ??
+          item.on_hand ??
+          item.quantity ??
+          0
+      ),
+      reserved: Number(item.reserved ?? 0),
+    }));
+
+    setInventoryProducts(mappedProducts);
+  } catch {
+    setInventoryProducts([]);
+  }
+}, []);
+
+useEffect(() => {
+  try {
+    const storedWarehouses =
+      localStorage.getItem("inventory-warehouses");
+
+    if (!storedWarehouses) {
+      return;
+    }
+
+    const savedWarehouses =
+      JSON.parse(storedWarehouses);
+
+    if (Array.isArray(savedWarehouses)) {
+      setWarehouses(savedWarehouses);
+    }
+  } catch {
+    // Keep initial warehouses if saved data is invalid.
+  }
+}, []);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<"All" | "Active" | "Inactive">("All");
@@ -98,6 +178,35 @@ export default function WarehousePage() {
     });
   }, [warehouses, search, statusFilter]);
 
+  const warehouseStock = useMemo(() => {
+  return warehouses.map((warehouse) => {
+    const products = inventoryProducts.filter(
+      (product) =>
+        product.warehouse.trim().toLowerCase() ===
+        warehouse.name.trim().toLowerCase()
+    );
+
+    const onHand = products.reduce(
+      (total, product) => total + product.onHand,
+      0
+    );
+
+    const reserved = products.reduce(
+      (total, product) => total + product.reserved,
+      0
+    );
+
+    return {
+      warehouseId: warehouse.id,
+      warehouseName: warehouse.name,
+      productCount: products.length,
+      onHand,
+      reserved,
+      available: Math.max(onHand - reserved, 0),
+    };
+  });
+}, [warehouses, inventoryProducts]);
+
   const activeCount = warehouses.filter(
     (warehouse) => warehouse.status === "Active"
   ).length;
@@ -123,11 +232,33 @@ export default function WarehousePage() {
     }
 
     if (capacity <= 0) {
-      alert("Capacity must be greater than 0.");
-      return;
-    }
+  alert("Capacity must be greater than 0.");
+  return;
+}
 
-    const newWarehouse: Warehouse = {
+const duplicateCode = warehouses.some(
+  (warehouse) =>
+    warehouse.code.trim().toLowerCase() ===
+    code.trim().toLowerCase()
+);
+
+if (duplicateCode) {
+  alert("Warehouse code already exists.");
+  return;
+}
+
+const duplicateName = warehouses.some(
+  (warehouse) =>
+    warehouse.name.trim().toLowerCase() ===
+    name.trim().toLowerCase()
+);
+
+if (duplicateName) {
+  alert("Warehouse name already exists.");
+  return;
+}
+
+const newWarehouse: Warehouse = {
       id: Date.now(),
       name: name.trim(),
       code: code.trim().toUpperCase(),
@@ -139,10 +270,19 @@ export default function WarehousePage() {
       status: "Active",
     };
 
-    setWarehouses((previous) => [
-      newWarehouse,
-      ...previous,
-    ]);
+    setWarehouses((previous) => {
+  const updatedWarehouses = [
+    newWarehouse,
+    ...previous,
+  ];
+
+  localStorage.setItem(
+    "inventory-warehouses",
+    JSON.stringify(updatedWarehouses)
+  );
+
+  return updatedWarehouses;
+});
 
     setName("");
     setCode("");
@@ -154,33 +294,75 @@ export default function WarehousePage() {
     alert("Warehouse created successfully.");
   };
 
-  const toggleWarehouseStatus = (id: number) => {
-    setWarehouses((previous) =>
-      previous.map((warehouse) =>
-        warehouse.id === id
-          ? {
-              ...warehouse,
-              status:
-                warehouse.status === "Active"
-                  ? "Inactive"
-                  : "Active",
-            }
-          : warehouse
-      )
-    );
-
-    setSelectedWarehouse((previous) =>
-      previous && previous.id === id
+const toggleWarehouseStatus = (id: number) => {
+  setWarehouses((previous) => {
+    const updatedWarehouses: Warehouse[] = previous.map((warehouse) =>
+      warehouse.id === id
         ? {
-            ...previous,
+            ...warehouse,
             status:
-              previous.status === "Active"
+              warehouse.status === "Active"
                 ? "Inactive"
                 : "Active",
           }
-        : previous
+        : warehouse
     );
-  };
+
+    localStorage.setItem(
+      "inventory-warehouses",
+      JSON.stringify(updatedWarehouses)
+    );
+
+    return updatedWarehouses;
+  });
+
+  setSelectedWarehouse((previous) =>
+    previous && previous.id === id
+      ? {
+          ...previous,
+          status:
+            previous.status === "Active"
+              ? "Inactive"
+              : "Active",
+        }
+      : previous
+  );
+};
+
+const deleteWarehouse = (id: number) => {
+  const warehouse = warehouses.find(
+    (item) => item.id === id
+  );
+
+  if (!warehouse) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete "${warehouse.name}"?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  setWarehouses((previous) => {
+    const updatedWarehouses = previous.filter(
+      (item) => item.id !== id
+    );
+
+    localStorage.setItem(
+      "inventory-warehouses",
+      JSON.stringify(updatedWarehouses)
+    );
+
+    return updatedWarehouses;
+  });
+
+  setSelectedWarehouse(null);
+
+  alert("Warehouse deleted successfully.");
+};
 
   const capacityPercentage = (warehouse: Warehouse) => {
     if (warehouse.capacity === 0) return 0;
@@ -371,6 +553,18 @@ export default function WarehousePage() {
                   </th>
 
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+  On Hand
+</th>
+
+<th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+  Reserved
+</th>
+
+<th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+  Available
+</th>
+
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Status
                   </th>
 
@@ -448,8 +642,28 @@ export default function WarehousePage() {
                       </td>
 
                       <td className="px-6 py-5 text-sm font-semibold">
-                        {warehouse.products}
-                      </td>
+  {warehouseStock.find(
+    (stock) => stock.warehouseId === warehouse.id
+  )?.productCount ?? 0}
+</td>
+
+                      <td className="px-6 py-5 text-sm font-semibold">
+  {warehouseStock.find(
+    (stock) => stock.warehouseId === warehouse.id
+  )?.onHand ?? 0}
+</td>
+
+<td className="px-6 py-5 text-sm font-semibold">
+  {warehouseStock.find(
+    (stock) => stock.warehouseId === warehouse.id
+  )?.reserved ?? 0}
+</td>
+
+<td className="px-6 py-5 text-sm font-semibold">
+  {warehouseStock.find(
+    (stock) => stock.warehouseId === warehouse.id
+  )?.available ?? 0}
+</td>
 
                       <td className="px-6 py-5">
 
@@ -465,19 +679,27 @@ export default function WarehousePage() {
 
                       </td>
 
-                      <td className="px-6 py-5">
+                     <td className="px-6 py-5">
+  <div className="flex items-center gap-2">
+    <button
+      type="button"
+      onClick={() =>
+        setSelectedWarehouse(warehouse)
+      }
+      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+    >
+      Manage
+    </button>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedWarehouse(warehouse)
-                          }
-                          className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Manage
-                        </button>
-
-                      </td>
+    <button
+      type="button"
+      onClick={() => deleteWarehouse(warehouse.id)}
+      className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+    >
+      Delete
+    </button>
+  </div>
+</td>
 
                     </tr>
                   );
@@ -486,7 +708,7 @@ export default function WarehousePage() {
                 {filteredWarehouses.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={10}
                       className="px-6 py-12 text-center"
                     >
                       <p className="font-semibold text-slate-700">
@@ -702,14 +924,17 @@ export default function WarehousePage() {
                   </div>
 
                   <div className="rounded-lg bg-slate-50 p-4">
-                    <p className="text-xs text-slate-400">
-                      Products
-                    </p>
+  <p className="text-xs text-slate-400">
+    Products
+  </p>
 
-                    <p className="mt-1 text-2xl font-bold">
-                      {selectedWarehouse.products}
-                    </p>
-                  </div>
+  <p className="mt-1 text-2xl font-bold">
+    {warehouseStock.find(
+      (stock) =>
+        stock.warehouseId === selectedWarehouse.id
+    )?.productCount ?? 0}
+  </p>
+</div>
 
                   <div className="rounded-lg bg-slate-50 p-4">
                     <p className="text-xs text-slate-400">
@@ -724,7 +949,108 @@ export default function WarehousePage() {
                     </p>
                   </div>
 
+                  <div className="rounded-lg bg-slate-50 p-4">
+  <p className="text-xs text-slate-400">
+    On Hand
+  </p>
+
+  <p className="mt-1 text-2xl font-bold">
+    {warehouseStock.find(
+      (stock) =>
+        stock.warehouseId === selectedWarehouse.id
+    )?.onHand ?? 0}
+  </p>
+</div>
+
+<div className="rounded-lg bg-slate-50 p-4">
+  <p className="text-xs text-slate-400">
+    Reserved
+  </p>
+
+  <p className="mt-1 text-2xl font-bold">
+    {warehouseStock.find(
+      (stock) =>
+        stock.warehouseId === selectedWarehouse.id
+    )?.reserved ?? 0}
+  </p>
+</div>
+
+<div className="rounded-lg bg-slate-50 p-4">
+  <p className="text-xs text-slate-400">
+    Available
+  </p>
+
+  <p className="mt-1 text-2xl font-bold">
+    {warehouseStock.find(
+      (stock) =>
+        stock.warehouseId === selectedWarehouse.id
+    )?.available ?? 0}
+  </p>
+</div>
+
                 </div>
+
+                <div className="rounded-lg border border-slate-200 p-4">
+  <p className="text-sm font-semibold text-slate-900">
+    Product Stock
+  </p>
+
+  <div className="mt-3 max-h-48 overflow-y-auto">
+    {inventoryProducts.filter(
+      (product) =>
+        product.warehouse.trim().toLowerCase() ===
+        selectedWarehouse.name.trim().toLowerCase()
+    ).length === 0 ? (
+      <p className="py-4 text-center text-sm text-slate-400">
+        No products in this warehouse.
+      </p>
+    ) : (
+      <div className="space-y-2">
+        {inventoryProducts
+          .filter(
+            (product) =>
+              product.warehouse.trim().toLowerCase() ===
+              selectedWarehouse.name.trim().toLowerCase()
+          )
+          .map((product) => (
+            <div
+              key={product.id}
+              className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2"
+            >
+              <div className="min-w-0">
+  <p className="truncate text-sm font-medium text-slate-800">
+    {product.name}
+  </p>
+
+  <p className="font-mono text-xs text-slate-400">
+    {product.sku}
+  </p>
+
+  <p className="mt-1 text-xs text-slate-500">
+    Location:{" "}
+    {(
+      product as typeof product & {
+        storageLocation?: string;
+      }
+    ).storageLocation ?? "Not assigned"}
+  </p>
+</div>
+
+              <div className="ml-4 text-right">
+                <p className="text-sm font-semibold text-slate-900">
+                  {product.onHand}
+                </p>
+
+                <p className="text-xs text-slate-400">
+                  Available
+                </p>
+              </div>
+            </div>
+          ))}
+      </div>
+    )}
+  </div>
+</div>
 
                 <div className="rounded-lg border border-slate-200 p-4">
 

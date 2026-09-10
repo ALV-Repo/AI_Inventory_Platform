@@ -343,3 +343,15 @@ html.stockflow-dark ::-webkit-scrollbar-thumb {
 html.stockflow-dark ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
+
+@keyframes chartBarGrow {
+  from {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}

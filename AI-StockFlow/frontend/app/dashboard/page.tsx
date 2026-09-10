@@ -113,15 +113,19 @@ function getDeadStockValue(
 
 export default function DashboardPage() {
   const {
-    summary,
-    reorderSuggestions,
-    deadStock,
-    loading,
-    error,
-    period,
-    setPeriod,
-    refresh,
-  } = useDashboard();
+  summary,
+  reorderSuggestions,
+  deadStock,
+  loading,
+  error,
+  period,
+  setPeriod,
+  customStartDate,
+  setCustomStartDate,
+  customEndDate,
+  setCustomEndDate,
+  refresh,
+} = useDashboard();
 
   const [
     showAllDeadStock,
@@ -287,6 +291,32 @@ export default function DashboardPage() {
 
             </div>
           </div>
+
+          <div className="mb-5 flex flex-wrap items-center justify-end gap-2">
+  <input
+    type="date"
+    value={customStartDate}
+    onChange={(event) =>
+      setCustomStartDate(event.target.value)
+    }
+    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs"
+    aria-label="Custom start date"
+  />
+
+  <span className="text-xs text-gray-500">
+    to
+  </span>
+
+  <input
+    type="date"
+    value={customEndDate}
+    onChange={(event) =>
+      setCustomEndDate(event.target.value)
+    }
+    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs"
+    aria-label="Custom end date"
+  />
+</div>
 
           {/* ERROR */}
 
@@ -478,22 +508,24 @@ export default function DashboardPage() {
                     <div className="mt-6 h-2 overflow-hidden rounded-full bg-gray-200">
 
                       <div
-                        className="h-full rounded-full bg-blue-500 transition-all"
-                        style={{
-                          width:
-                            revenuePeriod > 0
-                              ? `${Math.min(
-                                  100,
-                                  Math.max(
-                                    0,
-                                    (revenueToday /
-                                      revenuePeriod) *
-                                      100
-                                  )
-                                )}%`
-                              : "0%",
-                        }}
-                      />
+  className="h-full rounded-full bg-blue-500 transition-all"
+  style={{
+    width:
+      revenuePeriod > 0
+        ? `${Math.min(
+            100,
+            Math.max(
+              0,
+              (revenueToday /
+                revenuePeriod) *
+                100
+            )
+          )}%`
+        : "0%",
+    transformOrigin: "left",
+    animation: "chartBarGrow 700ms ease-out both",
+  }}
+/>
 
                     </div>
 

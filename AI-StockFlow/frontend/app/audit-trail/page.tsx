@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageLayout from "../../components/layout/PageLayout";
 
 type AuditLog = {
@@ -140,12 +140,30 @@ const auditLogs: AuditLog[] = [
 
 export default function AuditTrailPage() {
   const [search, setSearch] = useState("");
+  const [logs, setLogs] = useState<AuditLog[]>(() => {
+  if (typeof window === "undefined") {
+    return auditLogs;
+  }
+
+  const savedLogs = localStorage.getItem("audit-logs");
+
+  if (savedLogs) {
+    return JSON.parse(savedLogs);
+  }
+
+  localStorage.setItem("audit-logs", JSON.stringify(auditLogs));
+  return auditLogs;
+});
   const [moduleFilter, setModuleFilter] =
     useState("All Modules");
   const [actionFilter, setActionFilter] =
     useState("All Actions");
   const [statusFilter, setStatusFilter] =
     useState("All Status");
+
+    useEffect(() => {
+  localStorage.setItem("audit-logs", JSON.stringify(logs));
+}, [logs]);
 
   const modules = [
     "All Modules",
@@ -177,7 +195,7 @@ export default function AuditTrailPage() {
   ];
 
   const filteredLogs = useMemo(() => {
-    return auditLogs.filter((log) => {
+  return logs.filter((log) => {
       const searchText = search.toLowerCase();
 
       const matchesSearch =
@@ -215,19 +233,19 @@ export default function AuditTrailPage() {
     statusFilter,
   ]);
 
-  const totalEvents = auditLogs.length;
+  const totalEvents = logs.length;
 
-  const successfulEvents = auditLogs.filter(
-    (log) => log.status === "Success"
-  ).length;
+const successfulEvents = logs.filter(
+  (log) => log.status === "Success"
+).length;
 
-  const warningEvents = auditLogs.filter(
-    (log) => log.status === "Warning"
-  ).length;
+const warningEvents = logs.filter(
+  (log) => log.status === "Warning"
+).length;
 
-  const failedEvents = auditLogs.filter(
-    (log) => log.status === "Failed"
-  ).length;
+const failedEvents = logs.filter(
+  (log) => log.status === "Failed"
+).length;
 
   const clearFilters = () => {
     setSearch("");
@@ -544,7 +562,7 @@ export default function AuditTrailPage() {
             <div className="border-t border-slate-200 px-4 py-3">
               <p className="text-[10px] text-slate-500">
                 Showing {filteredLogs.length} of{" "}
-                {auditLogs.length} audit events
+{logs.length} audit events
               </p>
             </div>
           </section>

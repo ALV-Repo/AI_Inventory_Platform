@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type AdjustmentType = "Increase" | "Decrease";
 
@@ -167,12 +167,43 @@ export default function StockAdjustmentPage() {
   const [typeFilter, setTypeFilter] =
     useState<string>("All Types");
 
-  const [adjustments, setAdjustments] =
-  useState<AdjustmentRecord[]>(initialAdjustments);
+  const [adjustments, setAdjustments] = useState<AdjustmentRecord[]>(() => {
+  if (typeof window === "undefined") {
+    return initialAdjustments;
+  }
+
+  const savedAdjustments = localStorage.getItem("inventory-adjustments");
+
+  if (savedAdjustments) {
+    return JSON.parse(savedAdjustments);
+  }
+
+  return initialAdjustments;
+});
 
 const [stockLevels, setStockLevels] = useState<Record<number, number>>({});
 
 const [message, setMessage] = useState<string>("");
+
+useEffect(() => {
+  const savedStockLevels = localStorage.getItem("inventory-stock-levels");
+  const savedAdjustments = localStorage.getItem("inventory-adjustments");
+
+  if (savedStockLevels) {
+    setStockLevels(JSON.parse(savedStockLevels));
+  }
+
+  if (savedAdjustments) {
+    setAdjustments(JSON.parse(savedAdjustments));
+  }
+
+  if (!localStorage.getItem("inventory-stock-ledger")) {
+    localStorage.setItem(
+      "inventory-stock-ledger",
+      JSON.stringify([])
+    );
+  }
+}, []);
 
   const selectedProduct = useMemo(() => {
   const product =
@@ -244,10 +275,100 @@ const [message, setMessage] = useState<string>("");
     ? selectedProduct.currentStock + quantity
     : selectedProduct.currentStock - quantity;
 
-setStockLevels((previous) => ({
-  ...previous,
-  [selectedProduct.id]: updatedStock,
-}));
+setStockLevels((previous) => {
+  const updatedStockLevels = {
+    ...previous,
+    [selectedProduct.id]: updatedStock,
+  };
+
+  localStorage.setItem(
+    "inventory-stock-levels",
+    JSON.stringify(updatedStockLevels)
+  );
+
+  const savedProducts = localStorage.getItem("inventory-products");
+
+  if (savedProducts) {
+    const inventoryProducts = JSON.parse(savedProducts) as Array<
+      Record<string, unknown>
+    >;
+
+    const updatedProducts = inventoryProducts.map((product) => {
+      const sameSku =
+        String(product.sku ?? "").toLowerCase() ===
+        selectedProduct.sku.toLowerCase();
+
+      const sameWarehouse =
+        String(product.warehouse ?? "").toLowerCase() ===
+        selectedProduct.warehouse.toLowerCase();
+
+      if (!sameSku || !sameWarehouse) {
+        return product;
+      }
+
+      return {
+        ...product,
+        onHand: updatedStock,
+        on_hand: updatedStock,
+        available: updatedStock,
+      };
+    });
+
+    localStorage.setItem(
+      "inventory-products",
+      JSON.stringify(updatedProducts)
+    );
+  }
+
+  return updatedStockLevels;
+});
+
+const savedAuditLogs = localStorage.getItem("audit-logs");
+const currentAuditLogs = savedAuditLogs
+  ? JSON.parse(savedAuditLogs)
+  : [];
+
+const newAuditLog = {
+  id: `AUD-${Date.now()}`,
+  timestamp: new Date().toLocaleString("en-IN"),
+  user: "Admin User",
+  role: "Admin",
+  action: "Updated",
+  module: "Inventory",
+  description: `${adjustmentType} adjustment of ${quantity} units for ${selectedProduct.name}`,
+  status: "Success",
+  ip: "Local",
+};
+
+localStorage.setItem(
+  "audit-logs",
+  JSON.stringify([newAuditLog, ...currentAuditLogs])
+);
+
+const savedStockLedger = localStorage.getItem("inventory-stock-ledger");
+const currentStockLedger = savedStockLedger
+  ? JSON.parse(savedStockLedger)
+  : [];
+
+const newStockLedgerEntry = {
+  id: `LED-${Date.now()}`,
+  timestamp: new Date().toLocaleString("en-IN"),
+  product: selectedProduct.name,
+  sku: selectedProduct.sku,
+  warehouse: selectedProduct.warehouse,
+  movementType: adjustmentType,
+  quantity: adjustmentType === "Increase" ? quantity : -quantity,
+  stockBefore: selectedProduct.currentStock,
+  stockAfter: updatedStock,
+  reason,
+  reference: `ADJ-${Date.now()}`,
+  user: "Admin User",
+};
+
+localStorage.setItem(
+  "inventory-stock-ledger",
+  JSON.stringify([newStockLedgerEntry, ...currentStockLedger])
+);
 
     const newRecord: AdjustmentRecord = {
       id: adjustments.length + 1,
@@ -262,7 +383,16 @@ setStockLevels((previous) => ({
       user: "Admin User",
     };
 
-    setAdjustments((previous) => [newRecord, ...previous]);
+    setAdjustments((previous) => {
+  const updatedAdjustments = [newRecord, ...previous];
+
+  localStorage.setItem(
+    "inventory-adjustments",
+    JSON.stringify(updatedAdjustments)
+  );
+
+  return updatedAdjustments;
+});
 
     setMessage(
       `${adjustmentType} adjustment of ${quantity} units completed successfully.`
@@ -572,13 +702,18 @@ setStockLevels((previous) => ({
                 Reason
               </label>
 
-              <input
-                type="text"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="Example: Damaged units"
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
-              />
+              <select
+  value={reason}
+  onChange={(event) => setReason(event.target.value)}
+  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+  required
+>
+  <option value="">Select adjustment reason</option>
+  <option value="Damaged units">Damaged units</option>
+  <option value="Stock received">Stock received</option>
+  <option value="Missing stock">Missing stock</option>
+  <option value="Physical count">Physical count</option>
+</select>
             </div>
           </div>
 
