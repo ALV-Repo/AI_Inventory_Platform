@@ -48,6 +48,7 @@ class SaleIn(BaseModel):
     customer_id: int | None = None
     lines: list[SaleLineIn] = Field(min_length=1)
     payment_mode: str = "cash"
+    credit_limit_override: bool = False
     channel: str = "pos"
     interstate: bool = False
     idempotency_key: str | None = Field(
@@ -298,6 +299,39 @@ def _create_sale_once(
     order.tax_amount = round(tax_total, 2)
     order.discount = round(discount_total, 2)
     order.total = round(subtotal + tax_total, 2)
+    # FR-SAL-09: block credit sales beyond the customer's credit limit.
+    if (
+        order.customer_id
+        and str(order.payment_mode or "").lower() == "pending"
+    ):
+        customer = (
+            scoped(db, Customer, user.tenant_id)
+            .filter(Customer.id == order.customer_id)
+            .first()
+        )
+
+        if customer:
+            current_outstanding = float(customer.outstanding or 0)
+            credit_limit = float(customer.credit_limit or 0)
+            projected_outstanding = current_outstanding + float(order.total)
+
+            if (
+                projected_outstanding > credit_limit
+                and not body.credit_limit_override
+            ):
+                allowed_override_roles = {"owner", "admin", "manager"}
+
+                if str(user.role or "").lower() not in allowed_override_roles:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=(
+                            f"Credit limit exceeded. "
+                            f"Outstanding ₹{current_outstanding:.2f} + "
+                            f"sale ₹{order.total:.2f} exceeds "
+                            f"credit limit ₹{credit_limit:.2f}."
+                        ),
+                    )
+
     order.cogs = round(cogs, 2)
 
     # --------------------------------------------------------------
