@@ -1,6 +1,6 @@
 """AI endpoints (SRS §4). All results are tenant-scoped and human-approved."""
 from datetime import date, datetime, timedelta, timezone
-
+from app.services.copilot import answer_question
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -9,12 +9,27 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, scoped
 from app.core.security import require
 from app.models.entities import (
-    AIRecommendation, AuditLog, ForecastResult, Product, PurchaseOrder,
-    PurchaseOrderLine, SalesOrder, SalesOrderLine, StockItem, Supplier, User,
+    AIRecommendation,
+    AuditLog,
+    Customer,
+    ForecastResult,
+    Product,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    SalesOrder,
+    SalesOrderLine,
+    StockItem,
+    Supplier,
+    User,
+    Warehouse,
 )
 from app.services.copilot import answer_question
 from app.services.logic import (
-    business_health_score, classify_stock, forecast_demand, recommend_price, suggest_reorder,
+    business_health_score,
+    classify_stock,
+    forecast_demand,
+    recommend_price,
+    suggest_reorder,
 )
 
 router = APIRouter(prefix="/ai", tags=["AI"])
@@ -24,24 +39,141 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     """Normalise DB datetimes: treat naive values as UTC, convert aware ones."""
     if dt is None:
         return None
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+    return (
+        dt.replace(tzinfo=timezone.utc)
+        if dt.tzinfo is None
+        else dt.astimezone(timezone.utc)
+    )
 
 
 # ------------------------------------------------------------------ helpers
-def _daily_sales(db: Session, tenant_id: int, product_id: int, days: int = 180) -> list[float]:
+def _daily_sales(
+    db: Session,
+    tenant_id: int,
+    product_id: int,
+    days: int = 180,
+) -> list[float]:
     """Daily sold quantity for one product, zero-filled across the window."""
+
     since = datetime.now(timezone.utc) - timedelta(days=days)
+
     rows = (
         scoped(db, SalesOrderLine, tenant_id)
         .join(SalesOrder, SalesOrderLine.order_id == SalesOrder.id)
-        .filter(SalesOrderLine.product_id == product_id, SalesOrder.order_date >= since)
-        .with_entities(func.date(SalesOrder.order_date), func.sum(SalesOrderLine.quantity))
+        .filter(
+            SalesOrderLine.product_id == product_id,
+            SalesOrder.order_date >= since,
+        )
+        .with_entities(
+            func.date(SalesOrder.order_date),
+            func.sum(SalesOrderLine.quantity),
+        )
         .group_by(func.date(SalesOrder.order_date))
         .all()
     )
-    by_day = {str(d): float(q or 0) for d, q in rows}
-    start = (datetime.now(timezone.utc) - timedelta(days=days)).date()
-    return [by_day.get(str(start + timedelta(days=i)), 0.0) for i in range(days)]
+
+    by_day = {
+        str(d): float(q or 0)
+        for d, q in rows
+    }
+
+    start = (
+        datetime.now(timezone.utc) - timedelta(days=days)
+    ).date()
+
+    return [
+        by_day.get(
+            str(start + timedelta(days=i)),
+            0.0,
+        )
+        for i in range(days)
+    ]
+
+
+def _daily_category_sales(
+    db: Session,
+    tenant_id: int,
+    category: str,
+    days: int = 180,
+) -> list[float]:
+    """Daily sold quantity aggregated across products in a category."""
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = (
+        scoped(db, SalesOrderLine, tenant_id)
+        .join(
+            SalesOrder,
+            SalesOrderLine.order_id == SalesOrder.id,
+        )
+        .join(
+            Product,
+            SalesOrderLine.product_id == Product.id,
+        )
+        .filter(
+            Product.category == category,
+            Product.is_active.is_(True),
+            SalesOrder.order_date >= since,
+        )
+        .with_entities(
+            func.date(SalesOrder.order_date),
+            func.sum(SalesOrderLine.quantity),
+        )
+        .group_by(func.date(SalesOrder.order_date))
+        .all()
+    )
+
+    by_day = {
+        str(day): float(quantity or 0)
+        for day, quantity in rows
+    }
+
+    start = (
+        datetime.now(timezone.utc) - timedelta(days=days)
+    ).date()
+
+    return [
+        by_day.get(
+            str(start + timedelta(days=i)),
+            0.0,
+        )
+        for i in range(days)
+    ]
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = (
+        scoped(db, SalesOrderLine, tenant_id)
+        .join(SalesOrder, SalesOrderLine.order_id == SalesOrder.id)
+        .join(Product, SalesOrderLine.product_id == Product.id)
+        .filter(
+            Product.category == category,
+            Product.is_active.is_(True),
+            SalesOrder.order_date >= since,
+        )
+        .with_entities(
+            func.date(SalesOrder.order_date),
+            func.sum(SalesOrderLine.quantity),
+        )
+        .group_by(func.date(SalesOrder.order_date))
+        .all()
+    )
+
+    by_day = {
+        str(day): float(quantity or 0)
+        for day, quantity in rows
+    }
+
+    start = (
+        datetime.now(timezone.utc) - timedelta(days=days)
+    ).date()
+
+    return [
+        by_day.get(
+            str(start + timedelta(days=i)),
+            0.0,
+        )
+        for i in range(days)
+    ]
 
 
 def _stock_totals(db: Session, tenant_id: int, product_id: int) -> tuple[float, float, float]:
@@ -212,26 +344,34 @@ def dead_stock(
             daily_demand=float(sold_90) / 90,
         )
         summary[c.velocity_class] += c.capital_locked
-
         if c.velocity_class != "fast_moving":
             items.append({
-                "product_id": p.id, "sku": p.sku, "name": p.name,
-                "on_hand": on_hand, "capital_locked": c.capital_locked,
+                "product_id": p.id,
+                "sku": p.sku,
+                "name": p.name,
+                "on_hand": on_hand,
+                "capital_locked": c.capital_locked,
                 "velocity_class": c.velocity_class,
-                "days_since_last_sale": days_since if last_sale else None,
+                "days_since_last_sale": days_since,
                 "recommended_action": c.recommended_action,
                 "suggested_discount_pct": c.suggested_discount_pct,
             })
 
     items.sort(key=lambda i: i["capital_locked"], reverse=True)
+
     return {
         "summary": {k: round(v, 2) for k, v in summary.items()},
         "total_locked_in_slow_or_dead": round(
-            summary["slow_moving"] + summary["non_moving"] + summary["overstocked"], 2
+            summary["slow_moving"]
+            + summary["non_moving"]
+            + summary["overstocked"],
+            2,
         ),
         "items": items,
     }
 
+
+            
 
 # ------------------------------------------------------------------ pricing
 class PriceRequest(BaseModel):
@@ -305,52 +445,95 @@ def decide_recommendation(
     rec.acted_at = datetime.now(timezone.utc)
 
     draft_po_id = None
+
     if body.decision == "accepted" and rec.rec_type == "reorder":
         payload = rec.payload or {}
+
         product = (
             scoped(db, Product, user.tenant_id)
             .filter(Product.id == rec.product_id)
             .first()
         )
+
         supplier = (
             scoped(db, Supplier, user.tenant_id)
             .filter(Supplier.is_active.is_(True))
             .order_by(Supplier.lead_time_days)
             .first()
         )
+
         if product and supplier and payload.get("suggested_qty"):
             po_count = scoped(db, PurchaseOrder, user.tenant_id).count()
+
+            warehouse = (
+                scoped(db, Warehouse, user.tenant_id)
+                .filter(
+                    Warehouse.code == "WH-MAIN",
+                    Warehouse.is_active.is_(True),
+                )
+                .first()
+            )
+
+            if not warehouse:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "No active main warehouse is configured for this tenant.",
+                )
+
             po = PurchaseOrder(
                 tenant_id=user.tenant_id,
                 po_number=f"PO-{datetime.now(timezone.utc).strftime('%Y%m')}-{po_count + 1:05d}",
                 supplier_id=supplier.id,
+                warehouse_id=warehouse.id,
                 status="draft",
                 created_by_ai=True,
                 ai_reasoning=rec.reasoning,
                 subtotal=payload.get("estimated_cost", 0),
                 total=payload.get("estimated_cost", 0),
             )
+
             db.add(po)
             db.flush()
-            db.add(PurchaseOrderLine(
-                tenant_id=user.tenant_id, po_id=po.id, product_id=product.id,
-                quantity=payload["suggested_qty"],
-                unit_price=product.cost_price, gst_rate=product.gst_rate,
-            ))
+
+            db.add(
+                PurchaseOrderLine(
+                    tenant_id=user.tenant_id,
+                    po_id=po.id,
+                    product_id=product.id,
+                    quantity=payload["suggested_qty"],
+                    unit_price=product.cost_price,
+                    gst_rate=product.gst_rate,
+                )
+            )
+
             draft_po_id = po.id
 
-    db.add(AuditLog(
-        tenant_id=user.tenant_id, user_id=user.id, action=f"ai.recommendation.{body.decision}",
-        entity_type="ai_recommendation", entity_id=rec.id,
-        details={"type": rec.rec_type, "draft_po_id": draft_po_id},
-    ))
+    # Audit every AI recommendation decision, including price suggestions.
+    db.add(
+        AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action=f"ai.recommendation.{body.decision}",
+            entity_type="ai_recommendation",
+            entity_id=rec.id,
+            details={
+                "type": rec.rec_type,
+                "draft_po_id": draft_po_id,
+            },
+        )
+    )
+
     db.commit()
-    return {"id": rec.id, "status": rec.status, "draft_po_id": draft_po_id}
 
-
+    return {
+        "id": rec.id,
+        "status": rec.status,
+        "draft_po_id": draft_po_id,
+    }
 # ------------------------------------------------------------------ copilot
 class CopilotQuestion(BaseModel):
     question: str = Field(min_length=3, max_length=500)
+    conversation_id: str | None = None
 
 
 @router.post("/copilot")
@@ -360,7 +543,14 @@ def copilot(
     db: Session = Depends(get_db),
 ):
     """Answer a business question from this tenant's data only (FR-AI-COP-01..03)."""
-    return answer_question(db=db, tenant_id=user.tenant_id, role=user.role, question=body.question)
+    return answer_question(
+        db=db,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        role=user.role,
+        question=body.question,
+        conversation_id=body.conversation_id,
+    )
 
 
 # ------------------------------------------------------------------ health score
@@ -398,11 +588,206 @@ def health_score(
         .with_entities(func.avg(Supplier.on_time_rate)).scalar()
     ) or 0.9
 
+    # Receivables overdue ratio: overdue outstanding / total outstanding.
+    total_receivables = 0.0
+    overdue_receivables = 0.0
+    as_of = now.date()
+
+    for order in scoped(db, SalesOrder, user.tenant_id).all():
+        outstanding = float(order.outstanding or 0)
+        if outstanding <= 0:
+            continue
+
+        total_receivables += outstanding
+        due_date = order.due_date or order.order_date.date()
+        if due_date < as_of:
+            overdue_receivables += outstanding
+
+    receivables_overdue_ratio = (
+        overdue_receivables / total_receivables
+        if total_receivables > 0
+        else 0.0
+    )
+
+    # Customer repeat rate: customers with 2+ sales / customers with at least 1 sale.
+    customer_order_counts = (
+        scoped(db, SalesOrder, user.tenant_id)
+        .filter(SalesOrder.customer_id.isnot(None))
+        .with_entities(
+            SalesOrder.customer_id,
+            func.count(SalesOrder.id),
+        )
+        .group_by(SalesOrder.customer_id)
+        .all()
+    )
+
+    active_customers = len(customer_order_counts)
+    repeat_customers = sum(
+        1 for _, order_count in customer_order_counts
+        if order_count >= 2
+    )
+
+    customer_repeat_rate = (
+        repeat_customers / active_customers
+        if active_customers > 0
+        else 0.0
+    )
+
     return business_health_score(
         stockout_rate=out_of_stock / total_products,
         dead_stock_ratio=(dead["summary"]["non_moving"] + dead["summary"]["slow_moving"]) / total_value,
         revenue_growth_pct=growth,
-        receivables_overdue_ratio=0.1,
+        receivables_overdue_ratio=receivables_overdue_ratio,
         supplier_on_time_rate=float(on_time),
-        customer_repeat_rate=0.45,
+        customer_repeat_rate=customer_repeat_rate,
     )
+# ------------------------------------------------------------------
+# Forecast Accuracy / MAPE (FR-AI-FOR-02)
+# ------------------------------------------------------------------
+
+@router.get("/forecast-accuracy/{product_id}")
+def forecast_accuracy(
+    product_id: int,
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    """
+    Calculate forecast accuracy using Mean Absolute Percentage Error (MAPE).
+
+    Uses historical daily sales to perform a simple one-step-ahead
+    backtest: forecast the next day using the sales history available
+    before that day, then compare the forecast with actual sales.
+    """
+
+    # Make sure the product belongs to the current tenant
+    product = (
+        scoped(db, Product, user.tenant_id)
+        .filter(Product.id == product_id, Product.is_active.is_(True))
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status_code=404,
+            detail="That product does not exist.",
+        )
+
+    # Get daily sales history
+    history = _daily_sales(db, user.tenant_id, product_id)
+
+    # Not enough history to calculate meaningful accuracy
+    if len(history) < 7:
+        return {
+            "product_id": product.id,
+            "sku": product.sku,
+            "name": product.name,
+            "mape": None,
+            "accuracy_pct": None,
+            "sample_count": 0,
+            "confidence": 0.0,
+            "message": "Not enough sales history to calculate MAPE.",
+        }
+
+    errors = []
+
+    # Backtest one day at a time.
+    # Start after enough history exists for the forecasting function.
+    min_history = 7
+
+    for i in range(min_history, len(history)):
+        training_history = history[:i]
+        actual = history[i]
+
+        # Avoid division by zero in MAPE
+        if actual <= 0:
+            continue
+
+        forecast = forecast_demand(
+            training_history,
+            horizon_days=1,
+            seasonality_index=1.0,
+        )
+
+        predicted = forecast.daily_rate
+
+        percentage_error = abs(actual - predicted) / actual * 100
+        errors.append(percentage_error)
+
+    # No valid observations
+    if not errors:
+        return {
+            "product_id": product.id,
+            "sku": product.sku,
+            "name": product.name,
+            "mape": None,
+            "accuracy_pct": None,
+            "sample_count": 0,
+            "confidence": 0.0,
+            "message": "No valid non-zero actual sales found.",
+        }
+
+    mape = sum(errors) / len(errors)
+
+    # Convert MAPE into a simple accuracy indicator.
+    # Clamp between 0 and 100 so the result stays meaningful.
+    accuracy_pct = max(0.0, min(100.0, 100.0 - mape))
+    # More historical observations = higher confidence.
+    confidence = min(1.0, len(errors) / 90)
+
+    return {
+        "product_id": product.id,
+        "sku": product.sku,
+        "name": product.name,
+        "mape": round(mape, 2),
+        "accuracy_pct": round(accuracy_pct, 2),
+        "sample_count": len(errors),
+        "confidence": round(confidence, 2),
+        "method": "one-step-backtest-v1",
+    }
+@router.get("/forecast/category/{category}")
+def category_forecast(
+    category: str,
+    horizon_days: int = Query(30, ge=1, le=365),
+    seasonality_index: float = Query(1.0, ge=0.1, le=5.0),
+    user: User = Depends(require("ai:read")),
+    db: Session = Depends(get_db),
+):
+    """Demand forecast aggregated for one category."""
+
+    products = (
+        scoped(db, Product, user.tenant_id)
+        .filter(
+            Product.category == category,
+            Product.is_active.is_(True),
+        )
+        .all()
+    )
+
+    if not products:
+        raise HTTPException(
+            status_code=404,
+            detail="That category does not exist.",
+        )
+
+    history = _daily_category_sales(
+        db,
+        user.tenant_id,
+        category,
+    )
+
+    f = forecast_demand(
+        history,
+        horizon_days=horizon_days,
+        seasonality_index=seasonality_index,
+    )
+
+    return {
+        "category": category,
+        "product_count": len(products),
+        "horizon_days": horizon_days,
+        "predicted_demand": f.predicted_demand,
+        "daily_rate": f.daily_rate,
+        "confidence": f.confidence,
+        "method": f.method,
+        "is_heuristic": f.method.startswith("heuristic"),
+    }

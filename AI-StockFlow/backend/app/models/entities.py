@@ -1,8 +1,19 @@
 """ORM entities (SRS §8.1). Every tenant-owned table carries tenant_id."""
 from datetime import datetime, timezone
-
+from sqlalchemy import UniqueConstraint
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -73,8 +84,49 @@ class Customer(Base, TenantMixin):
     phone = Column(String(32))
     email = Column(String(180))
     credit_limit = Column(Float, default=0.0)
+    payment_terms_days = Column(Integer, default=30)
     outstanding = Column(Float, default=0.0)
+class Quotation(Base, TenantMixin):
+    """Sales quotation (FR-SAL-01)."""
+    __tablename__ = "quotations"
 
+    id = Column(Integer, primary_key=True)
+    quote_number = Column(String(40), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    status = Column(String(24), default="draft")
+    valid_until = Column(Date)
+    revision = Column(Integer, default=1)
+    subtotal = Column(Float, default=0.0)
+    tax_amount = Column(Float, default=0.0)
+    total = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=utcnow)
+
+    lines = relationship(
+        "QuotationLine",
+        back_populates="quotation",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("ix_quotations_tenant_number", "tenant_id", "quote_number", unique=True),
+    )
+
+
+class QuotationLine(Base, TenantMixin):
+    """Quotation line item (FR-SAL-01)."""
+    __tablename__ = "quotation_lines"
+
+    id = Column(Integer, primary_key=True)
+    quotation_id = Column(Integer, ForeignKey("quotations.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    quantity = Column(Float, nullable=False)
+    unit_price = Column(Float, default=0.0)
+    discount = Column(Float, default=0.0)
+    gst_rate = Column(Float, default=18.0)
+    tax_amount = Column(Float, default=0.0)
+    line_total = Column(Float, default=0.0)
+
+    quotation = relationship("Quotation", back_populates="lines")
 
 class Product(Base, TenantMixin):
     """FR-INV-01 / FR-INV-02."""
@@ -102,29 +154,56 @@ class Product(Base, TenantMixin):
 
     stock_items = relationship("StockItem", back_populates="product")
 
-    __table_args__ = (Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),)
+    parent = relationship(
+        "Product",
+        remote_side=[id],
+        backref="variants",
+    )
 
-
+    __table_args__ = (
+        Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),
+    )
 class StockItem(Base, TenantMixin):
-    """Current stock position per product per warehouse (FR-INV-05, FR-INV-09)."""
+    """Current stock position per product per warehouse/location (FR-INV-05, FR-INV-09)."""
     __tablename__ = "stock_items"
+
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
-    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False, index=True)
+
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+        index=True,
+    )
+
+    location_id = Column(
+        Integer,
+        ForeignKey("storage_locations.id"),
+        nullable=True,
+        index=True,
+    )
+
     batch_no = Column(String(64))
     expiry_date = Column(Date)
     quantity = Column(Float, default=0.0)
     reserved_qty = Column(Float, default=0.0)
-    avg_cost = Column(Float, default=0.0)                 # weighted average (FR-FIN-03)
+    avg_cost = Column(Float, default=0.0)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     product = relationship("Product", back_populates="stock_items")
+    location = relationship("StorageLocation")
+    warehouse = relationship("Warehouse")
 
     @property
     def available(self) -> float:
         return (self.quantity or 0) - (self.reserved_qty or 0)
-
-
 class StockMovement(Base, TenantMixin):
     """Immutable stock ledger — append only (FR-INV-12, NFR-08)."""
     __tablename__ = "stock_movements"
@@ -153,6 +232,8 @@ class PurchaseOrder(Base, TenantMixin):
     subtotal = Column(Float, default=0.0)
     tax_amount = Column(Float, default=0.0)
     total = Column(Float, default=0.0)
+    due_date = Column(Date)
+    outstanding = Column(Float, default=0.0)
     created_by_ai = Column(Boolean, default=False)        # FR-AI-PUR-01
     ai_reasoning = Column(JSON)                           # FR-AI-PUR-03
     created_at = Column(DateTime, default=utcnow)
@@ -187,9 +268,14 @@ class SalesOrder(Base, TenantMixin):
     discount = Column(Float, default=0.0)
     tax_amount = Column(Float, default=0.0)
     total = Column(Float, default=0.0)
+    due_date = Column(Date)
+    outstanding = Column(Float, default=0.0)
     cogs = Column(Float, default=0.0)                     # for gross profit (FR-RPT-01)
     payment_mode = Column(String(24), default="cash")
-    idempotency_key = Column(String(64))                  # NFR-05 offline POS sync
+    idempotency_key = Column(String(64))
+    irn = Column(String(64), nullable=True)
+    irn_status = Column(String(24), default="not_required")
+                   # NFR-05 offline POS sync
     created_at = Column(DateTime, default=utcnow)
 
     lines = relationship("SalesOrderLine", back_populates="order", cascade="all, delete-orphan")
@@ -205,7 +291,66 @@ class SalesOrder(Base, TenantMixin):
         ),
     )
 
+class DeliveryNote(Base, TenantMixin):
+    """Delivery note / challan linked to a sales order (FR-SAL-08)."""
+    __tablename__ = "delivery_notes"
 
+    id = Column(Integer, primary_key=True)
+    delivery_number = Column(String(40), nullable=False)
+    sales_order_id = Column(
+        Integer,
+        ForeignKey("sales_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
+    delivery_date = Column(DateTime, default=utcnow, nullable=False)
+    status = Column(String(24), default="draft", nullable=False)
+    delivery_address = Column(Text)
+    notes = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    lines = relationship(
+        "DeliveryNoteLine",
+        back_populates="delivery_note",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_delivery_notes_tenant_number",
+            "tenant_id",
+            "delivery_number",
+            unique=True,
+        ),
+    )
+
+
+class DeliveryNoteLine(Base, TenantMixin):
+    """Individual product delivered on a delivery note."""
+    __tablename__ = "delivery_note_lines"
+
+    id = Column(Integer, primary_key=True)
+    delivery_note_id = Column(
+        Integer,
+        ForeignKey("delivery_notes.id"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+    quantity = Column(Float, nullable=False)
+
+    delivery_note = relationship(
+        "DeliveryNote",
+        back_populates="lines",
+    )
 class SalesOrderLine(Base, TenantMixin):
     __tablename__ = "sales_order_lines"
     id = Column(Integer, primary_key=True)
@@ -220,7 +365,69 @@ class SalesOrderLine(Base, TenantMixin):
     unit_cost = Column(Float, default=0.0)
 
     order = relationship("SalesOrder", back_populates="lines")
+class SalesReturn(Base, TenantMixin):
+    """Sales return / refund document."""
+    __tablename__ = "sales_returns"
 
+    id = Column(Integer, primary_key=True)
+    return_number = Column(String(40), nullable=False)
+    sales_order_id = Column(
+        Integer,
+        ForeignKey("sales_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
+    return_date = Column(DateTime, default=utcnow, index=True)
+    reason = Column(String(255))
+    refund_amount = Column(Float, default=0.0)
+    tax_amount = Column(Float, default=0.0)
+    total_amount = Column(Float, default=0.0)
+    status = Column(String(24), default="confirmed")
+    created_at = Column(DateTime, default=utcnow)
+
+    lines = relationship(
+        "SalesReturnLine",
+        back_populates="sales_return",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_sales_returns_tenant_number",
+            "tenant_id",
+            "return_number",
+            unique=True,
+        ),
+    )
+
+
+class SalesReturnLine(Base, TenantMixin):
+    """Individual returned item."""
+    __tablename__ = "sales_return_lines"
+
+    id = Column(Integer, primary_key=True)
+    return_id = Column(
+        Integer,
+        ForeignKey("sales_returns.id"),
+        nullable=False,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+    )
+    quantity = Column(Float, nullable=False)
+    unit_price = Column(Float, default=0.0)
+    gst_rate = Column(Float, default=18.0)
+    tax_amount = Column(Float, default=0.0)
+    line_total = Column(Float, default=0.0)
+
+    sales_return = relationship(
+        "SalesReturn",
+        back_populates="lines",
+    )
 
 class ForecastResult(Base, TenantMixin):
     """FR-AI-FOR-01..04."""
@@ -249,6 +456,51 @@ class AIRecommendation(Base, TenantMixin):
     acted_at = Column(DateTime)
     created_at = Column(DateTime, default=utcnow, index=True)
 
+class StockTransfer(Base, TenantMixin):
+    """FR-INV-06 — warehouse transfer workflow."""
+
+    __tablename__ = "stock_transfers"
+
+    id = Column(Integer, primary_key=True)
+
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    from_warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+    )
+
+    to_warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+    )
+
+    quantity = Column(Float, nullable=False)
+
+    status = Column(
+        String(20),
+        default="pending",
+        nullable=False,
+        index=True,
+    )  # pending|approved|in_transit|received
+
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    approved_by = Column(Integer, ForeignKey("users.id"))
+    dispatched_by = Column(Integer, ForeignKey("users.id"))
+    received_by = Column(Integer, ForeignKey("users.id"))
+
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    approved_at = Column(DateTime)
+    dispatched_at = Column(DateTime)
+    received_at = Column(DateTime)
+
 
 class AuditLog(Base, TenantMixin):
     """NFR-08 — immutable."""
@@ -261,3 +513,238 @@ class AuditLog(Base, TenantMixin):
     details = Column(JSON)
     ip_address = Column(String(64))
     created_at = Column(DateTime, default=utcnow, index=True)
+class CycleCountSession(Base, TenantMixin):
+    """FR-INV-07 — physical stock cycle-count session."""
+    __tablename__ = "cycle_count_sessions"
+
+    id = Column(Integer, primary_key=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    status = Column(String(20), default="open", nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    closed_at = Column(DateTime)
+
+
+class CycleCountEntry(Base, TenantMixin):
+    """Physical count entry belonging to a cycle-count session."""
+    __tablename__ = "cycle_count_entries"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(
+        Integer,
+        ForeignKey("cycle_count_sessions.id"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    system_quantity = Column(Float, nullable=False)
+    counted_quantity = Column(Float)
+    variance = Column(Float)
+
+    counted_by = Column(Integer, ForeignKey("users.id"))
+    counted_at = Column(DateTime)
+class StockSerial(Base, TenantMixin):
+    """Individual serial-number tracking for serialized inventory."""
+    __tablename__ = "stock_serials"
+
+    id = Column(Integer, primary_key=True)
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+    warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+        index=True,
+    )
+    serial_number = Column(String(128), nullable=False, index=True)
+    batch_no = Column(String(64))
+    status = Column(
+        String(24),
+        default="available",
+        nullable=False,
+    )  # available|reserved|sold|transferred
+
+    created_at = Column(DateTime, default=utcnow)
+
+    __table_args__ = (
+        Index(
+            "uq_stock_serial_tenant_serial",
+            "tenant_id",
+            "serial_number",
+            unique=True,
+        ),
+    )
+class ProductBOM(Base, TenantMixin):
+    """Bill of materials / bundle definition (FR-INV-10)."""
+    __tablename__ = "product_boms"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "product_id",
+            name="uq_product_bom_tenant_product",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    is_active = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=utcnow,
+        nullable=True,
+    )
+
+    product = relationship("Product")
+
+    lines = relationship(
+        "ProductBOMLine",
+        back_populates="bom",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProductBOMLine(Base, TenantMixin):
+    """Component required by a bundle/BOM."""
+    __tablename__ = "product_bom_lines"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "bom_id",
+            "component_product_id",
+            name="uq_product_bom_line_component",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+
+    bom_id = Column(
+        Integer,
+        ForeignKey("product_boms.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    component_product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    quantity = Column(
+        Float,
+        nullable=False,
+    )
+
+    bom = relationship(
+        "ProductBOM",
+        back_populates="lines",
+    )
+
+    component_product = relationship("Product")
+class Expense(Base, TenantMixin):
+    """Finance expense record (FR-FIN-02)."""
+    __tablename__ = "expenses"
+
+    id = Column(Integer, primary_key=True)
+    category = Column(String(80), nullable=False)
+    amount = Column(Float, nullable=False)
+    payment_mode = Column(String(24), default="cash")
+    description = Column(Text)
+    attachment_url = Column(String(500))
+    expense_date = Column(Date, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow)
+
+
+class FinanceTransaction(Base, TenantMixin):
+    """Cash/bank transaction (FR-FIN-04, FR-FIN-06)."""
+    __tablename__ = "finance_transactions"
+
+    id = Column(Integer, primary_key=True)
+    transaction_type = Column(String(24), nullable=False)
+    amount = Column(Float, nullable=False)
+    payment_mode = Column(String(24), default="cash")
+    reference_type = Column(String(40))
+    reference_id = Column(Integer)
+    party_id = Column(Integer)
+    notes = Column(Text)
+    transaction_date = Column(Date, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow)
+
+
+class FinanceAllocation(Base, TenantMixin):
+    """Allocation of receipts/payments against invoices/bills (FR-FIN-06)."""
+    __tablename__ = "finance_allocations"
+
+    id = Column(Integer, primary_key=True)
+    transaction_id = Column(
+        Integer,
+        ForeignKey("finance_transactions.id"),
+        nullable=False,
+        index=True,
+    )
+    document_type = Column(String(40), nullable=False)
+    document_id = Column(Integer, nullable=False)
+    allocated_amount = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+class CopilotConversation(Base, TenantMixin):
+    """Copilot conversation session (FR-AI-COP-02)."""
+    __tablename__ = "copilot_conversations"
+
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+class StorageLocation(Base, TenantMixin):
+    """Storage/bin location within a warehouse (FR-INV-05)."""
+    __tablename__ = "storage_locations"
+
+    id = Column(Integer, primary_key=True)
+    warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+        index=True,
+    )
+    code = Column(String(64), nullable=False)
+    name = Column(String(160), nullable=False)
+    is_active = Column(Boolean, default=True)
+
+    warehouse = relationship("Warehouse")
+
+    __table_args__ = (
+        Index(
+            "ix_storage_locations_tenant_warehouse_code",
+            "tenant_id",
+            "warehouse_id",
+            "code",
+            unique=True,
+        ),
+    )

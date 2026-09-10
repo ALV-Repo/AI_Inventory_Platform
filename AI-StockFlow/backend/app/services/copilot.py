@@ -17,7 +17,12 @@ from app.core.config import settings
 from app.core.database import scoped
 from app.core.security import has_permission
 from app.models.entities import (
-    Product, SalesOrder, SalesOrderLine, StockItem, Supplier,
+    CopilotConversation,
+    Product,
+    SalesOrder,
+    SalesOrderLine,
+    StockItem,
+    Supplier,
 )
 
 SYSTEM_PROMPT = """You are the inventory assistant inside a business management platform.
@@ -98,7 +103,67 @@ def _retrieve(db: Session, tenant_id: int, role: str) -> dict:
 
 
 # ------------------------------------------------------------------ generation
-def _call_llm(question: str, facts: dict) -> str | None:
+def _call_llm(
+    question: str,
+    facts: dict,
+    history: list[CopilotConversation] | None = None,
+) -> str | None:
+    """Send the question, conversation history and facts to the configured provider."""
+    if settings.AI_PROVIDER == "stub" or not settings.AI_API_KEY:
+        return None
+
+    try:  # pragma: no cover - exercised in integration environments only
+        import json
+        import urllib.request
+
+        messages = []
+
+        for turn in history or []:
+            messages.append({
+                "role": "user",
+                "content": turn.question,
+            })
+            messages.append({
+                "role": "assistant",
+                "content": turn.answer,
+            })
+
+        messages.append({
+            "role": "user",
+            "content": (
+                f"QUESTION: {question}\n\n"
+                f"FACTS (data only):\n{json.dumps(facts, default=str)}"
+            ),
+        })
+
+        payload = {
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 400,
+            "system": SYSTEM_PROMPT,
+            "messages": messages,
+        }
+
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload).encode(),
+            headers={
+                "content-type": "application/json",
+                "x-api-key": settings.AI_API_KEY,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+
+        return "".join(
+            b.get("text", "")
+            for b in data.get("content", [])
+            if b.get("type") == "text"
+        )
+
+    except Exception:
+        return None
     """Send the question and facts to the configured provider.
 
     Returns None when no provider is configured, so the caller can fall back to
@@ -185,17 +250,58 @@ def _deterministic_answer(question: str, facts: dict) -> str:
         "I can answer questions about stock levels, reorders, revenue trends, top products, "
         "supplier lead times, and inventory value. Try asking which products will run out next week."
     )
+def answer_question(
+    *,
+    db: Session,
+    tenant_id: int,
+    user_id: int,
+    role: str,
+    question: str,
+    conversation_id: str | None = None,
+) -> dict:
+    import uuid
 
+    conversation_id = conversation_id or uuid.uuid4().hex
 
-def answer_question(*, db: Session, tenant_id: int, role: str, question: str) -> dict:
+    history = (
+        scoped(db, CopilotConversation, tenant_id)
+        .filter(
+            CopilotConversation.user_id == user_id,
+            CopilotConversation.conversation_id == conversation_id,
+        )
+        .order_by(CopilotConversation.created_at.asc(), CopilotConversation.id.asc())
+        .limit(20)
+        .all()
+    )
+
     facts = _retrieve(db, tenant_id, role)
-    generated = _call_llm(question, facts)
+
+    generated = _call_llm(
+    question,
+    facts,
+    history,
+)
+
+    answer = generated or _deterministic_answer(question, facts)
+
+    db.add(
+        CopilotConversation(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            question=question,
+            answer=answer,
+        )
+    )
+    db.commit()
 
     return {
         "question": question,
-        "answer": generated or _deterministic_answer(question, facts),
-        "grounded_in": facts,          # FR-AI-COP-02: user can verify every figure
+        "answer": answer,
+        "conversation_id": conversation_id,
+        "history_turns": len(history),
+        "grounded_in": facts,
         "source": "llm" if generated else "rules",
         "scoped_to_tenant": tenant_id,
-        "role_filtered": True,         # FR-AI-COP-03
+        "role_filtered": True,
     }

@@ -116,8 +116,31 @@ class TestForecast:
     def test_rejects_bad_horizon(self):
         with pytest.raises(ValueError):
             forecast_demand([1, 2, 3], horizon_days=0)
+    
 
+    def test_rejects_bad_seasonality(self):
+        with pytest.raises(ValueError):
+            forecast_demand(
+                [1, 2, 3],
+                seasonality_index=0.05,
+            )
+    def test_long_history_uses_robust_trend_model(self):
+        history = [10, 11, 12, 13, 14, 15, 16] * 15
+        f = forecast_demand(history, horizon_days=30)
 
+        assert f.method == "weighted-trend-v1"
+        assert f.daily_rate > 0
+        assert f.predicted_demand > 0
+        assert 0 <= f.confidence <= 1
+
+    def test_zero_sales_history_sets_zero_stability(self):
+        history = [0] * 30
+
+        f = forecast_demand(history, horizon_days=30)
+
+        assert f.predicted_demand == 0
+        assert f.daily_rate == 0
+        assert 0 <= f.confidence <= 1
 # ------------------------------------------------------------------ FR-AI-PUR
 class TestReorder:
     def test_orders_when_below_reorder_point(self):
