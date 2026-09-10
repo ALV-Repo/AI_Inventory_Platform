@@ -291,7 +291,66 @@ class SalesOrder(Base, TenantMixin):
         ),
     )
 
+class DeliveryNote(Base, TenantMixin):
+    """Delivery note / challan linked to a sales order (FR-SAL-08)."""
+    __tablename__ = "delivery_notes"
 
+    id = Column(Integer, primary_key=True)
+    delivery_number = Column(String(40), nullable=False)
+    sales_order_id = Column(
+        Integer,
+        ForeignKey("sales_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
+    delivery_date = Column(DateTime, default=utcnow, nullable=False)
+    status = Column(String(24), default="draft", nullable=False)
+    delivery_address = Column(Text)
+    notes = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    lines = relationship(
+        "DeliveryNoteLine",
+        back_populates="delivery_note",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_delivery_notes_tenant_number",
+            "tenant_id",
+            "delivery_number",
+            unique=True,
+        ),
+    )
+
+
+class DeliveryNoteLine(Base, TenantMixin):
+    """Individual product delivered on a delivery note."""
+    __tablename__ = "delivery_note_lines"
+
+    id = Column(Integer, primary_key=True)
+    delivery_note_id = Column(
+        Integer,
+        ForeignKey("delivery_notes.id"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+    quantity = Column(Float, nullable=False)
+
+    delivery_note = relationship(
+        "DeliveryNote",
+        back_populates="lines",
+    )
 class SalesOrderLine(Base, TenantMixin):
     __tablename__ = "sales_order_lines"
     id = Column(Integer, primary_key=True)
