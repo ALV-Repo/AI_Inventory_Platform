@@ -279,6 +279,11 @@ class SalesOrder(Base, TenantMixin):
     created_at = Column(DateTime, default=utcnow)
 
     lines = relationship("SalesOrderLine", back_populates="order", cascade="all, delete-orphan")
+    payments = relationship(
+        "SalesPayment",
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         # Numbering and replay protection must hold under concurrency (NFR-05):
@@ -290,7 +295,23 @@ class SalesOrder(Base, TenantMixin):
             sqlite_where=idempotency_key.isnot(None),
         ),
     )
+class SalesPayment(Base, TenantMixin):
+    """Individual payment in a split POS payment (FR-SAL-03)."""
+    __tablename__ = "sales_payments"
 
+    id = Column(Integer, primary_key=True)
+    sales_order_id = Column(
+        Integer,
+        ForeignKey("sales_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    payment_mode = Column(String(24), nullable=False)
+    amount = Column(Float, nullable=False)
+    reference = Column(String(120))
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    order = relationship("SalesOrder", back_populates="payments")
 class DeliveryNote(Base, TenantMixin):
     """Delivery note / challan linked to a sales order (FR-SAL-08)."""
     __tablename__ = "delivery_notes"

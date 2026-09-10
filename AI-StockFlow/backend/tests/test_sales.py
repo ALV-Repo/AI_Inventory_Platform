@@ -440,6 +440,164 @@ class TestSales:
         assert stock.quantity == 8
 
 
+    def test_split_payments_are_saved(self, client, auth_headers, db, sales_data):
+        from app.models.entities import SalesOrder, SalesPayment
+
+        add_stock(db, sales_data, 10)
+
+        response = client.post(
+            "/api/v1/sales",
+            headers=auth_headers,
+            json={
+                "warehouse_id": sales_data["warehouse_id"],
+                "lines": [
+                    {
+                        "product_id": sales_data["product_id"],
+                        "quantity": 2,
+                    }
+                ],
+                "payments": [
+                    {
+                        "payment_mode": "cash",
+                        "amount": 177.00,
+                        "reference": "CASH-001",
+                    },
+                    {
+                        "payment_mode": "upi",
+                        "amount": 177.00,
+                        "reference": "UPI-001",
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 201, response.text
+
+        body = response.json()
+        assert body["payment_mode"] == "split"
+        assert len(body["payments"]) == 2
+        assert sum(p["amount"] for p in body["payments"]) == 354.0
+
+        order = db.query(SalesOrder).filter(SalesOrder.id == body["id"]).one()
+        payments = (
+            db.query(SalesPayment)
+            .filter(SalesPayment.sales_order_id == order.id)
+            .order_by(SalesPayment.id)
+            .all()
+        )
+
+        assert len(payments) == 2
+        assert payments[0].payment_mode == "cash"
+        assert payments[0].amount == 177.0
+        assert payments[1].payment_mode == "upi"
+        assert payments[1].amount == 177.0
+
+    def test_split_payment_total_must_match_sale_total(
+        self,
+        client,
+        auth_headers,
+        db,
+        sales_data,
+    ):
+        add_stock(db, sales_data, 10)
+
+        response = client.post(
+            "/api/v1/sales",
+            headers=auth_headers,
+            json={
+                "warehouse_id": sales_data["warehouse_id"],
+                "lines": [
+                    {
+                        "product_id": sales_data["product_id"],
+                        "quantity": 2,
+                    }
+                ],
+                "payments": [
+                    {
+                        "payment_mode": "cash",
+                        "amount": 100.00,
+                    },
+                    {
+                        "payment_mode": "upi",
+                        "amount": 100.00,
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 400
+        assert "payment total" in response.text.lower()
+
+    def test_split_payment_pending_amount_updates_customer_outstanding(
+        self,
+        client,
+        auth_headers,
+        db,
+        sales_data,
+    ):
+        from app.models.entities import Customer, SalesPayment
+
+        add_stock(db, sales_data, 10)
+
+        customer = Customer(
+            tenant_id=sales_data["tenant_id"],
+            name="Split Payment Customer",
+            phone="9000000001",
+            credit_limit=1000,
+            payment_terms_days=30,
+            outstanding=0,
+        )
+        db.add(customer)
+        db.commit()
+
+        response = client.post(
+            "/api/v1/sales",
+            headers=auth_headers,
+            json={
+                "warehouse_id": sales_data["warehouse_id"],
+                "customer_id": customer.id,
+                "lines": [
+                    {
+                        "product_id": sales_data["product_id"],
+                        "quantity": 2,
+                    }
+                ],
+                "payments": [
+                    {
+                        "payment_mode": "cash",
+                        "amount": 300.00,
+                    },
+                    {
+                        "payment_mode": "pending",
+                        "amount": 54.00,
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 201, response.text
+
+        db.refresh(customer)
+
+        assert customer.outstanding == 54.0
+        assert response.json()["payment_mode"] == "split"
+
+        payments = (
+            db.query(SalesPayment)
+            .filter(
+                SalesPayment.sales_order_id == response.json()["id"]
+            )
+            .all()
+        )
+
+        assert len(payments) == 2
+        assert sum(
+            payment.amount
+            for payment in payments
+            if payment.payment_mode == "pending"
+        ) == 54.0
+
+
 class TestSerializedSales:
 
     def test_serialized_sale_marks_serial_sold(

@@ -22,6 +22,7 @@ from app.models.entities import (
     QuotationLine,
     SalesOrder,
     SalesOrderLine,
+    SalesPayment,
     SalesReturn,
     SalesReturnLine,
     StockItem,
@@ -43,11 +44,18 @@ class SaleLineIn(BaseModel):
     serial_numbers: list[str] = Field(default_factory=list)
     batch_no: str | None = None
 
+class SalePaymentIn(BaseModel):
+    payment_mode: str
+    amount: float = Field(gt=0)
+    reference: str | None = None
+
+
 class SaleIn(BaseModel):
     warehouse_id: int
     customer_id: int | None = None
     lines: list[SaleLineIn] = Field(min_length=1)
     payment_mode: str = "cash"
+    payments: list[SalePaymentIn] | None = None
     credit_limit_override: bool = False
     channel: str = "pos"
     interstate: bool = False
@@ -299,10 +307,59 @@ def _create_sale_once(
     order.tax_amount = round(tax_total, 2)
     order.discount = round(discount_total, 2)
     order.total = round(subtotal + tax_total, 2)
+
+    # FR-SAL-03: validate and persist split/multiple payments.
+    pending_amount = 0.0
+
+    if body.payments:
+        payment_total = round(
+            sum(float(payment.amount) for payment in body.payments),
+            2,
+        )
+
+        if abs(payment_total - order.total) > 0.01:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Payment total ?{payment_total:.2f} must equal "
+                    f"sale total ?{order.total:.2f}."
+                ),
+            )
+
+        payment_modes = {
+            str(payment.payment_mode or "").strip().lower()
+            for payment in body.payments
+        }
+
+        order.payment_mode = (
+            next(iter(payment_modes))
+            if len(payment_modes) == 1
+            else "split"
+        )
+
+        for payment in body.payments:
+            mode = str(payment.payment_mode or "").strip().lower()
+
+            if mode == "pending":
+                pending_amount += float(payment.amount)
+
+            db.add(
+                SalesPayment(
+                    tenant_id=user.tenant_id,
+                    sales_order_id=order.id,
+                    payment_mode=mode,
+                    amount=round(float(payment.amount), 2),
+                    reference=payment.reference,
+                )
+            )
+    else:
+        if str(order.payment_mode or "").lower() == "pending":
+            pending_amount = float(order.total)
+
     # FR-SAL-09: block credit sales beyond the customer's credit limit.
     if (
         order.customer_id
-        and str(order.payment_mode or "").lower() == "pending"
+        and pending_amount > 0
     ):
         customer = (
             scoped(db, Customer, user.tenant_id)
@@ -313,7 +370,7 @@ def _create_sale_once(
         if customer:
             current_outstanding = float(customer.outstanding or 0)
             credit_limit = float(customer.credit_limit or 0)
-            projected_outstanding = current_outstanding + float(order.total)
+            projected_outstanding = current_outstanding + pending_amount
 
             if (
                 projected_outstanding > credit_limit
@@ -339,7 +396,7 @@ def _create_sale_once(
     # --------------------------------------------------------------
     if (
         order.customer_id
-        and str(order.payment_mode or "").lower() == "pending"
+        and pending_amount > 0
     ):
         customer = (
             scoped(db, Customer, user.tenant_id)
@@ -349,10 +406,10 @@ def _create_sale_once(
 
         if customer:
             terms = int(customer.payment_terms_days or 30)
-            order.outstanding = order.total
+            order.outstanding = round(pending_amount, 2)
             order.due_date = order.order_date.date() + timedelta(days=terms)
             customer.outstanding = (
-                float(customer.outstanding or 0) + order.total
+                float(customer.outstanding or 0) + pending_amount
             )
 
     db.add(AuditLog(
@@ -370,6 +427,15 @@ def _create_sale_once(
         "subtotal": order.subtotal,
         "tax_amount": order.tax_amount,
         "total": order.total,
+        "payment_mode": order.payment_mode,
+        "payments": [
+            {
+                "payment_mode": payment.payment_mode,
+                "amount": payment.amount,
+                "reference": payment.reference,
+            }
+            for payment in order.payments
+        ],
         "gross_profit": round(order.subtotal - order.cogs, 2),
         "duplicate": False,
     }
