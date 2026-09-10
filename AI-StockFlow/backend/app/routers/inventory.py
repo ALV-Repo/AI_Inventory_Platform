@@ -21,6 +21,7 @@ from app.models.entities import (
     StockItem,
     StockMovement,
     StockTransfer,
+    StorageLocation,
     User,
     Warehouse,
     utcnow,
@@ -83,10 +84,24 @@ class ProductUpdate(BaseModel):
     track_batch: bool | None = None
     track_serial: bool | None = None
 
+class StorageLocationIn(BaseModel):
+    """FR-INV-05 - storage/bin location within a warehouse."""
+    warehouse_id: int
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=160)
+
+
+class StorageLocationUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=64)
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    is_active: bool | None = None
+
+
 class AdjustmentIn(BaseModel):
     """FR-INV-08 â€” a reason code is mandatory."""
     product_id: int
     warehouse_id: int
+    location_id: int | None = None
     quantity: float = Field(description="Signed: positive adds stock, negative removes it.")
     reason_code: str = Field(min_length=2, max_length=64)
     note: str | None = None
@@ -124,6 +139,138 @@ class BOMLineRequest(BaseModel):
 class BOMCreateRequest(BaseModel):
     product_id: int
     lines: list[BOMLineRequest] = Field(min_length=1)
+
+
+# ------------------------------------------------------------------ storage locations
+
+@router.post("/locations", status_code=status.HTTP_201_CREATED)
+def create_storage_location(
+    body: StorageLocationIn,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    warehouse = (
+        scoped(db, Warehouse, user.tenant_id)
+        .filter(Warehouse.id == body.warehouse_id)
+        .first()
+    )
+    if not warehouse:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Warehouse not found.",
+        )
+
+    existing = (
+        scoped(db, StorageLocation, user.tenant_id)
+        .filter(
+            StorageLocation.warehouse_id == body.warehouse_id,
+            StorageLocation.code == body.code,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "A location with this code already exists in the warehouse.",
+        )
+
+    location = StorageLocation(
+        tenant_id=user.tenant_id,
+        warehouse_id=body.warehouse_id,
+        code=body.code,
+        name=body.name,
+        is_active=True,
+    )
+    db.add(location)
+    db.commit()
+    db.refresh(location)
+
+    return {
+        "id": location.id,
+        "warehouse_id": location.warehouse_id,
+        "code": location.code,
+        "name": location.name,
+        "is_active": location.is_active,
+    }
+
+
+@router.get("/locations")
+def list_storage_locations(
+    warehouse_id: int | None = None,
+    user: User = Depends(require("inventory:read")),
+    db: Session = Depends(get_db),
+):
+    q = scoped(db, StorageLocation, user.tenant_id)
+
+    if warehouse_id is not None:
+        q = q.filter(StorageLocation.warehouse_id == warehouse_id)
+
+    rows = q.order_by(StorageLocation.code).all()
+
+    return [
+        {
+            "id": location.id,
+            "warehouse_id": location.warehouse_id,
+            "code": location.code,
+            "name": location.name,
+            "is_active": location.is_active,
+        }
+        for location in rows
+    ]
+
+
+@router.patch("/locations/{location_id}")
+def update_storage_location(
+    location_id: int,
+    body: StorageLocationUpdate,
+    user: User = Depends(require("inventory:write")),
+    db: Session = Depends(get_db),
+):
+    location = (
+        scoped(db, StorageLocation, user.tenant_id)
+        .filter(StorageLocation.id == location_id)
+        .first()
+    )
+
+    if not location:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Storage location not found.",
+        )
+
+    if body.code is not None and body.code != location.code:
+        duplicate = (
+            scoped(db, StorageLocation, user.tenant_id)
+            .filter(
+                StorageLocation.warehouse_id == location.warehouse_id,
+                StorageLocation.code == body.code,
+                StorageLocation.id != location.id,
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "A location with this code already exists in the warehouse.",
+            )
+
+    if body.code is not None:
+        location.code = body.code
+    if body.name is not None:
+        location.name = body.name
+    if body.is_active is not None:
+        location.is_active = body.is_active
+
+    db.commit()
+    db.refresh(location)
+
+    return {
+        "id": location.id,
+        "warehouse_id": location.warehouse_id,
+        "code": location.code,
+        "name": location.name,
+        "is_active": location.is_active,
+    }
 
 
 # ------------------------------------------------------------------ helpers
@@ -585,18 +732,27 @@ def generate_product_qr(
 @router.get("/stock")
 def stock_positions(
     warehouse_id: int | None = None,
+    location_id: int | None = None,
     user: User = Depends(require("inventory:read")),
     db: Session = Depends(get_db),
 ):
     q = scoped(db, StockItem, user.tenant_id)
-    if warehouse_id:
+
+    if warehouse_id is not None:
         q = q.filter(StockItem.warehouse_id == warehouse_id)
+
+    if location_id is not None:
+        q = q.filter(StockItem.location_id == location_id)
+
     return [
         {
             "product_id": s.product_id,
             "sku": s.product.sku if s.product else None,
             "name": s.product.name if s.product else None,
             "warehouse_id": s.warehouse_id,
+            "location_id": s.location_id,
+            "location_code": s.location.code if s.location else None,
+            "location_name": s.location.name if s.location else None,
             "batch_no": s.batch_no,
             "quantity": s.quantity,
             "reserved": s.reserved_qty,
@@ -675,7 +831,44 @@ def create_adjustment(
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That product does not exist.")
 
-    row = _stock_row(db, user.tenant_id, body.product_id, body.warehouse_id)
+    if body.location_id is not None:
+        location = (
+            scoped(db, StorageLocation, user.tenant_id)
+            .filter(
+                StorageLocation.id == body.location_id,
+                StorageLocation.warehouse_id == body.warehouse_id,
+                StorageLocation.is_active.is_(True),
+            )
+            .first()
+        )
+        if not location:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Storage location does not belong to this warehouse or is inactive.",
+            )
+
+    row = (
+        scoped(db, StockItem, user.tenant_id)
+        .filter(
+            StockItem.product_id == body.product_id,
+            StockItem.warehouse_id == body.warehouse_id,
+            StockItem.location_id == body.location_id,
+        )
+        .first()
+    )
+
+    if not row:
+        row = StockItem(
+            tenant_id=user.tenant_id,
+            product_id=body.product_id,
+            warehouse_id=body.warehouse_id,
+            location_id=body.location_id,
+            quantity=0,
+            reserved_qty=0,
+        )
+        db.add(row)
+        db.flush()
+
     new_qty = (row.quantity or 0) + body.quantity
     if new_qty < 0:
         raise HTTPException(

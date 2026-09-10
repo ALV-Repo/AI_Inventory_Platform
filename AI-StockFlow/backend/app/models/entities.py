@@ -163,28 +163,47 @@ class Product(Base, TenantMixin):
     __table_args__ = (
         Index("ix_products_tenant_sku", "tenant_id", "sku", unique=True),
     )
-
-
 class StockItem(Base, TenantMixin):
-    """Current stock position per product per warehouse (FR-INV-05, FR-INV-09)."""
+    """Current stock position per product per warehouse/location (FR-INV-05, FR-INV-09)."""
     __tablename__ = "stock_items"
+
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
-    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False, index=True)
+
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
+
+    warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+        index=True,
+    )
+
+    location_id = Column(
+        Integer,
+        ForeignKey("storage_locations.id"),
+        nullable=True,
+        index=True,
+    )
+
     batch_no = Column(String(64))
     expiry_date = Column(Date)
     quantity = Column(Float, default=0.0)
     reserved_qty = Column(Float, default=0.0)
-    avg_cost = Column(Float, default=0.0)                 # weighted average (FR-FIN-03)
+    avg_cost = Column(Float, default=0.0)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     product = relationship("Product", back_populates="stock_items")
+    location = relationship("StorageLocation")
+    warehouse = relationship("Warehouse")
 
     @property
     def available(self) -> float:
         return (self.quantity or 0) - (self.reserved_qty or 0)
-
-
 class StockMovement(Base, TenantMixin):
     """Immutable stock ledger — append only (FR-INV-12, NFR-08)."""
     __tablename__ = "stock_movements"
@@ -644,3 +663,29 @@ class CopilotConversation(Base, TenantMixin):
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)
+class StorageLocation(Base, TenantMixin):
+    """Storage/bin location within a warehouse (FR-INV-05)."""
+    __tablename__ = "storage_locations"
+
+    id = Column(Integer, primary_key=True)
+    warehouse_id = Column(
+        Integer,
+        ForeignKey("warehouses.id"),
+        nullable=False,
+        index=True,
+    )
+    code = Column(String(64), nullable=False)
+    name = Column(String(160), nullable=False)
+    is_active = Column(Boolean, default=True)
+
+    warehouse = relationship("Warehouse")
+
+    __table_args__ = (
+        Index(
+            "ix_storage_locations_tenant_warehouse_code",
+            "tenant_id",
+            "warehouse_id",
+            "code",
+            unique=True,
+        ),
+    )
