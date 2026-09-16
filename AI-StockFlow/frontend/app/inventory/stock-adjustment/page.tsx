@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import PageLayout from "../../../components/layout/PageLayout";
 
 type AdjustmentType = "Increase" | "Decrease";
+type AdjustmentStatus = "Draft" | "Pending Approval" | "Completed" | "Rejected";
 
 type Product = {
   id: number;
@@ -15,7 +17,7 @@ type Product = {
 };
 
 type AdjustmentRecord = {
-  id: number;
+  id: string;
   product: string;
   sku: string;
   warehouse: string;
@@ -23,1104 +25,588 @@ type AdjustmentRecord = {
   quantity: number;
   reason: string;
   date: string;
-  status: "Completed" | "Pending";
+  status: AdjustmentStatus;
   user: string;
+  reference: string;
+  stockBefore: number;
+  stockAfter: number;
+  notes: string;
 };
 
 const products: Product[] = [
-  {
-    id: 1,
-    name: "Hot Wheels Track Set",
-    sku: "TOY-HW-002",
-    category: "Toys",
-    warehouse: "Main Store",
-    currentStock: 24,
-    unitPrice: 4200,
-  },
-  {
-    id: 2,
-    name: "Bluetooth Speaker",
-    sku: "ELC-BT-608",
-    category: "Electronics",
-    warehouse: "Main Store",
-    currentStock: 8,
-    unitPrice: 2800,
-  },
-  {
-    id: 3,
-    name: "Football Size 5",
-    sku: "SPT-BL-908",
-    category: "Sports",
-    warehouse: "Warehouse A",
-    currentStock: 17,
-    unitPrice: 1500,
-  },
-  {
-    id: 4,
-    name: "Christmas Tree 4ft",
-    sku: "SEA-XM-968",
-    category: "Seasonal",
-    warehouse: "Main Store",
-    currentStock: 81,
-    unitPrice: 3500,
-  },
-  {
-    id: 5,
-    name: "Fashion Doll Set",
-    sku: "TOY-DL-410",
-    category: "Toys",
-    warehouse: "Warehouse B",
-    currentStock: 56,
-    unitPrice: 2200,
-  },
-  {
-    id: 6,
-    name: "Ceramic Planter",
-    sku: "HOM-PL-810",
-    category: "Home",
-    warehouse: "Main Store",
-    currentStock: 53,
-    unitPrice: 1800,
-  },
-  {
-    id: 7,
-    name: "Wireless Keyboard",
-    sku: "ELC-KB-138",
-    category: "Electronics",
-    warehouse: "Warehouse A",
-    currentStock: 3,
-    unitPrice: 3200,
-  },
-  {
-    id: 8,
-    name: "USB Microphone",
-    sku: "ELC-MC-508",
-    category: "Electronics",
-    warehouse: "Main Store",
-    currentStock: 12,
-    unitPrice: 4500,
-  },
+  { id: 1, name: "Hot Wheels Track Set", sku: "TOY-HW-002", category: "Toys", warehouse: "Main Store", currentStock: 24, unitPrice: 4200 },
+  { id: 2, name: "Bluetooth Speaker", sku: "ELC-BT-608", category: "Electronics", warehouse: "Main Store", currentStock: 8, unitPrice: 2800 },
+  { id: 3, name: "Football Size 5", sku: "SPT-BL-908", category: "Sports", warehouse: "Warehouse A", currentStock: 17, unitPrice: 1500 },
+  { id: 4, name: "Christmas Tree 4ft", sku: "SEA-XM-968", category: "Seasonal", warehouse: "Main Store", currentStock: 81, unitPrice: 3500 },
+  { id: 5, name: "Fashion Doll Set", sku: "TOY-DL-410", category: "Toys", warehouse: "Warehouse B", currentStock: 56, unitPrice: 2200 },
+  { id: 6, name: "Ceramic Planter", sku: "HOM-PL-810", category: "Home", warehouse: "Main Store", currentStock: 53, unitPrice: 1800 },
+  { id: 7, name: "Wireless Keyboard", sku: "ELC-KB-138", category: "Electronics", warehouse: "Warehouse A", currentStock: 3, unitPrice: 3200 },
+  { id: 8, name: "USB Microphone", sku: "ELC-MC-508", category: "Electronics", warehouse: "Main Store", currentStock: 12, unitPrice: 4500 },
 ];
 
 const initialAdjustments: AdjustmentRecord[] = [
-  {
-    id: 1,
-    product: "Bluetooth Speaker",
-    sku: "ELC-BT-608",
-    warehouse: "Main Store",
-    type: "Decrease",
-    quantity: 2,
-    reason: "Damaged units",
-    date: "20 Aug 2026",
-    status: "Completed",
-    user: "Rahul",
-  },
-  {
-    id: 2,
-    product: "Hot Wheels Track Set",
-    sku: "TOY-HW-002",
-    warehouse: "Main Store",
-    type: "Increase",
-    quantity: 5,
-    reason: "Stock received",
-    date: "19 Aug 2026",
-    status: "Completed",
-    user: "Admin User",
-  },
-  {
-    id: 3,
-    product: "USB Microphone",
-    sku: "ELC-MC-508",
-    warehouse: "Main Store",
-    type: "Decrease",
-    quantity: 1,
-    reason: "Missing stock",
-    date: "18 Aug 2026",
-    status: "Completed",
-    user: "Rahul",
-  },
-  {
-    id: 4,
-    product: "Football Size 5",
-    sku: "SPT-BL-908",
-    warehouse: "Warehouse A",
-    type: "Increase",
-    quantity: 3,
-    reason: "Physical count",
-    date: "17 Aug 2026",
-    status: "Pending",
-    user: "Priya",
-  },
+  { id: "ADJ-001", product: "Bluetooth Speaker", sku: "ELC-BT-608", warehouse: "Main Store", type: "Decrease", quantity: 2, reason: "Damaged units", date: "20 Aug 2026", status: "Completed", user: "Rahul", reference: "ADJ-001", stockBefore: 10, stockAfter: 8, notes: "" },
+  { id: "ADJ-002", product: "Hot Wheels Track Set", sku: "TOY-HW-002", warehouse: "Main Store", type: "Increase", quantity: 5, reason: "Stock received", date: "19 Aug 2026", status: "Completed", user: "Admin User", reference: "ADJ-002", stockBefore: 19, stockAfter: 24, notes: "" },
+  { id: "ADJ-003", product: "USB Microphone", sku: "ELC-MC-508", warehouse: "Main Store", type: "Decrease", quantity: 1, reason: "Missing stock", date: "18 Aug 2026", status: "Completed", user: "Rahul", reference: "ADJ-003", stockBefore: 13, stockAfter: 12, notes: "" },
+  { id: "ADJ-004", product: "Football Size 5", sku: "SPT-BL-908", warehouse: "Warehouse A", type: "Increase", quantity: 3, reason: "Physical count", date: "17 Aug 2026", status: "Pending Approval", user: "Priya", reference: "ADJ-004", stockBefore: 14, stockAfter: 17, notes: "" },
 ];
 
+const reasonOptions = [
+  "Damaged units",
+  "Stock received",
+  "Missing stock",
+  "Physical count",
+  "Counting variance",
+  "Expiry",
+  "Quality issue",
+  "System correction",
+  "Other",
+];
+
+const statusClass: Record<AdjustmentStatus, string> = {
+  Draft: "bg-gray-100 text-gray-700",
+  "Pending Approval": "bg-amber-50 text-amber-700",
+  Completed: "bg-green-50 text-green-700",
+  Rejected: "bg-red-50 text-red-700",
+};
+
+const readJSON = <T,>(key: string, fallback: T): T => {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJSON = (key: string, value: unknown) => {
+  if (typeof window !== "undefined") localStorage.setItem(key, JSON.stringify(value));
+};
+
+const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+
 export default function StockAdjustmentPage() {
-  const [selectedProductId, setSelectedProductId] = useState<number>(1);
-  const [adjustmentType, setAdjustmentType] =
-    useState<AdjustmentType>("Increase");
+  const [selectedProductId, setSelectedProductId] = useState(1);
+  const [adjustmentType, setAdjustmentType] = useState<AdjustmentType>("Increase");
+  const [quantity, setQuantity] = useState(1);
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+  const [user, setUser] = useState("Admin User");
+  const [warehouseFilter, setWarehouseFilter] = useState("All Warehouses");
+  const [typeFilter, setTypeFilter] = useState("All Types");
+  const [statusFilter, setStatusFilter] = useState("All Statuses");
+  const [search, setSearch] = useState("");
+  const [adjustments, setAdjustments] = useState<AdjustmentRecord[]>([]);
+  const [stockLevels, setStockLevels] = useState<Record<number, number>>({});
+  const [message, setMessage] = useState("");
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<AdjustmentRecord | null>(null);
 
-  const [quantity, setQuantity] = useState<number>(1);
-  const [reason, setReason] = useState<string>("");
-
-  const [search, setSearch] = useState<string>("");
-  const [warehouseFilter, setWarehouseFilter] =
-    useState<string>("All Warehouses");
-  const [typeFilter, setTypeFilter] =
-    useState<string>("All Types");
-
-  const [adjustments, setAdjustments] = useState<AdjustmentRecord[]>(() => {
-  if (typeof window === "undefined") {
-    return initialAdjustments;
-  }
-
-  const savedAdjustments = localStorage.getItem("inventory-adjustments");
-
-  if (savedAdjustments) {
-    return JSON.parse(savedAdjustments);
-  }
-
-  return initialAdjustments;
-});
-
-const [stockLevels, setStockLevels] = useState<Record<number, number>>({});
-
-const [message, setMessage] = useState<string>("");
-
-useEffect(() => {
-  const savedStockLevels = localStorage.getItem("inventory-stock-levels");
-  const savedAdjustments = localStorage.getItem("inventory-adjustments");
-
-  if (savedStockLevels) {
-    setStockLevels(JSON.parse(savedStockLevels));
-  }
-
-  if (savedAdjustments) {
-    setAdjustments(JSON.parse(savedAdjustments));
-  }
-
-  if (!localStorage.getItem("inventory-stock-ledger")) {
-    localStorage.setItem(
-      "inventory-stock-ledger",
-      JSON.stringify([])
-    );
-  }
-}, []);
+  useEffect(() => {
+    setAdjustments(readJSON("inventory-adjustments", initialAdjustments));
+    setStockLevels(readJSON("inventory-stock-levels", {}));
+  }, []);
 
   const selectedProduct = useMemo(() => {
-  const product =
-    products.find((product) => product.id === selectedProductId) ??
-    products[0];
+    const product = products.find((item) => item.id === selectedProductId) ?? products[0];
+    return { ...product, currentStock: stockLevels[product.id] ?? product.currentStock };
+  }, [selectedProductId, stockLevels]);
 
-  return {
-    ...product,
-    currentStock: stockLevels[product.id] ?? product.currentStock,
-  };
-}, [selectedProductId, stockLevels]);
+  const newStock = adjustmentType === "Increase"
+    ? selectedProduct.currentStock + Math.max(0, quantity)
+    : Math.max(0, selectedProduct.currentStock - Math.max(0, quantity));
 
   const filteredAdjustments = useMemo(() => {
+    const term = search.trim().toLowerCase();
     return adjustments.filter((item) => {
-      const matchesSearch =
-        item.product.toLowerCase().includes(search.toLowerCase()) ||
-        item.sku.toLowerCase().includes(search.toLowerCase());
-
-      const matchesWarehouse =
-        warehouseFilter === "All Warehouses" ||
-        item.warehouse === warehouseFilter;
-
-      const matchesType =
-        typeFilter === "All Types" || item.type === typeFilter;
-
-      return matchesSearch && matchesWarehouse && matchesType;
+      const matchesSearch = !term ||
+        item.product.toLowerCase().includes(term) ||
+        item.sku.toLowerCase().includes(term) ||
+        item.reference.toLowerCase().includes(term) ||
+        item.reason.toLowerCase().includes(term);
+      return matchesSearch &&
+        (warehouseFilter === "All Warehouses" || item.warehouse === warehouseFilter) &&
+        (typeFilter === "All Types" || item.type === typeFilter) &&
+        (statusFilter === "All Statuses" || item.status === statusFilter);
     });
-  }, [adjustments, search, warehouseFilter, typeFilter]);
+  }, [adjustments, search, warehouseFilter, typeFilter, statusFilter]);
 
-  const totalAdjustments = adjustments.length;
+  const metrics = useMemo(() => ({
+    total: adjustments.length,
+    increases: adjustments.filter((x) => x.type === "Increase").length,
+    decreases: adjustments.filter((x) => x.type === "Decrease").length,
+    pending: adjustments.filter((x) => x.status === "Pending Approval").length,
+    completed: adjustments.filter((x) => x.status === "Completed").length,
+    increaseUnits: adjustments.filter((x) => x.type === "Increase").reduce((s, x) => s + x.quantity, 0),
+    decreaseUnits: adjustments.filter((x) => x.type === "Decrease").reduce((s, x) => s + x.quantity, 0),
+  }), [adjustments]);
 
-  const increaseCount = adjustments.filter(
-    (item) => item.type === "Increase"
-  ).length;
-
-  const decreaseCount = adjustments.filter(
-    (item) => item.type === "Decrease"
-  ).length;
-
-  const pendingCount = adjustments.filter(
-    (item) => item.status === "Pending"
-  ).length;
-
-  const newStock =
-    adjustmentType === "Increase"
-      ? selectedProduct.currentStock + quantity
-      : Math.max(0, selectedProduct.currentStock - quantity);
-        const handleAdjustment = () => {
+  const validate = () => {
     if (!reason.trim()) {
-      setMessage("Please enter a reason for the adjustment.");
-      return;
+      setMessage("Please select an adjustment reason.");
+      return false;
     }
-
-    if (quantity <= 0) {
+    if (!Number.isFinite(quantity) || quantity <= 0) {
       setMessage("Quantity must be greater than 0.");
-      return;
+      return false;
     }
-
-    if (
-      adjustmentType === "Decrease" &&
-      quantity > selectedProduct.currentStock
-    ) {
+    if (adjustmentType === "Decrease" && quantity > selectedProduct.currentStock) {
       setMessage("Decrease quantity cannot be greater than current stock.");
-      return;
+      return false;
     }
-
-    const updatedStock =
-  adjustmentType === "Increase"
-    ? selectedProduct.currentStock + quantity
-    : selectedProduct.currentStock - quantity;
-
-setStockLevels((previous) => {
-  const updatedStockLevels = {
-    ...previous,
-    [selectedProduct.id]: updatedStock,
+    return true;
   };
 
-  localStorage.setItem(
-    "inventory-stock-levels",
-    JSON.stringify(updatedStockLevels)
-  );
+  const createAdjustment = (submitForApproval: boolean) => {
+    if (!validate()) return;
 
-  const savedProducts = localStorage.getItem("inventory-products");
-
-  if (savedProducts) {
-    const inventoryProducts = JSON.parse(savedProducts) as Array<
-      Record<string, unknown>
-    >;
-
-    const updatedProducts = inventoryProducts.map((product) => {
-      const sameSku =
-        String(product.sku ?? "").toLowerCase() ===
-        selectedProduct.sku.toLowerCase();
-
-      const sameWarehouse =
-        String(product.warehouse ?? "").toLowerCase() ===
-        selectedProduct.warehouse.toLowerCase();
-
-      if (!sameSku || !sameWarehouse) {
-        return product;
-      }
-
-      return {
-        ...product,
-        onHand: updatedStock,
-        on_hand: updatedStock,
-        available: updatedStock,
-      };
-    });
-
-    localStorage.setItem(
-      "inventory-products",
-      JSON.stringify(updatedProducts)
-    );
-  }
-
-  return updatedStockLevels;
-});
-
-const savedAuditLogs = localStorage.getItem("audit-logs");
-const currentAuditLogs = savedAuditLogs
-  ? JSON.parse(savedAuditLogs)
-  : [];
-
-const newAuditLog = {
-  id: `AUD-${Date.now()}`,
-  timestamp: new Date().toLocaleString("en-IN"),
-  user: "Admin User",
-  role: "Admin",
-  action: "Updated",
-  module: "Inventory",
-  description: `${adjustmentType} adjustment of ${quantity} units for ${selectedProduct.name}`,
-  status: "Success",
-  ip: "Local",
-};
-
-localStorage.setItem(
-  "audit-logs",
-  JSON.stringify([newAuditLog, ...currentAuditLogs])
-);
-
-const savedStockLedger = localStorage.getItem("inventory-stock-ledger");
-const currentStockLedger = savedStockLedger
-  ? JSON.parse(savedStockLedger)
-  : [];
-
-const newStockLedgerEntry = {
-  id: `LED-${Date.now()}`,
-  timestamp: new Date().toLocaleString("en-IN"),
-  product: selectedProduct.name,
-  sku: selectedProduct.sku,
-  warehouse: selectedProduct.warehouse,
-  movementType: adjustmentType,
-  quantity: adjustmentType === "Increase" ? quantity : -quantity,
-  stockBefore: selectedProduct.currentStock,
-  stockAfter: updatedStock,
-  reason,
-  reference: `ADJ-${Date.now()}`,
-  user: "Admin User",
-};
-
-localStorage.setItem(
-  "inventory-stock-ledger",
-  JSON.stringify([newStockLedgerEntry, ...currentStockLedger])
-);
-
-    const newRecord: AdjustmentRecord = {
-      id: adjustments.length + 1,
+    const now = new Date();
+    const timestamp = now.toLocaleString("en-IN");
+    const reference = `ADJ-${now.getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const record: AdjustmentRecord = {
+      id: reference,
       product: selectedProduct.name,
       sku: selectedProduct.sku,
       warehouse: selectedProduct.warehouse,
       type: adjustmentType,
       quantity,
       reason,
-      date: "20 Aug 2026",
-      status: "Completed",
-      user: "Admin User",
+      date: timestamp,
+      status: submitForApproval ? "Pending Approval" : "Draft",
+      user,
+      reference,
+      stockBefore: selectedProduct.currentStock,
+      stockAfter: newStock,
+      notes,
     };
 
-    setAdjustments((previous) => {
-  const updatedAdjustments = [newRecord, ...previous];
+    const next = [record, ...adjustments];
+    setAdjustments(next);
+    writeJSON("inventory-adjustments", next);
 
-  localStorage.setItem(
-    "inventory-adjustments",
-    JSON.stringify(updatedAdjustments)
-  );
-
-  return updatedAdjustments;
-});
-
-    setMessage(
-      `${adjustmentType} adjustment of ${quantity} units completed successfully.`
-    );
-
+    if (submitForApproval) {
+      setMessage(`${reference} submitted for approval. Inventory has not been changed yet.`);
+    } else {
+      setMessage(`${reference} saved as draft. Inventory has not been changed.`);
+    }
     setQuantity(1);
     setReason("");
+    setNotes("");
+    setShowConfirm(false);
   };
 
-  const clearFilters = () => {
-    setSearch("");
-    setWarehouseFilter("All Warehouses");
-    setTypeFilter("All Types");
+  const completeAdjustment = (record: AdjustmentRecord) => {
+    if (record.status !== "Pending Approval") return;
+
+    const product = products.find((x) => x.sku === record.sku && x.warehouse === record.warehouse);
+    if (!product) {
+      setMessage("Product could not be matched for inventory update.");
+      return;
+    }
+
+    const currentStock = stockLevels[product.id] ?? product.currentStock;
+    const updatedStock = record.type === "Increase"
+      ? currentStock + record.quantity
+      : currentStock - record.quantity;
+
+    if (updatedStock < 0) {
+      setMessage("Adjustment cannot make inventory negative.");
+      return;
+    }
+
+    const updatedStockLevels = { ...stockLevels, [product.id]: updatedStock };
+    setStockLevels(updatedStockLevels);
+    writeJSON("inventory-stock-levels", updatedStockLevels);
+
+    const inventoryProducts = readJSON<Record<string, unknown>[]>("inventory-products", []);
+    if (inventoryProducts.length) {
+      writeJSON("inventory-products", inventoryProducts.map((item) => {
+        const sameSku = String(item.sku ?? "").toLowerCase() === record.sku.toLowerCase();
+        const sameWarehouse = String(item.warehouse ?? "").toLowerCase() === record.warehouse.toLowerCase();
+        if (!sameSku || !sameWarehouse) return item;
+        return {
+          ...item,
+          onHand: updatedStock,
+          on_hand: updatedStock,
+          available: updatedStock,
+          availableStock: updatedStock,
+          lastStockUpdate: new Date().toISOString(),
+        };
+      }));
+    }
+
+    const ledger = readJSON<Record<string, unknown>[]>("inventory-stock-ledger", []);
+    const ledgerEntry = {
+      id: `LED-${Date.now()}`,
+      transactionId: `TXN-${record.reference}`,
+      type: "ADJUSTMENT",
+      transactionType: "ADJUSTMENT",
+      movementType: record.type,
+      referenceId: record.reference,
+      referenceType: "Stock Adjustment",
+      product: record.product,
+      sku: record.sku,
+      warehouse: record.warehouse,
+      quantityBefore: currentStock,
+      stockBefore: currentStock,
+      quantityChange: record.type === "Increase" ? record.quantity : -record.quantity,
+      quantityAfter: updatedStock,
+      stockAfter: updatedStock,
+      availableStock: updatedStock,
+      reason: record.reason,
+      notes: record.notes,
+      user: record.user,
+      timestamp: new Date().toISOString(),
+    };
+    writeJSON("inventory-stock-ledger", [ledgerEntry, ...ledger]);
+
+    const auditLogs = readJSON<Record<string, unknown>[]>("audit-logs", []);
+    writeJSON("audit-logs", [{
+      id: `AUD-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      user: record.user,
+      role: "Admin",
+      action: "Stock Adjustment Completed",
+      module: "Inventory",
+      description: `${record.type} adjustment of ${record.quantity} units for ${record.product}`,
+      referenceId: record.reference,
+      status: "Success",
+      ip: "Local",
+    }, ...auditLogs]);
+
+    const updatedRecords = adjustments.map((item) =>
+      item.id === record.id ? { ...item, status: "Completed" as AdjustmentStatus, stockBefore: currentStock, stockAfter: updatedStock } : item,
+    );
+    setAdjustments(updatedRecords);
+    writeJSON("inventory-adjustments", updatedRecords);
+    setSelectedRecord(null);
+    setMessage(`${record.reference} approved and completed. Inventory and stock ledger updated.`);
   };
+
+  const rejectAdjustment = (record: AdjustmentRecord) => {
+    const updated = adjustments.map((item) =>
+      item.id === record.id ? { ...item, status: "Rejected" as AdjustmentStatus } : item,
+    );
+    setAdjustments(updated);
+    writeJSON("inventory-adjustments", updated);
+    setSelectedRecord(null);
+    setMessage(`${record.reference} rejected. Inventory was not changed.`);
+  };
+
+  const deleteDraft = (record: AdjustmentRecord) => {
+    if (record.status !== "Draft") return;
+    const updated = adjustments.filter((item) => item.id !== record.id);
+    setAdjustments(updated);
+    writeJSON("inventory-adjustments", updated);
+    setSelectedRecord(null);
+    setMessage(`${record.reference} deleted.`);
+  };
+
+  const exportCSV = () => {
+    if (!filteredAdjustments.length) {
+      setMessage("No adjustment records to export.");
+      return;
+    }
+    const headers = ["Reference", "Product", "SKU", "Warehouse", "Type", "Quantity", "Reason", "Date", "Status", "User", "Stock Before", "Stock After"];
+    const rows = filteredAdjustments.map((x) => [
+      x.reference, x.product, x.sku, x.warehouse, x.type, x.quantity, x.reason, x.date, x.status, x.user, x.stockBefore, x.stockAfter,
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "stock-adjustments.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const resetForm = () => {
+    setSelectedProductId(1);
+    setAdjustmentType("Increase");
+    setQuantity(1);
+    setReason("");
+    setNotes("");
+    setMessage("Adjustment form reset.");
+  };
+
+  const warehouses = [...new Set(products.map((x) => x.warehouse))];
 
   return (
-    <main className="min-h-screen bg-[#f5f7fa] px-6 py-8 text-[#12213a]">
-      <div className="mx-auto max-w-7xl">
-        {/* HEADER */}
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm font-medium text-blue-600">
-              Inventory / Stock Adjustment
-            </p>
-
-            <h1 className="mt-1 text-3xl font-bold">
-              Stock Adjustment
-            </h1>
-
-            <p className="mt-2 text-sm text-gray-500">
-              Increase or decrease inventory stock with a complete adjustment
-              history.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              document
-                .getElementById("adjustment-form")
-                ?.scrollIntoView({ behavior: "smooth" });
-            }}
-            className="rounded-lg bg-[#12213a] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1c3154]"
-          >
-            + New Adjustment
-          </button>
-        </div>
-
-        {/* SUMMARY CARDS */}
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Total Adjustments
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-[#12213a]">
-              {totalAdjustments}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              All inventory adjustments
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Stock Increased
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-green-600">
-              {increaseCount}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Positive adjustments
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Stock Decreased
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-red-500">
-              {decreaseCount}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Negative adjustments
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Pending Approval
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-orange-500">
-              {pendingCount}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Waiting for approval
-            </p>
-          </div>
-        </div>
-
-        {/* ADJUSTMENT WORKFLOW */}
-        <section className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-5">
-            <h2 className="text-lg font-semibold">
-              Adjustment Workflow
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Follow the standard process for changing inventory quantities.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600">
-                1
+    <PageLayout>
+      <main className="min-h-screen bg-[#f5f7fa] px-4 py-6 text-[#12213a] md:px-6 md:py-8">
+        <div className="mx-auto max-w-[1500px]">
+          <header className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Inventory Control / Adjustments</p>
+              <div className="mt-1 flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-black tracking-tight">Stock Adjustment</h1>
+                <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wider text-gray-500">
+                  Controlled Inventory Change
+                </span>
               </div>
-
-              <h3 className="font-semibold">Select Product</h3>
-
-              <p className="mt-1 text-xs text-gray-500">
-                Choose the product and warehouse.
+              <p className="mt-2 max-w-3xl text-sm text-gray-500">
+                Record justified stock corrections with approval workflow, audit history and immutable-style ledger references.
               </p>
             </div>
-
-            <div className="rounded-xl border border-purple-200 bg-purple-50 p-5">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-purple-100 font-bold text-purple-600">
-                2
-              </div>
-
-              <h3 className="font-semibold">Choose Action</h3>
-
-              <p className="mt-1 text-xs text-gray-500">
-                Increase or decrease available stock.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-orange-200 bg-orange-50 p-5">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 font-bold text-orange-600">
-                3
-              </div>
-
-              <h3 className="font-semibold">Enter Quantity</h3>
-
-              <p className="mt-1 text-xs text-gray-500">
-                Enter the quantity and adjustment reason.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-green-200 bg-green-50 p-5">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-green-100 font-bold text-green-600">
-                4
-              </div>
-
-              <h3 className="font-semibold">Complete</h3>
-
-              <p className="mt-1 text-xs text-gray-500">
-                Save the adjustment in inventory history.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* ADJUSTMENT FORM */}
-        <section
-          id="adjustment-form"
-          className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
-        >
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold">
-              Create Stock Adjustment
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Update inventory stock for a selected product.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* PRODUCT */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Product
-              </label>
-
-              <select
-                value={selectedProductId}
-                onChange={(event) =>
-                  setSelectedProductId(Number(event.target.value))
-                }
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
-              >
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name} — {product.sku}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* WAREHOUSE */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Warehouse
-              </label>
-
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium">
-                {selectedProduct.warehouse}
-              </div>
-            </div>
-
-            {/* CURRENT STOCK */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Current Stock
-              </label>
-
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-2xl font-bold text-green-600">
-                {selectedProduct.currentStock} units
-              </div>
-            </div>
-
-            {/* UNIT PRICE */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Unit Price
-              </label>
-
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold">
-                ₹{selectedProduct.unitPrice.toLocaleString("en-IN")}
-              </div>
-            </div>
-          </div>
-
-          {/* TYPE */}
-          <div className="mt-6">
-            <label className="mb-3 block text-sm font-medium text-gray-700">
-              Adjustment Type
-            </label>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setAdjustmentType("Increase")}
-                className={`rounded-xl border p-5 text-left transition ${
-                  adjustmentType === "Increase"
-                    ? "border-green-400 bg-green-50"
-                    : "border-gray-200 bg-white hover:border-green-300"
-                }`}
-              >
-                <div className="text-lg font-semibold text-green-600">
-                  + Increase Stock
-                </div>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Add units to the current inventory.
-                </p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={resetForm} className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50">
+                Reset
               </button>
-
-              <button
-                type="button"
-                onClick={() => setAdjustmentType("Decrease")}
-                className={`rounded-xl border p-5 text-left transition ${
-                  adjustmentType === "Decrease"
-                    ? "border-red-400 bg-red-50"
-                    : "border-gray-200 bg-white hover:border-red-300"
-                }`}
-              >
-                <div className="text-lg font-semibold text-red-500">
-                  − Decrease Stock
-                </div>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Remove units from the current inventory.
-                </p>
+              <button type="button" onClick={() => document.getElementById("adjustment-form")?.scrollIntoView({ behavior: "smooth" })} className="rounded-xl bg-[#12213a] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#1c3154]">
+                + New Adjustment
               </button>
             </div>
-          </div>
+          </header>
 
-          {/* QUANTITY + REASON */}
-          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Quantity
-              </label>
+          <section className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["Total Adjustments", metrics.total, "All recorded requests", "text-[#12213a]"],
+              ["Increase Units", metrics.increaseUnits, `${metrics.increases} increase records`, "text-green-600"],
+              ["Decrease Units", metrics.decreaseUnits, `${metrics.decreases} decrease records`, "text-red-500"],
+              ["Pending Approval", metrics.pending, `${metrics.completed} completed`, "text-amber-600"],
+            ].map(([label, value, sub, color]) => (
+              <div key={label} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</p>
+                <p className={`mt-2 text-3xl font-black ${color}`}>{value}</p>
+                <p className="mt-1 text-xs text-gray-500">{sub}</p>
+              </div>
+            ))}
+          </section>
 
-              <input
-                type="number"
-                min="1"
-                value={quantity}
-                onChange={(event) =>
-                  setQuantity(Number(event.target.value))
-                }
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
-              />
+          <section className="mb-7 grid gap-4 lg:grid-cols-4">
+            {[
+              ["01", "Select product", "Identify the exact SKU and warehouse."],
+              ["02", "Define adjustment", "Increase or decrease with quantity."],
+              ["03", "Justify change", "Use a controlled reason and notes."],
+              ["04", "Approve & post", "Update stock and create ledger entry."],
+            ].map(([step, title, sub]) => (
+              <div key={step} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-xs font-black text-blue-600">{step}</div>
+                <p className="font-black">{title}</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">{sub}</p>
+              </div>
+            ))}
+          </section>
+
+          <section id="adjustment-form" className="mb-7 rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-6 py-5">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg font-black">Create Adjustment Request</h2>
+                  <p className="mt-1 text-xs text-gray-500">Requests are submitted for approval before inventory is changed.</p>
+                </div>
+                <span className="rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-black text-blue-700">AUDIT CONTROLLED</span>
+              </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Reason
+            <div className="p-6">
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                <label className="block xl:col-span-2">
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Product / SKU</span>
+                  <select value={selectedProductId} onChange={(e) => setSelectedProductId(Number(e.target.value))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
+                    {products.map((product) => <option key={product.id} value={product.id}>{product.name} — {product.sku}</option>)}
+                  </select>
+                </label>
+
+                <div>
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Warehouse</span>
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-bold">{selectedProduct.warehouse}</div>
+                </div>
+
+                <div>
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Current Stock</span>
+                  <div className="rounded-xl border border-green-100 bg-green-50 px-3 py-3 text-lg font-black text-green-700">{selectedProduct.currentStock} units</div>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <button type="button" onClick={() => setAdjustmentType("Increase")} className={`rounded-2xl border p-5 text-left transition ${adjustmentType === "Increase" ? "border-green-400 bg-green-50 ring-4 ring-green-50" : "border-gray-200 hover:border-green-300"}`}>
+                  <p className="text-lg font-black text-green-600">+ Increase Stock</p>
+                  <p className="mt-1 text-xs text-gray-500">Add units after an approved inventory correction.</p>
+                </button>
+                <button type="button" onClick={() => setAdjustmentType("Decrease")} className={`rounded-2xl border p-5 text-left transition ${adjustmentType === "Decrease" ? "border-red-400 bg-red-50 ring-4 ring-red-50" : "border-gray-200 hover:border-red-300"}`}>
+                  <p className="text-lg font-black text-red-500">− Decrease Stock</p>
+                  <p className="mt-1 text-xs text-gray-500">Remove units for damage, shortage or another approved reason.</p>
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-5 md:grid-cols-3">
+                <label>
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Quantity</span>
+                  <input type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(0, Number(e.target.value) || 0))} className="w-full rounded-xl border border-gray-200 px-3 py-3 text-sm font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" />
+                </label>
+                <label>
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Reason Code</span>
+                  <select value={reason} onChange={(e) => setReason(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
+                    <option value="">Select reason</option>
+                    {reasonOptions.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Requested By</span>
+                  <input value={user} onChange={(e) => setUser(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" />
+                </label>
+              </div>
+
+              <label className="mt-5 block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Supporting Notes / Document Reference</span>
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Explain the adjustment, physical count reference, damage note, or supporting document..." className="w-full resize-none rounded-xl border border-gray-200 px-3 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" />
               </label>
 
-              <select
-  value={reason}
-  onChange={(event) => setReason(event.target.value)}
-  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
-  required
->
-  <option value="">Select adjustment reason</option>
-  <option value="Damaged units">Damaged units</option>
-  <option value="Stock received">Stock received</option>
-  <option value="Missing stock">Missing stock</option>
-  <option value="Physical count">Physical count</option>
-</select>
+              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Stock Preview</p>
+                    <p className="mt-1 font-bold text-gray-700">{selectedProduct.name} · {selectedProduct.sku}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-semibold text-gray-500">{selectedProduct.currentStock}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="text-xl font-black text-[#12213a]">{newStock}</span>
+                    <span className={`rounded-full px-3 py-1.5 text-xs font-black ${adjustmentType === "Increase" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                      {adjustmentType === "Increase" ? "+" : "−"}{quantity}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {message && <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">{message}</div>}
+
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <button type="button" onClick={() => createAdjustment(false)} className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50">Save Draft</button>
+                <button type="button" onClick={() => { if (validate()) setShowConfirm(true); }} className={`rounded-xl px-6 py-2.5 text-sm font-bold text-white shadow-sm ${adjustmentType === "Increase" ? "bg-green-600 hover:bg-green-700" : "bg-red-500 hover:bg-red-600"}`}>
+                  Submit for Approval
+                </button>
+              </div>
             </div>
-          </div>
+          </section>
 
-          {/* PREVIEW */}
-          <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-blue-600">
-              Stock Preview
-            </p>
-
-            <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <section className="mb-7 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-sm text-gray-500">
-                  {selectedProduct.name}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-400">
-                  {selectedProduct.sku}
-                </p>
+                <h2 className="text-lg font-black">Adjustment History</h2>
+                <p className="mt-1 text-xs text-gray-500">Review requests, approvals and completed stock movements.</p>
               </div>
-
-              <div className="text-left md:text-right">
-                <p className="text-xs text-gray-500">
-                  {selectedProduct.currentStock} → {newStock} units
-                </p>
-
-                <p
-                  className={`mt-1 text-lg font-bold ${
-                    adjustmentType === "Increase"
-                      ? "text-green-600"
-                      : "text-red-500"
-                  }`}
-                >
-                  {adjustmentType === "Increase" ? "+" : "-"}
-                  {quantity} units
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* MESSAGE */}
-          {message && (
-            <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-              {message}
-            </div>
-          )}
-
-          {/* BUTTON */}
-          <div className="mt-6 flex justify-end">
-            <button
-              type="button"
-              onClick={handleAdjustment}
-              className={`rounded-lg px-6 py-3 text-sm font-semibold text-white ${
-                adjustmentType === "Increase"
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-red-500 hover:bg-red-600"
-              }`}
-            >
-              {adjustmentType === "Increase"
-                ? "Increase Stock"
-                : "Decrease Stock"}
-            </button>
-          </div>
-        </section>
-
-                {/* FILTERS */}
-        <section className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">
-                Adjustment History
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Search and review previous inventory adjustments.
-              </p>
+              <button type="button" onClick={exportCSV} className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">Export CSV</button>
             </div>
 
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="text-sm font-medium text-blue-600 hover:text-blue-800"
-            >
-              Clear Filters
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {/* SEARCH */}
-            <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">
-                Search
-              </label>
-
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Product or SKU..."
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
-              />
-            </div>
-
-            {/* WAREHOUSE */}
-            <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">
-                Warehouse
-              </label>
-
-              <select
-                value={warehouseFilter}
-                onChange={(event) =>
-                  setWarehouseFilter(event.target.value)
-                }
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
-              >
+            <div className="grid gap-3 md:grid-cols-4">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search product, SKU, reference..." className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500" />
+              <select value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">
                 <option>All Warehouses</option>
-                <option>Main Store</option>
-                <option>Warehouse A</option>
-                <option>Warehouse B</option>
+                {warehouses.map((x) => <option key={x}>{x}</option>)}
+              </select>
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">
+                <option>All Types</option><option>Increase</option><option>Decrease</option>
+              </select>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">
+                <option>All Statuses</option><option>Draft</option><option>Pending Approval</option><option>Completed</option><option>Rejected</option>
               </select>
             </div>
+          </section>
 
-            {/* TYPE */}
-            <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">
-                Adjustment Type
-              </label>
-
-              <select
-                value={typeFilter}
-                onChange={(event) =>
-                  setTypeFilter(event.target.value)
-                }
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
-              >
-                <option>All Types</option>
-                <option>Increase</option>
-                <option>Decrease</option>
-              </select>
-            </div>
-          </div>
-        </section>
-
-        {/* HISTORY TABLE */}
-        <section className="mb-8 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-5">
-            <div className="flex items-center justify-between">
+          <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
               <div>
-                <h2 className="text-lg font-semibold">
-                  Adjustment List
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Showing {filteredAdjustments.length} of{" "}
-                  {adjustments.length} adjustments
-                </p>
+                <h2 className="font-black">Adjustment Register</h2>
+                <p className="mt-1 text-xs text-gray-500">Showing {filteredAdjustments.length} of {adjustments.length} records</p>
               </div>
-
-              <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
-                {filteredAdjustments.length} Records
-              </div>
+              <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[10px] font-black text-gray-600">{filteredAdjustments.length} Records</span>
             </div>
-          </div>
 
-          {/* DESKTOP TABLE */}
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full">
-              <thead className="border-b border-gray-200 bg-gray-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Product
-                  </th>
-
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Warehouse
-                  </th>
-
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Type
-                  </th>
-
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Quantity
-                  </th>
-
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Reason
-                  </th>
-
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Date
-                  </th>
-
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Status
-                  </th>
-
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    User
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredAdjustments.length === 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1250px] text-left">
+                <thead className="border-b border-gray-100 bg-gray-50">
                   <tr>
-                    <td
-                      colSpan={8}
-                      className="px-6 py-12 text-center text-sm text-gray-500"
-                    >
-                      No adjustment records found.
-                    </td>
+                    {["Reference", "Product", "Warehouse", "Movement", "Qty", "Stock", "Reason", "Date", "Status", "User", "Action"].map((heading) => (
+                      <th key={heading} className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">{heading}</th>
+                    ))}
                   </tr>
-                ) : (
-                  filteredAdjustments.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50"
-                    >
-                      {/* PRODUCT */}
-                      <td className="px-6 py-5">
-                        <div>
-                          <p className="text-sm font-semibold text-[#12213a]">
-                            {item.product}
-                          </p>
-
-                          <p className="mt-1 text-xs text-gray-400">
-                            {item.sku}
-                          </p>
-                        </div>
-                      </td>
-
-                      {/* WAREHOUSE */}
-                      <td className="px-6 py-5 text-sm text-gray-600">
-                        {item.warehouse}
-                      </td>
-
-                      {/* TYPE */}
-                      <td className="px-6 py-5">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            item.type === "Increase"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-600"
-                          }`}
-                        >
-                          {item.type}
-                        </span>
-                      </td>
-
-                      {/* QUANTITY */}
-                      <td className="px-6 py-5">
-                        <span
-                          className={`text-sm font-bold ${
-                            item.type === "Increase"
-                              ? "text-green-600"
-                              : "text-red-500"
-                          }`}
-                        >
-                          {item.type === "Increase" ? "+" : "-"}
-                          {item.quantity}
-                        </span>
-                      </td>
-
-                      {/* REASON */}
-                      <td className="max-w-[180px] px-6 py-5 text-sm text-gray-600">
-                        {item.reason}
-                      </td>
-
-                      {/* DATE */}
-                      <td className="px-6 py-5 text-sm text-gray-500">
-                        {item.date}
-                      </td>
-
-                      {/* STATUS */}
-                      <td className="px-6 py-5">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            item.status === "Completed"
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-orange-100 text-orange-700"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-
-                      {/* USER */}
-                      <td className="px-6 py-5 text-sm font-medium text-gray-700">
-                        {item.user}
-                      </td>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredAdjustments.length === 0 ? (
+                    <tr><td colSpan={11} className="px-6 py-12 text-center text-sm text-gray-500">No adjustment records found.</td></tr>
+                  ) : filteredAdjustments.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-5 py-4 text-xs font-black text-[#12213a]">{item.reference}</td>
+                      <td className="px-5 py-4"><p className="text-sm font-bold">{item.product}</p><p className="mt-1 text-[10px] text-gray-400">{item.sku}</p></td>
+                      <td className="px-5 py-4 text-xs text-gray-600">{item.warehouse}</td>
+                      <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${item.type === "Increase" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{item.type}</span></td>
+                      <td className={`px-5 py-4 text-sm font-black ${item.type === "Increase" ? "text-green-600" : "text-red-500"}`}>{item.type === "Increase" ? "+" : "−"}{item.quantity}</td>
+                      <td className="px-5 py-4 text-xs font-semibold text-gray-600">{item.stockBefore} → {item.stockAfter}</td>
+                      <td className="max-w-[180px] px-5 py-4 text-xs text-gray-600">{item.reason}</td>
+                      <td className="px-5 py-4 text-xs text-gray-500">{item.date}</td>
+                      <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${statusClass[item.status]}`}>{item.status}</span></td>
+                      <td className="px-5 py-4 text-xs font-semibold text-gray-600">{item.user}</td>
+                      <td className="px-5 py-4"><button type="button" onClick={() => setSelectedRecord(item)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-[10px] font-bold hover:bg-gray-50">View</button></td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-          {/* MOBILE CARDS */}
-          <div className="divide-y divide-gray-100 md:hidden">
-            {filteredAdjustments.length === 0 ? (
-              <div className="px-6 py-12 text-center text-sm text-gray-500">
-                No adjustment records found.
-              </div>
-            ) : (
-              filteredAdjustments.map((item) => (
-                <div key={item.id} className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-[#12213a]">
-                        {item.product}
-                      </p>
-
-                      <p className="mt-1 text-xs text-gray-400">
-                        {item.sku}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        item.type === "Increase"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-600"
-                      }`}
-                    >
-                      {item.type}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-gray-400">
-                        Warehouse
-                      </p>
-
-                      <p className="mt-1 text-sm font-medium">
-                        {item.warehouse}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-gray-400">
-                        Quantity
-                      </p>
-
-                      <p
-                        className={`mt-1 text-sm font-bold ${
-                          item.type === "Increase"
-                            ? "text-green-600"
-                            : "text-red-500"
-                        }`}
-                      >
-                        {item.type === "Increase" ? "+" : "-"}
-                        {item.quantity}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-gray-400">
-                        Reason
-                      </p>
-
-                      <p className="mt-1 text-sm font-medium">
-                        {item.reason}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-gray-400">
-                        Date
-                      </p>
-
-                      <p className="mt-1 text-sm font-medium">
-                        {item.date}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        item.status === "Completed"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-orange-100 text-orange-700"
-                      }`}
-                    >
-                      {item.status}
-                    </span>
-
-                    <span className="text-xs text-gray-500">
-                      {item.user}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-                {/* FOOTER */}
-
-        <div className="border-t border-gray-200 py-8 text-center">
-          <p className="text-xs text-gray-400">
-            AI StockFlow • Stock Adjustment Management
-          </p>
+          <footer className="py-8 text-center text-[10px] font-semibold text-gray-400">
+            AI StockFlow • Controlled Stock Adjustment Management
+          </footer>
         </div>
 
-      </div>
-    </main>
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+              <div className="border-b border-gray-100 px-6 py-5">
+                <h2 className="font-black text-[#12213a]">Submit Adjustment for Approval?</h2>
+                <p className="mt-1 text-xs text-gray-500">The stock will not change until the request is approved and completed.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 p-6">
+                <div className="rounded-xl bg-gray-50 p-4"><p className="text-[10px] font-black uppercase text-gray-400">Product</p><p className="mt-1 text-sm font-bold">{selectedProduct.name}</p></div>
+                <div className="rounded-xl bg-gray-50 p-4"><p className="text-[10px] font-black uppercase text-gray-400">Movement</p><p className="mt-1 text-sm font-bold">{adjustmentType} {quantity}</p></div>
+                <div className="rounded-xl bg-gray-50 p-4"><p className="text-[10px] font-black uppercase text-gray-400">Reason</p><p className="mt-1 text-sm font-bold">{reason}</p></div>
+                <div className="rounded-xl bg-gray-50 p-4"><p className="text-[10px] font-black uppercase text-gray-400">Preview</p><p className="mt-1 text-sm font-bold">{selectedProduct.currentStock} → {newStock}</p></div>
+              </div>
+              <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+                <button type="button" onClick={() => setShowConfirm(false)} className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700">Go Back</button>
+                <button type="button" onClick={() => createAdjustment(true)} className="rounded-xl bg-[#12213a] px-5 py-2.5 text-sm font-bold text-white">Confirm & Submit</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedRecord && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+                <div>
+                  <div className="flex items-center gap-2"><h2 className="font-black">{selectedRecord.reference}</h2><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${statusClass[selectedRecord.status]}`}>{selectedRecord.status}</span></div>
+                  <p className="mt-1 text-xs text-gray-500">{selectedRecord.product} · {selectedRecord.sku}</p>
+                </div>
+                <button type="button" onClick={() => setSelectedRecord(null)} className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100">✕</button>
+              </div>
+              <div className="grid gap-4 p-6 md:grid-cols-2">
+                {[
+                  ["Warehouse", selectedRecord.warehouse],
+                  ["Movement", `${selectedRecord.type} ${selectedRecord.quantity}`],
+                  ["Stock Before", String(selectedRecord.stockBefore)],
+                  ["Stock After", String(selectedRecord.stockAfter)],
+                  ["Reason", selectedRecord.reason],
+                  ["Requested By", selectedRecord.user],
+                  ["Date", selectedRecord.date],
+                  ["Notes", selectedRecord.notes || "—"],
+                ].map(([label, value]) => <div key={label} className="rounded-xl bg-gray-50 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</p><p className="mt-1 text-sm font-bold text-gray-700">{value}</p></div>)}
+              </div>
+              <div className="flex flex-wrap justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+                {selectedRecord.status === "Pending Approval" && <>
+                  <button type="button" onClick={() => rejectAdjustment(selectedRecord)} className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-600">Reject</button>
+                  <button type="button" onClick={() => completeAdjustment(selectedRecord)} className="rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white">Approve & Complete</button>
+                </>}
+                {selectedRecord.status === "Draft" && <button type="button" onClick={() => deleteDraft(selectedRecord)} className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-600">Delete Draft</button>}
+                <button type="button" onClick={() => setSelectedRecord(null)} className="rounded-xl bg-[#12213a] px-5 py-2.5 text-sm font-bold text-white">Close</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </PageLayout>
   );
 }

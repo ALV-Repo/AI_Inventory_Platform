@@ -7,17 +7,39 @@ export const metadata: Metadata = {
   description: "AI Inventory Management Platform",
 };
 
+const themeScript = `
+(function () {
+  try {
+    const savedTheme = localStorage.getItem("stockflow-dark-mode");
+    const root = document.documentElement;
+
+    if (savedTheme === "true") {
+      root.classList.add("dark");
+      root.classList.add("stockflow-dark");
+      root.style.colorScheme = "dark";
+    } else {
+      root.classList.remove("dark");
+      root.classList.remove("stockflow-dark");
+      root.style.colorScheme = "light";
+    }
+  } catch (error) {
+    console.error("Theme initialization failed:", error);
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body>
-        <AuthGuard>
-          {children}
-        </AuthGuard>
+        <AuthGuard>{children}</AuthGuard>
       </body>
     </html>
   );

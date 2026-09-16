@@ -39,6 +39,30 @@ type CreditCustomer = {
   overdue: boolean;
 };
 
+type POSCustomer = {
+  id: number;
+  name: string;
+  phone: string;
+  email?: string;
+  city?: string;
+  company?: string;
+  gstin?: string;
+  creditLimit?: number;
+  priceLevel?: string;
+  totalPurchases?: number;
+  orders?: number;
+  status?: string;
+};
+
+type Salesperson = {
+  id: number;
+  name: string;
+  role: "Salesperson" | "Manager" | "Owner";
+  sales: number;
+  orders: number;
+  target: number;
+};
+
 const creditCustomers: CreditCustomer[] = [
   {
     name: "Apex Retail Solutions",
@@ -343,12 +367,18 @@ const [syncingQueue, setSyncingQueue] =
 
     const [customerPhone, setCustomerPhone] = useState("");
 
+    const [customers, setCustomers] = useState<POSCustomer[]>([]);
+const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+
     const selectedCreditCustomer = creditCustomers.find(
   (item) => item.name.toLowerCase() === customer.trim().toLowerCase()
 );
 
     const [discount, setDiscount] =
   useState(0);
+
+  const [discountType, setDiscountType] =
+  useState<"Amount" | "Percentage">("Amount");
 
   /* =========================================================
      PAYMENT
@@ -360,7 +390,59 @@ const [syncingQueue, setSyncingQueue] =
   ] = useState("Cash");
 
   const [userRole, setUserRole] = useState<"Cashier" | "Manager">("Cashier");
+  const [performanceAccess, setPerformanceAccess] =
+  useState<"Individual" | "Owner">("Individual");
   const [creditOverride, setCreditOverride] = useState(false);
+
+  const [salespeople, setSalespeople] = useState<Salesperson[]>([
+  {
+    id: 1,
+    name: "Rahul Sharma",
+    role: "Salesperson",
+    sales: 0,
+    orders: 0,
+    target: 100000,
+  },
+  {
+    id: 2,
+    name: "Priya Sharma",
+    role: "Salesperson",
+    sales: 0,
+    orders: 0,
+    target: 100000,
+  },
+]);
+
+useEffect(() => {
+  const savedSalespeople = localStorage.getItem(
+    "stockflow-salespeople"
+  );
+
+  if (!savedSalespeople) {
+    return;
+  }
+
+  try {
+    const parsedSalespeople =
+      JSON.parse(savedSalespeople);
+
+    if (Array.isArray(parsedSalespeople)) {
+      setSalespeople(parsedSalespeople);
+    }
+  } catch {
+    localStorage.removeItem("stockflow-salespeople");
+  }
+}, []);
+
+useEffect(() => {
+  localStorage.setItem(
+    "stockflow-salespeople",
+    JSON.stringify(salespeople)
+  );
+}, [salespeople]);
+
+const [selectedSalespersonId, setSelectedSalespersonId] =
+  useState<number>(1);
 
   /* =========================================================
      SALE UI STATE
@@ -390,6 +472,7 @@ const [
   customer: string;
 customerPhone: string;
 paymentMethod: string;
+salesperson: string;
   items: {
     name: string;
     quantity: number;
@@ -554,8 +637,7 @@ async function syncOfflineSales() {
       setProductsLoading(true);
       setProductsError(null);
 
-      const response =
-        await getProducts();
+      const response = await getProducts();
 
       const rawProducts =
         Array.isArray(response)
@@ -566,33 +648,117 @@ async function syncOfflineSales() {
               ? response.data
               : []);
 
-      const normalizedProducts =
-        rawProducts
-          .map(normalizeProduct)
-          .filter(
-            (
-              product
-            ): product is Product =>
-              product !== null
-          );
-
-      setProducts(
-        normalizedProducts
-      );
+      const normalizedProducts = rawProducts
+        .map(normalizeProduct)
+        .filter(
+          (product): product is Product =>
+            product !== null
+        );
 
       /*
-       * Update existing cart items with
-       * the latest backend stock.
+       * IMPORTANT: Inventory stock adjustments in this frontend
+       * are persisted in localStorage under `inventory-products`
+       * and `inventory-stock-levels`.
+       *
+       * The POS API can still return the original/demo stock value,
+       * so merge the locally updated inventory stock before rendering
+       * the Sales page. This keeps Inventory and POS synchronized in
+       * the frontend demo without changing the backend.
+       */
+      let syncedProducts = normalizedProducts;
+
+      try {
+        const savedInventory =
+          localStorage.getItem("inventory-products");
+
+        const savedStockLevels =
+          localStorage.getItem("inventory-stock-levels");
+
+        const inventoryProducts = savedInventory
+          ? JSON.parse(savedInventory)
+          : [];
+
+        const stockLevels = savedStockLevels
+          ? JSON.parse(savedStockLevels)
+          : {};
+
+        if (Array.isArray(inventoryProducts)) {
+          syncedProducts = normalizedProducts.map((product) => {
+            const localProduct = inventoryProducts.find(
+              (item: Record<string, unknown>) =>
+                String(item.id ?? "") === String(product.id) ||
+                String(item.sku ?? "").trim().toLowerCase() ===
+                  product.sku.trim().toLowerCase()
+            ) as Record<string, unknown> | undefined;
+
+            if (!localProduct) {
+              return product;
+            }
+
+            const localId = Number(localProduct.id);
+
+            const stockFromLevels =
+              Number.isFinite(localId) &&
+              Object.prototype.hasOwnProperty.call(
+                stockLevels,
+                String(localId)
+              )
+                ? Number(stockLevels[String(localId)])
+                : NaN;
+
+            const localOnHand = Number(
+              localProduct.onHand ??
+                localProduct.on_hand ??
+                localProduct.quantity ??
+                localProduct.available ??
+                NaN
+            );
+
+            const localReserved = Number(
+              localProduct.reserved ??
+                localProduct.reserved_quantity ??
+                0
+            );
+
+            const onHand =
+              Number.isFinite(stockFromLevels)
+                ? stockFromLevels
+                : localOnHand;
+
+            if (!Number.isFinite(onHand)) {
+              return product;
+            }
+
+            const availableStock = Math.max(
+              onHand - (Number.isFinite(localReserved) ? localReserved : 0),
+              0
+            );
+
+            return {
+              ...product,
+              stock: availableStock,
+            };
+          });
+        }
+      } catch (storageError) {
+        console.warn(
+          "Unable to merge local inventory stock with POS products:",
+          storageError
+        );
+      }
+
+      setProducts(syncedProducts);
+
+      /*
+       * Update existing cart items with the latest synchronized stock.
        */
       setCart((currentCart) =>
         currentCart
           .map((cartItem) => {
-            const latest =
-              normalizedProducts.find(
-                (product) =>
-                  product.id ===
-                  cartItem.id
-              );
+            const latest = syncedProducts.find(
+              (product) =>
+                product.id === cartItem.id
+            );
 
             if (!latest) {
               return cartItem;
@@ -608,8 +774,7 @@ async function syncOfflineSales() {
             };
           })
           .filter(
-            (item) =>
-              item.quantity > 0
+            (item) => item.quantity > 0
           )
       );
     } catch (error) {
@@ -627,6 +792,7 @@ async function syncOfflineSales() {
       setProductsLoading(false);
     }
   }
+
 
     /* =========================================================
      LOAD TODAY'S SALES
@@ -669,13 +835,25 @@ async function syncOfflineSales() {
     }
   }
 
-  /* =========================================================
-     INITIAL LOAD
-     ========================================================= */
-
   useEffect(() => {
   loadProducts();
   loadTodaySales();
+
+  const savedCustomers =
+    localStorage.getItem("stockflow-customers");
+
+  if (savedCustomers) {
+    try {
+      const parsedCustomers =
+        JSON.parse(savedCustomers);
+
+      if (Array.isArray(parsedCustomers)) {
+        setCustomers(parsedCustomers);
+      }
+    } catch {
+      localStorage.removeItem("stockflow-customers");
+    }
+  }
 }, []);
 
 useEffect(() => {
@@ -739,11 +917,28 @@ useEffect(() => {
 }, [cart]);
 
   const discountAmount = useMemo(() => {
+  const discountValue = Math.max(
+    0,
+    Number(discount) || 0
+  );
+
+  if (discountType === "Percentage") {
+    const percentage = Math.min(
+      discountValue,
+      100
+    );
+
+    return Math.min(
+      (subtotal * percentage) / 100,
+      subtotal
+    );
+  }
+
   return Math.min(
-    Math.max(0, Number(discount) || 0),
+    discountValue,
     subtotal
   );
-}, [discount, subtotal]);
+}, [discount, discountType, subtotal]);
 
 const total = useMemo(() => {
   return subtotal - discountAmount + taxAmount;
@@ -919,6 +1114,9 @@ const total = useMemo(() => {
   setCart([]);
   setCustomer("");
   setCustomerPhone("");
+  setSelectedCustomerId(null);
+  setDiscount(0);
+  setDiscountType("Amount");
   setSaleError(null);
   setShowSuccess(false);
 }
@@ -999,6 +1197,10 @@ const total = useMemo(() => {
 
     setProcessing(true);
 
+const selectedSalesperson = salespeople.find(
+  (salesperson) => salesperson.id === selectedSalespersonId
+);
+
 try {
   /*
    * If the browser is offline, save the sale
@@ -1008,7 +1210,7 @@ try {
     const offlineSale: OfflineSale = {
       id: `offline-${Date.now()}`,
       payload: {
-        customer_id: null,
+        customer_id: selectedCustomerId,
         warehouse_id:
           DEFAULT_WAREHOUSE_ID,
         channel: "POS",
@@ -1031,12 +1233,27 @@ try {
       offlineSale,
     ]);
 
+    if (selectedSalesperson) {
+  setSalespeople((current) =>
+    current.map((salesperson) =>
+      salesperson.id === selectedSalesperson.id
+        ? {
+            ...salesperson,
+            sales: salesperson.sales + total,
+            orders: salesperson.orders + 1,
+          }
+        : salesperson
+    )
+  );
+}
+
     setLastReceipt({
   receiptNumber: `POS-${Date.now()}`,
   date: new Date().toLocaleString("en-IN"),
   customer: customer || "Walk-in Customer",
   customerPhone,
   paymentMethod,
+  salesperson: selectedSalesperson?.name ?? "Unassigned",
   items: cart.map((item) => ({
     name: item.name,
     quantity: item.quantity,
@@ -1052,6 +1269,9 @@ try {
 setCart([]);
 setCustomer("");
 setCustomerPhone("");
+setSelectedCustomerId(null);
+setDiscount(0);
+setDiscountType("Amount");
 setPaymentMethod("Cash");
 
 setOfflineSaleQueued(true);
@@ -1077,8 +1297,8 @@ return;
        * Send `lines`, NOT `items`.
        */
 
-      const payload = {
-        customer_id: null,
+const payload = {
+        customer_id: selectedCustomerId,
 
         warehouse_id:
           DEFAULT_WAREHOUSE_ID,
@@ -1108,6 +1328,20 @@ return;
           payload
         );
 
+        if (selectedSalesperson) {
+  setSalespeople((current) =>
+    current.map((salesperson) =>
+      salesperson.id === selectedSalesperson.id
+        ? {
+            ...salesperson,
+            sales: salesperson.sales + total,
+            orders: salesperson.orders + 1,
+          }
+        : salesperson
+    )
+  );
+}
+
       console.log(
         "Sale created successfully:",
         createdSale
@@ -1128,6 +1362,7 @@ return;
 customer: customer || "Walk-in Customer",
 customerPhone,
 paymentMethod,
+salesperson: selectedSalesperson?.name ?? "Unassigned",
   items: cart.map((item) => ({
     name: item.name,
     quantity: item.quantity,
@@ -1142,6 +1377,10 @@ paymentMethod,
 setCart([]);
 
 setCustomer("");
+setSelectedCustomerId(null);
+
+setDiscount(0);
+setDiscountType("Amount");
 
 setPaymentMethod("Cash");
 
@@ -1283,12 +1522,11 @@ setShowReceipt(true);
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">
-                Point of Sale
+                Sales Management
               </h1>
 
               <p className="mt-1 text-xs text-slate-500">
-                Create sales, manage cart items
-                and process payments.
+                Manage sales transactions, customers, payments, and orders.
               </p>
             </div>
 
@@ -1317,7 +1555,7 @@ setShowReceipt(true);
                 disabled={cart.length === 0}
                 className="rounded-md border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Clear Cart
+                Cancel Sale
               </button>
 
             </div>
@@ -1808,17 +2046,41 @@ setShowReceipt(true);
                     Customer
                   </label>
 
-                  <input
-                    type="text"
-                    value={customer}
-                    onChange={(event) =>
-                      setCustomer(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Customer name (optional)"
-                    className="h-9 w-full rounded-md border border-slate-200 px-3 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  />
+                  <select
+  value={selectedCustomerId ?? ""}
+  onChange={(event) => {
+    const customerId = Number(event.target.value);
+
+    if (!event.target.value) {
+      setSelectedCustomerId(null);
+      setCustomer("");
+      setCustomerPhone("");
+      return;
+    }
+
+    const selected = customers.find(
+      (item) => item.id === customerId
+    );
+
+    if (!selected) return;
+
+    setSelectedCustomerId(selected.id);
+    setCustomer(selected.name);
+    setCustomerPhone(selected.phone || "");
+  }}
+  className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+>
+  <option value="">
+    Walk-in Customer / Select Customer
+  </option>
+
+  {customers.map((item) => (
+    <option key={item.id} value={item.id}>
+      {item.name}
+      {item.phone ? ` — ${item.phone}` : ""}
+    </option>
+  ))}
+</select>
 
                   <div className="mt-2">
   <label className="mb-1 block text-[9px] font-medium text-slate-600">
@@ -1905,6 +2167,181 @@ setShowReceipt(true);
   </select>
 </div>
 
+<div className="mt-3">
+  <label className="mb-1 block text-[9px] font-medium text-slate-600">
+    Salesperson
+  </label>
+
+  <select
+    value={selectedSalespersonId}
+    onChange={(event) =>
+      setSelectedSalespersonId(Number(event.target.value))
+    }
+    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+  >
+    {salespeople.map((salesperson) => (
+      <option key={salesperson.id} value={salesperson.id}>
+        {salesperson.name}
+      </option>
+    ))}
+  </select>
+</div>
+
+<div className="mt-3">
+  <label className="mb-1 block text-[9px] font-medium text-slate-600">
+    Performance Access
+  </label>
+
+  <select
+    value={performanceAccess}
+    onChange={(event) =>
+      setPerformanceAccess(
+        event.target.value as "Individual" | "Owner"
+      )
+    }
+    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+  >
+    <option value="Individual">Individual</option>
+    <option value="Owner">Owner</option>
+  </select>
+</div>
+
+<div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2.5">
+  <div className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">
+    {performanceAccess === "Owner"
+  ? "Team Performance"
+  : "Salesperson Performance"}
+  </div>
+
+  {(() => {
+  const selected = salespeople.find(
+    (salesperson) =>
+      salesperson.id === selectedSalespersonId
+  );
+
+  if (!selected) {
+    return null;
+  }
+
+  const displaySales =
+    performanceAccess === "Owner"
+      ? salespeople.reduce(
+          (sum, salesperson) =>
+            sum + salesperson.sales,
+          0
+        )
+      : selected.sales;
+
+  const displayOrders =
+    performanceAccess === "Owner"
+      ? salespeople.reduce(
+          (sum, salesperson) =>
+            sum + salesperson.orders,
+          0
+        )
+      : selected.orders;
+
+  const displayTarget =
+    performanceAccess === "Owner"
+      ? salespeople.reduce(
+          (sum, salesperson) =>
+            sum + salesperson.target,
+          0
+        )
+      : selected.target;
+
+  const achievement =
+    displayTarget > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (displaySales / displayTarget) * 100
+          )
+        )
+      : 0;
+
+    return (
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        <div>
+          <div className="text-[9px] text-slate-500">
+            Sales
+          </div>
+          <div className="text-xs font-semibold text-slate-900">
+            {formatCurrency(displaySales)}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[9px] text-slate-500">
+            Orders
+          </div>
+          <div className="text-xs font-semibold text-slate-900">
+            {displayOrders}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[9px] text-slate-500">
+            Target
+          </div>
+          <div className="text-xs font-semibold text-slate-900">
+            {achievement}%
+          </div>
+        </div>
+      </div>
+    );
+  })()}
+</div>
+
+      {performanceAccess === "Owner" && (
+        <div className="mt-3 border-t border-blue-100 pt-3">
+          <div className="mb-2 text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+            Individual Performance
+          </div>
+
+          <div className="space-y-2">
+            {salespeople.map((salesperson) => {
+              const salespersonAchievement =
+                salesperson.target > 0
+                  ? Math.min(
+                      100,
+                      Math.round(
+                        (salesperson.sales /
+                          salesperson.target) *
+                          100
+                      )
+                    )
+                  : 0;
+
+              return (
+                <div
+                  key={salesperson.id}
+                  className="flex items-center justify-between rounded-md bg-white px-2.5 py-2"
+                >
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-800">
+                      {salesperson.name}
+                    </div>
+                    <div className="text-[9px] text-slate-400">
+                      {salesperson.orders} orders
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-[10px] font-semibold text-slate-800">
+                      {formatCurrency(salesperson.sales)}
+                    </div>
+                    <div className="text-[9px] text-blue-600">
+                      {salespersonAchievement}% target
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
                 <div className="mt-3">
 
                   <label className="mb-1 block text-[9px] font-medium text-slate-600">
@@ -1914,22 +2351,46 @@ setShowReceipt(true);
                   <div className="mt-3">
   <label className="mb-1 block text-[9px] font-medium text-slate-600">
     Discount
-  </label>
+    </label>
+
+  <select
+    value={discountType}
+    onChange={(event) =>
+      setDiscountType(
+        event.target.value as "Amount" | "Percentage"
+      )
+    }
+    className="mb-2 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+  >
+    <option value="Amount">Amount (₹)</option>
+    <option value="Percentage">Percentage (%)</option>
+  </select>
 
   <input
     type="number"
     min="0"
-    max={subtotal}
+    max={discountType === "Percentage" ? 100 : subtotal}
     value={discount}
-    onChange={(event) =>
-      setDiscount(
-        Math.min(
-          Math.max(0, Number(event.target.value) || 0),
-          subtotal
-        )
-      )
-    }
-    placeholder="0"
+    placeholder={
+  discountType === "Percentage"
+    ? "Enter %"
+    : "Enter amount"
+}
+    onChange={(event) => {
+  const value = Math.max(
+    0,
+    Number(event.target.value) || 0
+  );
+
+  setDiscount(
+    Math.min(
+      value,
+      discountType === "Percentage"
+        ? 100
+        : subtotal
+    )
+  );
+}}
     className="h-9 w-full rounded-md border border-slate-200 px-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
   />
 </div>

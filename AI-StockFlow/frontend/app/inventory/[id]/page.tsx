@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import PageLayout from "../../../components/layout/PageLayout";
 import useInventory from "../../../hooks/useInventory";
@@ -13,6 +13,26 @@ type Variant = {
   size: string;
   stock: number;
   price: number;
+};
+
+type TrackingMode = "None" | "Serial" | "Batch" | "Serial + Batch";
+
+type SerialRecord = {
+  id: string;
+  serialNumber: string;
+  status: "Available" | "Reserved" | "Sold" | "Transferred";
+  warehouse: string;
+  receivedDate: string;
+};
+
+type BatchRecord = {
+  id: string;
+  batchNumber: string;
+  quantity: number;
+  warehouse: string;
+  manufacturingDate: string;
+  expiryDate: string;
+  status: "Active" | "Expired" | "Quarantine";
 };
 
 type Product = {
@@ -496,6 +516,24 @@ const product: Product | undefined = apiProduct
   const scannerRef =
     useRef<HTMLInputElement>(null);
 
+  // FR-INV-04: serial / batch tracking
+  const [trackingMode, setTrackingMode] =
+    useState<TrackingMode>("None");
+  const [serialRecords, setSerialRecords] =
+    useState<SerialRecord[]>([]);
+  const [batchRecords, setBatchRecords] =
+    useState<BatchRecord[]>([]);
+  const [trackingModal, setTrackingModal] =
+    useState<"serial" | "batch" | null>(null);
+  const [serialNumber, setSerialNumber] = useState("");
+  const [batchNumber, setBatchNumber] = useState("");
+  const [batchQuantity, setBatchQuantity] = useState("");
+  const [manufacturingDate, setManufacturingDate] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [trackingWarehouse, setTrackingWarehouse] =
+    useState("Main Store");
+  const [trackingMessage, setTrackingMessage] = useState("");
+
   const selectedVariant = useMemo(() => {
   if (!product) {
     return undefined;
@@ -508,6 +546,210 @@ const product: Product | undefined = apiProduct
     ) ?? product.variants[0]
   );
 }, [product, selectedVariantId]);
+
+  const trackingStorageKey = product && selectedVariant
+    ? `inventory-tracking-${product.id}-${selectedVariant.sku}`
+    : "";
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !trackingStorageKey) {
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem(trackingStorageKey);
+
+      if (!stored) {
+        setSerialRecords([]);
+        setBatchRecords([]);
+        setTrackingMode("None");
+        return;
+      }
+
+      const parsed = JSON.parse(stored);
+
+      setTrackingMode(parsed?.trackingMode ?? "None");
+      setSerialRecords(
+        Array.isArray(parsed?.serialRecords)
+          ? parsed.serialRecords
+          : []
+      );
+      setBatchRecords(
+        Array.isArray(parsed?.batchRecords)
+          ? parsed.batchRecords
+          : []
+      );
+    } catch {
+      setTrackingMode("None");
+      setSerialRecords([]);
+      setBatchRecords([]);
+    }
+  }, [trackingStorageKey]);
+
+  const persistTracking = (
+    mode: TrackingMode,
+    serials: SerialRecord[],
+    batches: BatchRecord[]
+  ) => {
+    if (typeof window === "undefined" || !trackingStorageKey) {
+      return;
+    }
+
+    localStorage.setItem(
+      trackingStorageKey,
+      JSON.stringify({
+        trackingMode: mode,
+        serialRecords: serials,
+        batchRecords: batches,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  };
+
+  const addSerialRecord = () => {
+    const value = serialNumber.trim();
+
+    if (!value) {
+      setTrackingMessage("Serial number is required.");
+      return;
+    }
+
+    if (
+      serialRecords.some(
+        (item) =>
+          item.serialNumber.toLowerCase() === value.toLowerCase()
+      )
+    ) {
+      setTrackingMessage("This serial number already exists.");
+      return;
+    }
+
+    const record: SerialRecord = {
+      id: `SER-${Date.now()}`,
+      serialNumber: value,
+      status: "Available",
+      warehouse: trackingWarehouse,
+      receivedDate: new Date().toISOString().slice(0, 10),
+    };
+
+    const nextSerials = [...serialRecords, record];
+    const nextMode: TrackingMode =
+      trackingMode === "Batch" ? "Serial + Batch" : "Serial";
+
+    setSerialRecords(nextSerials);
+    setTrackingMode(nextMode);
+    persistTracking(nextMode, nextSerials, batchRecords);
+    setSerialNumber("");
+    setTrackingMessage("Serial number added successfully.");
+  };
+
+  const addBatchRecord = () => {
+    const value = batchNumber.trim();
+    const quantity = Number(batchQuantity);
+
+    if (!value || quantity <= 0) {
+      setTrackingMessage(
+        "Batch number and a quantity greater than 0 are required."
+      );
+      return;
+    }
+
+    if (!manufacturingDate || !expiryDate) {
+      setTrackingMessage(
+        "Manufacturing date and expiry date are required."
+      );
+      return;
+    }
+
+    if (expiryDate < manufacturingDate) {
+      setTrackingMessage(
+        "Expiry date cannot be earlier than manufacturing date."
+      );
+      return;
+    }
+
+    if (
+      batchRecords.some(
+        (item) =>
+          item.batchNumber.toLowerCase() === value.toLowerCase()
+      )
+    ) {
+      setTrackingMessage("This batch number already exists.");
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const record: BatchRecord = {
+      id: `BAT-${Date.now()}`,
+      batchNumber: value,
+      quantity,
+      warehouse: trackingWarehouse,
+      manufacturingDate,
+      expiryDate,
+      status: expiryDate < today ? "Expired" : "Active",
+    };
+
+    const nextBatches = [...batchRecords, record];
+    const nextMode: TrackingMode =
+      trackingMode === "Serial" ? "Serial + Batch" : "Batch";
+
+    setBatchRecords(nextBatches);
+    setTrackingMode(nextMode);
+    persistTracking(nextMode, serialRecords, nextBatches);
+    setBatchNumber("");
+    setBatchQuantity("");
+    setManufacturingDate("");
+    setExpiryDate("");
+    setTrackingMessage("Batch record added successfully.");
+  };
+
+  const removeSerialRecord = (id: string) => {
+    const nextSerials = serialRecords.filter(
+      (item) => item.id !== id
+    );
+    const nextMode: TrackingMode =
+      nextSerials.length > 0 && batchRecords.length > 0
+        ? "Serial + Batch"
+        : nextSerials.length > 0
+        ? "Serial"
+        : batchRecords.length > 0
+        ? "Batch"
+        : "None";
+
+    setSerialRecords(nextSerials);
+    setTrackingMode(nextMode);
+    persistTracking(nextMode, nextSerials, batchRecords);
+  };
+
+  const removeBatchRecord = (id: string) => {
+    const nextBatches = batchRecords.filter(
+      (item) => item.id !== id
+    );
+    const nextMode: TrackingMode =
+      serialRecords.length > 0 && nextBatches.length > 0
+        ? "Serial + Batch"
+        : serialRecords.length > 0
+        ? "Serial"
+        : nextBatches.length > 0
+        ? "Batch"
+        : "None";
+
+    setBatchRecords(nextBatches);
+    setTrackingMode(nextMode);
+    persistTracking(nextMode, serialRecords, nextBatches);
+  };
+
+  const closeTrackingModal = () => {
+    setTrackingModal(null);
+    setSerialNumber("");
+    setBatchNumber("");
+    setBatchQuantity("");
+    setManufacturingDate("");
+    setExpiryDate("");
+    setTrackingMessage("");
+  };
+
+
 
   const warehouseStocks =
   warehouseStock[product?.id ?? 0] ??
@@ -1128,6 +1370,184 @@ const product: Product | undefined = apiProduct
                 Current selling price
               </p>
             </div>
+          </section>
+
+          {/* FR-INV-04 — SERIAL & BATCH TRACKING */}
+          <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-bold text-[#12213a]">
+                    Serial &amp; Batch Tracking
+                  </h2>
+                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[9px] font-bold text-blue-700">
+                    FR-INV-04
+                  </span>
+                  <span className={`rounded-full px-2.5 py-1 text-[9px] font-bold ${
+                    trackingMode === "None"
+                      ? "bg-gray-100 text-gray-600"
+                      : "bg-green-100 text-green-700"
+                  }`}>
+                    {trackingMode === "None" ? "Not Configured" : trackingMode}
+                  </span>
+                </div>
+                <p className="mt-1 max-w-2xl text-xs text-gray-500">
+                  Track individual serial numbers or batches with manufacturing
+                  and expiry dates for the selected SKU.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTrackingModal("serial");
+                    setTrackingWarehouse(selectedWarehouse);
+                    setTrackingMessage("");
+                  }}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:border-blue-300 hover:bg-blue-50"
+                >
+                  + Add Serial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTrackingModal("batch");
+                    setTrackingWarehouse(selectedWarehouse);
+                    setTrackingMessage("");
+                  }}
+                  className="rounded-lg bg-[#12213a] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
+                >
+                  + Add Batch
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                  Tracking Mode
+                </p>
+                <p className="mt-1 text-sm font-bold text-[#12213a]">
+                  {trackingMode}
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                  Serial Records
+                </p>
+                <p className="mt-1 text-sm font-bold text-[#12213a]">
+                  {serialRecords.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                  Batch Quantity
+                </p>
+                <p className="mt-1 text-sm font-bold text-[#12213a]">
+                  {batchRecords.reduce((sum, item) => sum + item.quantity, 0)}
+                </p>
+              </div>
+            </div>
+
+            {trackingMode === "None" && (
+              <div className="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-5 text-center">
+                <p className="text-xs font-semibold text-gray-700">
+                  No serial or batch tracking configured
+                </p>
+                <p className="mt-1 text-[10px] text-gray-400">
+                  Add a serial or batch record to start unit-level traceability.
+                </p>
+              </div>
+            )}
+
+            {serialRecords.length > 0 && (
+              <div className="mt-5 overflow-x-auto rounded-xl border border-gray-200">
+                <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                  <p className="text-xs font-bold text-[#12213a]">
+                    Serial Numbers
+                  </p>
+                </div>
+                <table className="min-w-full text-left">
+                  <thead className="border-b border-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">Serial</th>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">Warehouse</th>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">Status</th>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">Received</th>
+                      <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase text-gray-500">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {serialRecords.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-blue-700">{item.serialNumber}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600">{item.warehouse}</td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full bg-green-100 px-2 py-1 text-[9px] font-semibold text-green-700">{item.status}</span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{item.receivedDate}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button type="button" onClick={() => removeSerialRecord(item.id)} className="text-[10px] font-semibold text-red-600 hover:text-red-800">
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {batchRecords.length > 0 && (
+              <div className="mt-5 overflow-x-auto rounded-xl border border-gray-200">
+                <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                  <p className="text-xs font-bold text-[#12213a]">
+                    Batch Records
+                  </p>
+                </div>
+                <table className="min-w-full text-left">
+                  <thead className="border-b border-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">Batch</th>
+                      <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase text-gray-500">Qty</th>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">Warehouse</th>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">MFG Date</th>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">Expiry</th>
+                      <th className="px-4 py-3 text-[10px] font-semibold uppercase text-gray-500">Status</th>
+                      <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase text-gray-500">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {batchRecords.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-blue-700">{item.batchNumber}</td>
+                        <td className="px-4 py-3 text-right text-xs font-bold text-[#12213a]">{item.quantity}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600">{item.warehouse}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{item.manufacturingDate}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-gray-700">{item.expiryDate}</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-1 text-[9px] font-semibold ${
+                            item.status === "Expired"
+                              ? "bg-red-100 text-red-700"
+                              : item.status === "Quarantine"
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-green-100 text-green-700"
+                          }`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button type="button" onClick={() => removeBatchRecord(item.id)} className="text-[10px] font-semibold text-red-600 hover:text-red-800">
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           {/* BIN BUILDER */}
@@ -1779,7 +2199,156 @@ const product: Product | undefined = apiProduct
             </div>
           </section>
 
-                {/* BARCODE SCANNER MODAL */}
+                {/* SERIAL / BATCH MODAL */}
+          {trackingModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-blue-500">
+                      FR-INV-04 · {selectedVariant?.sku}
+                    </p>
+                    <h2 className="mt-1 text-lg font-bold text-[#12213a]">
+                      {trackingModal === "serial"
+                        ? "Add Serial Number"
+                        : "Add Batch Record"}
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Tracking is stored locally for this SKU until the backend
+                      tracking API is connected.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeTrackingModal}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-sm font-bold text-gray-500 hover:bg-gray-200"
+                    aria-label="Close tracking modal"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="mt-5">
+                  <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                    Warehouse
+                  </label>
+                  <select
+                    value={trackingWarehouse}
+                    onChange={(event) => setTrackingWarehouse(event.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                  >
+                    {warehouseStocks.map((item) => (
+                      <option key={item.warehouse} value={item.warehouse}>
+                        {item.warehouse}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {trackingModal === "serial" ? (
+                  <div className="mt-4">
+                    <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                      Serial Number *
+                    </label>
+                    <input
+                      value={serialNumber}
+                      onChange={(event) => setSerialNumber(event.target.value)}
+                      placeholder="SN-2026-000001"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 font-mono text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      autoFocus
+                    />
+                    <p className="mt-2 text-[10px] text-gray-400">
+                      Serial numbers must be unique for this SKU.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                        Batch Number *
+                      </label>
+                      <input
+                        value={batchNumber}
+                        onChange={(event) => setBatchNumber(event.target.value)}
+                        placeholder="BATCH-2026-001"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 font-mono text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                        Quantity *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={batchQuantity}
+                        onChange={(event) => setBatchQuantity(event.target.value)}
+                        placeholder="100"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                        Manufacturing Date *
+                      </label>
+                      <input
+                        type="date"
+                        value={manufacturingDate}
+                        onChange={(event) => setManufacturingDate(event.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+                        Expiry Date *
+                      </label>
+                      <input
+                        type="date"
+                        value={expiryDate}
+                        min={manufacturingDate || undefined}
+                        onChange={(event) => setExpiryDate(event.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {trackingMessage && (
+                  <div className={`mt-4 rounded-lg border p-3 text-xs font-semibold ${
+                    trackingMessage.includes("successfully")
+                      ? "border-green-200 bg-green-50 text-green-700"
+                      : "border-red-200 bg-red-50 text-red-700"
+                  }`}>
+                    {trackingMessage}
+                  </div>
+                )}
+
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeTrackingModal}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={
+                      trackingModal === "serial"
+                        ? addSerialRecord
+                        : addBatchRecord
+                    }
+                    className="rounded-lg bg-[#12213a] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
+                  >
+                    Save {trackingModal === "serial" ? "Serial" : "Batch"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* BARCODE SCANNER MODAL */}
 
           {showBarcode && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

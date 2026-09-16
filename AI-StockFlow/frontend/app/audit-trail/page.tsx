@@ -36,7 +36,7 @@ const auditLogs: AuditLog[] = [
     action: "Created",
     module: "Sales",
     description:
-      "Created new point of sale transaction",
+      "Created new Sales Management transaction",
     status: "Success",
     ip: "192.168.1.102",
   },

@@ -1,15 +1,16 @@
 "use client";
 
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import PageLayout from "../../components/layout/PageLayout";
 
 type ReceiptStatus =
   | "Draft"
+  | "Pending QC"
   | "Partially Received"
-  | "Received";
+  | "Received"
+  | "Rejected";
+
+type QCStatus = "Not Inspected" | "Passed" | "Failed" | "Partial";
 
 type ReceiptItem = {
   id: number;
@@ -18,9 +19,15 @@ type ReceiptItem = {
   orderedQty: number;
   previouslyReceived: number;
   receivedQty: number;
+  acceptedQty: number;
+  rejectedQty: number;
   unit: string;
   batch: string;
   expiry: string;
+  serialNumbers: string;
+  qcStatus: QCStatus;
+  unitCost: number;
+  rejectionReason: string;
 };
 
 type PurchaseOrder = {
@@ -29,6 +36,28 @@ type PurchaseOrder = {
   date: string;
   warehouse: string;
   total: number;
+};
+
+type GoodsReceipt = {
+  id: string;
+  grnNumber: string;
+  purchaseOrder: string;
+  supplier: string;
+  warehouse: string;
+  receiptDate: string;
+  deliveryNote: string;
+  invoiceNumber: string;
+  status: ReceiptStatus;
+  qcStatus: QCStatus;
+  submittedAt: string;
+  createdBy: string;
+  items: ReceiptItem[];
+  totalOrdered: number;
+  totalPreviouslyReceived: number;
+  totalCurrentReceived: number;
+  totalAccepted: number;
+  totalRejected: number;
+  totalRemaining: number;
 };
 
 const purchaseOrders: PurchaseOrder[] = [
@@ -63,9 +92,15 @@ const initialItems: ReceiptItem[] = [
     orderedQty: 250,
     previouslyReceived: 0,
     receivedQty: 250,
+    acceptedQty: 250,
+    rejectedQty: 0,
     unit: "Units",
     batch: "BATCH-0826-A",
     expiry: "",
+    serialNumbers: "",
+    qcStatus: "Passed",
+    unitCost: 850,
+    rejectionReason: "",
   },
   {
     id: 2,
@@ -74,20 +109,32 @@ const initialItems: ReceiptItem[] = [
     orderedQty: 100,
     previouslyReceived: 0,
     receivedQty: 80,
+    acceptedQty: 80,
+    rejectedQty: 0,
     unit: "Units",
     batch: "BATCH-0826-B",
     expiry: "",
+    serialNumbers: "",
+    qcStatus: "Passed",
+    unitCost: 1450,
+    rejectionReason: "",
   },
   {
     id: 3,
     sku: "MON-24-004",
-    product: '24-inch Monitor',
+    product: "24-inch Monitor",
     orderedQty: 120,
     previouslyReceived: 0,
     receivedQty: 120,
+    acceptedQty: 120,
+    rejectedQty: 0,
     unit: "Units",
     batch: "BATCH-0826-C",
     expiry: "",
+    serialNumbers: "",
+    qcStatus: "Passed",
+    unitCost: 9200,
+    rejectionReason: "",
   },
   {
     id: 4,
@@ -96,1681 +143,1667 @@ const initialItems: ReceiptItem[] = [
     orderedQty: 150,
     previouslyReceived: 25,
     receivedQty: 50,
+    acceptedQty: 50,
+    rejectedQty: 0,
     unit: "Units",
     batch: "BATCH-0826-D",
     expiry: "",
+    serialNumbers: "",
+    qcStatus: "Passed",
+    unitCost: 650,
+    rejectionReason: "",
   },
 ];
 
-export default function GoodsReceiptsPage() {
-  const [selectedPO, setSelectedPO] =
-    useState(purchaseOrders[0].id);
+const defaultHistory: GoodsReceipt[] = [];
 
-  const [supplier, setSupplier] =
-    useState(purchaseOrders[0].supplier);
+const statusClasses: Record<ReceiptStatus, string> = {
+  Draft: "bg-gray-100 text-gray-700",
+  "Pending QC": "bg-purple-50 text-purple-700",
+  "Partially Received": "bg-amber-50 text-amber-700",
+  Received: "bg-green-50 text-green-700",
+  Rejected: "bg-red-50 text-red-700",
+};
 
-  const [warehouse, setWarehouse] =
-    useState(purchaseOrders[0].warehouse);
+const qcClasses: Record<QCStatus, string> = {
+  "Not Inspected": "bg-gray-100 text-gray-600",
+  Passed: "bg-green-50 text-green-700",
+  Failed: "bg-red-50 text-red-700",
+  Partial: "bg-amber-50 text-amber-700",
+};
 
-  const [receiptDate, setReceiptDate] =
-    useState("2026-08-22");
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
 
-  const [deliveryNote, setDeliveryNote] =
-    useState("");
-
-  const [invoiceNumber, setInvoiceNumber] =
-    useState("");
-
-  const [items, setItems] =
-    useState<ReceiptItem[]>(
-      initialItems
-    );
-
-  const [status, setStatus] =
-    useState<ReceiptStatus>("Draft");
-
-  const [showConfirm, setShowConfirm] =
-    useState(false);
-
-  const [message, setMessage] =
-    useState("");
-
-    const [grnNumber, setGrnNumber] =
-  useState("");
-
-const [submittedAt, setSubmittedAt] =
-  useState("");
-
-  const [showAddItem, setShowAddItem] =
-    useState(false);
-
-  const [newProduct, setNewProduct] =
-    useState("");
-
-  const [newSku, setNewSku] =
-    useState("");
-
-  const [newQuantity, setNewQuantity] =
-    useState("");
-
-    useEffect(() => {
-  const savedGRN = localStorage.getItem(
-    "stockflow-last-grn"
-  );
-
-  if (!savedGRN) {
-    return;
-  }
-
+const readJSON = <T,>(key: string, fallback: T): T => {
+  if (typeof window === "undefined") return fallback;
   try {
-    const data = JSON.parse(savedGRN);
-
-    if (data.grnNumber) {
-      setGrnNumber(data.grnNumber);
-    }
-
-    if (data.submittedAt) {
-      setSubmittedAt(data.submittedAt);
-    }
-
-    if (data.status) {
-      setStatus(data.status);
-    }
-
-    if (data.items) {
-      setItems(data.items);
-    }
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
-    localStorage.removeItem(
-      "stockflow-last-grn"
-    );
+    return fallback;
   }
-}, []);
+};
 
-  const selectedPurchaseOrder =
-    useMemo(
-      () =>
-        purchaseOrders.find(
-          (po) =>
-            po.id === selectedPO
-        ),
-      [selectedPO]
+const writeJSON = (key: string, value: unknown) => {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+};
+
+const toSafeNumber = (value: unknown, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
+const normalizeReceiptItem = (
+  item: Partial<ReceiptItem>,
+  index: number,
+): ReceiptItem => {
+  const orderedQty = Math.max(0, toSafeNumber(item.orderedQty));
+  const previouslyReceived = Math.max(0, toSafeNumber(item.previouslyReceived));
+  const receivedQty = Math.max(0, toSafeNumber(item.receivedQty));
+  const rawRejected = Math.max(0, toSafeNumber(item.rejectedQty));
+  const rawAccepted = Math.max(0, toSafeNumber(item.acceptedQty));
+
+  // Repair old/localStorage records where received > 0 but accepted/rejected
+  // were saved as 0 or no longer add up to the received quantity.
+  const rejectedQty = Math.min(rawRejected, receivedQty);
+  const acceptedQty =
+    rawAccepted + rejectedQty === receivedQty
+      ? rawAccepted
+      : Math.max(0, receivedQty - rejectedQty);
+
+  return {
+    id: Number(item.id) || index + 1,
+    sku: String(item.sku ?? ""),
+    product: String(item.product ?? ""),
+    orderedQty,
+    previouslyReceived,
+    receivedQty,
+    acceptedQty,
+    rejectedQty,
+    unit: String(item.unit ?? "Units"),
+    batch: String(item.batch ?? ""),
+    expiry: String(item.expiry ?? ""),
+    serialNumbers: String(item.serialNumbers ?? ""),
+    qcStatus:
+      item.qcStatus === "Passed" ||
+      item.qcStatus === "Failed" ||
+      item.qcStatus === "Partial" ||
+      item.qcStatus === "Not Inspected"
+        ? item.qcStatus
+        : "Not Inspected",
+    unitCost: Math.max(0, toSafeNumber(item.unitCost)),
+    rejectionReason: String(item.rejectionReason ?? ""),
+  };
+};
+
+const normalizeReceiptItems = (items: unknown): ReceiptItem[] => {
+  if (!Array.isArray(items)) return [];
+
+  return items.map((item, index) =>
+    normalizeReceiptItem(
+      item && typeof item === "object"
+        ? (item as Partial<ReceiptItem>)
+        : {},
+      index,
+    ),
+  );
+};
+
+const normalizeGoodsReceipt = (
+  receipt: Partial<GoodsReceipt>,
+  index: number,
+): GoodsReceipt => {
+  const items = normalizeReceiptItems(receipt.items);
+
+  const status: ReceiptStatus =
+    receipt.status === "Pending QC" ||
+    receipt.status === "Partially Received" ||
+    receipt.status === "Received" ||
+    receipt.status === "Rejected"
+      ? receipt.status
+      : "Draft";
+
+  const qcStatus: QCStatus =
+    receipt.qcStatus === "Passed" ||
+    receipt.qcStatus === "Failed" ||
+    receipt.qcStatus === "Partial"
+      ? receipt.qcStatus
+      : "Not Inspected";
+
+  return {
+    id: String(receipt.id ?? receipt.grnNumber ?? `GRN-${index + 1}`),
+    grnNumber: String(receipt.grnNumber ?? receipt.id ?? `GRN-${index + 1}`),
+    purchaseOrder: String(receipt.purchaseOrder ?? ""),
+    supplier: String(receipt.supplier ?? ""),
+    warehouse: String(receipt.warehouse ?? ""),
+    receiptDate: String(receipt.receiptDate ?? ""),
+    deliveryNote: String(receipt.deliveryNote ?? ""),
+    invoiceNumber: String(receipt.invoiceNumber ?? ""),
+    status,
+    qcStatus,
+    submittedAt: String(receipt.submittedAt ?? ""),
+    createdBy: String(receipt.createdBy ?? "Current User"),
+    items,
+    totalOrdered: Number(receipt.totalOrdered) || 0,
+    totalPreviouslyReceived: Number(receipt.totalPreviouslyReceived) || 0,
+    totalCurrentReceived: Number(receipt.totalCurrentReceived) || 0,
+    totalAccepted: Number(receipt.totalAccepted) || 0,
+    totalRejected: Number(receipt.totalRejected) || 0,
+    totalRemaining: Number(receipt.totalRemaining) || 0,
+  };
+};
+
+export default function GoodsReceiptsPage() {
+  const [selectedPO, setSelectedPO] = useState(purchaseOrders[0].id);
+  const [supplier, setSupplier] = useState(purchaseOrders[0].supplier);
+  const [warehouse, setWarehouse] = useState(purchaseOrders[0].warehouse);
+  const [receiptDate, setReceiptDate] = useState("2026-08-22");
+  const [deliveryNote, setDeliveryNote] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [items, setItems] = useState<ReceiptItem[]>(initialItems);
+  const [status, setStatus] = useState<ReceiptStatus>("Draft");
+  const [qcStatus, setQcStatus] = useState<QCStatus>("Not Inspected");
+  const [grnNumber, setGrnNumber] = useState("");
+  const [submittedAt, setSubmittedAt] = useState("");
+  const [createdBy, setCreatedBy] = useState("Current User");
+  const [message, setMessage] = useState("");
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<GoodsReceipt | null>(null);
+  const [history, setHistory] = useState<GoodsReceipt[]>(defaultHistory);
+  const [search, setSearch] = useState("");
+  const [historyStatus, setHistoryStatus] = useState<"All" | ReceiptStatus>("All");
+  const [historyWarehouse, setHistoryWarehouse] = useState("All");
+  const [newProduct, setNewProduct] = useState("");
+  const [newSku, setNewSku] = useState("");
+  const [newQuantity, setNewQuantity] = useState("");
+  const [newUnitCost, setNewUnitCost] = useState("0");
+
+  useEffect(() => {
+    const savedHistory = readJSON<GoodsReceipt[]>(
+      "stockflow-goods-receipts",
+      [],
+    );
+    const savedLast = readJSON<Partial<GoodsReceipt> & { grnNumber?: string }>(
+      "stockflow-last-grn",
+      {},
     );
 
-  const totalOrdered = useMemo(
-    () =>
-      items.reduce(
-        (sum, item) =>
-          sum + item.orderedQty,
-        0
-      ),
-    [items]
+    const normalizedHistory = savedHistory.map((receipt, index) =>
+      normalizeGoodsReceipt(receipt, index),
+    );
+
+    setHistory(normalizedHistory);
+
+    if (savedLast.grnNumber) setGrnNumber(String(savedLast.grnNumber));
+    if (savedLast.submittedAt) setSubmittedAt(String(savedLast.submittedAt));
+    if (savedLast.status) {
+      setStatus(
+        savedLast.status === "Pending QC" ||
+          savedLast.status === "Partially Received" ||
+          savedLast.status === "Received" ||
+          savedLast.status === "Rejected"
+          ? savedLast.status
+          : "Draft",
+      );
+    }
+
+    if (savedLast.items) {
+      setItems(normalizeReceiptItems(savedLast.items));
+    }
+
+    if (savedLast.purchaseOrder) {
+      setSelectedPO(String(savedLast.purchaseOrder));
+    }
+    if (savedLast.supplier) setSupplier(String(savedLast.supplier));
+    if (savedLast.warehouse) setWarehouse(String(savedLast.warehouse));
+    if (savedLast.receiptDate) setReceiptDate(String(savedLast.receiptDate));
+    if (savedLast.deliveryNote) setDeliveryNote(String(savedLast.deliveryNote));
+    if (savedLast.invoiceNumber) setInvoiceNumber(String(savedLast.invoiceNumber));
+  }, []);
+
+  const selectedPurchaseOrder = useMemo(
+    () => purchaseOrders.find((po) => po.id === selectedPO),
+    [selectedPO],
   );
 
-  const totalPreviouslyReceived =
-    useMemo(
-      () =>
-        items.reduce(
-          (sum, item) =>
-            sum +
-            item.previouslyReceived,
-          0
-        ),
-      [items]
+  const totals = useMemo(() => {
+    const totalOrdered = items.reduce(
+      (sum, item) => sum + (Number(item.orderedQty) || 0),
+      0,
     );
 
-  const totalCurrentReceived =
-    useMemo(
-      () =>
-        items.reduce(
-          (sum, item) =>
-            sum + item.receivedQty,
-          0
-        ),
-      [items]
+    const totalPreviouslyReceived = items.reduce(
+      (sum, item) => sum + (Number(item.previouslyReceived) || 0),
+      0,
     );
 
-  const totalReceivedAfterGRN =
-    totalPreviouslyReceived +
-    totalCurrentReceived;
+    const totalCurrentReceived = items.reduce(
+      (sum, item) => sum + (Number(item.receivedQty) || 0),
+      0,
+    );
 
-  const totalRemaining = useMemo(
-    () =>
-      items.reduce(
-        (sum, item) =>
-          sum +
-          Math.max(
-            0,
-            item.orderedQty -
-              item.previouslyReceived -
-              item.receivedQty
-          ),
-        0
-      ),
-    [items]
+    const totalAccepted = items.reduce(
+      (sum, item) => sum + (Number(item.acceptedQty) || 0),
+      0,
+    );
+
+    const totalRejected = items.reduce(
+      (sum, item) => sum + (Number(item.rejectedQty) || 0),
+      0,
+    );
+
+    const totalRemaining = items.reduce(
+      (sum, item) =>
+        sum +
+        Math.max(
+          0,
+          (Number(item.orderedQty) || 0) -
+            (Number(item.previouslyReceived) || 0) -
+            (Number(item.receivedQty) || 0),
+        ),
+      0,
+    );
+
+    const receiptPercentage =
+      totalOrdered > 0
+        ? Math.min(
+            100,
+            Math.round(
+              ((totalPreviouslyReceived + totalCurrentReceived) /
+                totalOrdered) *
+                100,
+            ),
+          )
+        : 0;
+
+    const receiptValue = items.reduce(
+      (sum, item) =>
+        sum +
+        (Number(item.acceptedQty) || 0) * (Number(item.unitCost) || 0),
+      0,
+    );
+
+    return {
+      totalOrdered,
+      totalPreviouslyReceived,
+      totalCurrentReceived,
+      totalAccepted,
+      totalRejected,
+      totalRemaining,
+      receiptPercentage,
+      receiptValue,
+    };
+  }, [items]);
+
+  const hasOverReceipt = items.some(
+    (item) =>
+      item.receivedQty >
+      Math.max(0, item.orderedQty - item.previouslyReceived),
   );
 
-  const receiptPercentage =
-    totalOrdered > 0
-      ? Math.round(
-          (totalReceivedAfterGRN /
-            totalOrdered) *
-            100
-        )
-      : 0;
+  const hasAcceptanceMismatch = items.some(
+    (item) => item.acceptedQty + item.rejectedQty !== item.receivedQty,
+  );
 
-  const hasPartialReceipt =
-    items.some(
-      (item) =>
-        item.receivedQty > 0 &&
-        item.receivedQty <
-          item.orderedQty -
-            item.previouslyReceived
-    );
+  const hasQCFailure = items.some((item) => item.qcStatus === "Failed");
 
-  const hasOverReceipt =
-    items.some(
-      (item) =>
-        item.receivedQty >
-        item.orderedQty -
-          item.previouslyReceived
-    );
+  const historyFiltered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return history.filter((receipt) => {
+      const matchesSearch =
+        !term ||
+        receipt.grnNumber.toLowerCase().includes(term) ||
+        receipt.purchaseOrder.toLowerCase().includes(term) ||
+        receipt.supplier.toLowerCase().includes(term) ||
+        receipt.items.some(
+          (item) =>
+            item.product.toLowerCase().includes(term) ||
+            item.sku.toLowerCase().includes(term),
+        );
+      const matchesStatus =
+        historyStatus === "All" || receipt.status === historyStatus;
+      const matchesWarehouse =
+        historyWarehouse === "All" || receipt.warehouse === historyWarehouse;
+      return matchesSearch && matchesStatus && matchesWarehouse;
+    });
+  }, [history, search, historyStatus, historyWarehouse]);
 
-  const formatCurrency = (
-    value: number
-  ) =>
-    new Intl.NumberFormat(
-      "en-IN",
-      {
-        style: "currency",
-        currency: "INR",
-        maximumFractionDigits: 0,
-      }
-    ).format(value);
-
-  const calculateItemRemaining = (
-    item: ReceiptItem
-  ) =>
-    Math.max(
-      0,
-      item.orderedQty -
-        item.previouslyReceived -
-        item.receivedQty
-    );
-
-  const calculateItemAvailable = (
-    item: ReceiptItem
-  ) =>
-    Math.max(
-      0,
-      item.orderedQty -
-        item.previouslyReceived
-    );
-
-  const updateReceivedQuantity = (
+  const updateItem = (
     id: number,
-    value: string
+    patch: Partial<ReceiptItem>,
   ) => {
-    const quantity =
-      Number(value);
-
     setItems((current) =>
-      current.map((item) => {
-        if (item.id !== id) {
-          return item;
-        }
-
-        return {
-          ...item,
-          receivedQty:
-            Number.isNaN(quantity)
-              ? 0
-              : Math.max(
-                  0,
-                  quantity
-                ),
-        };
-      })
+      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     );
-
     setStatus("Draft");
     setMessage("");
   };
 
-  const updateBatch = (
-    id: number,
-    value: string
-  ) => {
+  const updateReceivedQuantity = (id: number, value: string) => {
+    const quantity = Number(value);
+    const safeQuantity = Number.isFinite(quantity) ? Math.max(0, quantity) : 0;
     setItems((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              batch: value,
-            }
-          : item
-      )
+      current.map((item) => {
+        if (item.id !== id) return item;
+        const pending = Math.max(
+          0,
+          item.orderedQty - item.previouslyReceived,
+        );
+        const rejectedQty = Math.min(
+          Math.max(0, toSafeNumber(item.rejectedQty)),
+          safeQuantity,
+        );
+        const acceptedQty = Math.max(0, safeQuantity - rejectedQty);
+
+        return {
+          ...item,
+          receivedQty: safeQuantity,
+          acceptedQty,
+          rejectedQty,
+        };
+      }),
     );
-  };
-
-  const updateExpiry = (
-    id: number,
-    value: string
-  ) => {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              expiry: value,
-            }
-          : item
-      )
-    );
-  };
-
-  const handlePOChange = (
-    poId: string
-  ) => {
-    const po =
-      purchaseOrders.find(
-        (item) =>
-          item.id === poId
-      );
-
-    setSelectedPO(poId);
-
-    if (po) {
-      setSupplier(
-        po.supplier
-      );
-
-      setWarehouse(
-        po.warehouse
-      );
-    }
-
+    setStatus("Draft");
     setMessage("");
   };
 
-  const setAllPendingQuantity =
-    () => {
-      setItems((current) =>
-        current.map((item) => ({
+  const updateRejectedQuantity = (id: number, value: string) => {
+    const rejected = Math.max(0, Number(value) || 0);
+    setItems((current) =>
+      current.map((item) => {
+        if (item.id !== id) return item;
+        return {
           ...item,
-          receivedQty:
-            Math.max(
-              0,
-              item.orderedQty -
-                item.previouslyReceived
-            ),
-        }))
-      );
+          rejectedQty: Math.min(rejected, item.receivedQty),
+          acceptedQty: Math.max(0, item.receivedQty - Math.min(rejected, item.receivedQty)),
+          qcStatus: rejected > 0 ? "Partial" : item.qcStatus,
+        };
+      }),
+    );
+    setStatus("Draft");
+    setMessage("");
+  };
 
-      setStatus("Draft");
-      setMessage(
-        "All pending quantities have been filled."
-      );
-    };
+  const handlePOChange = (poId: string) => {
+    const po = purchaseOrders.find((item) => item.id === poId);
+    setSelectedPO(poId);
+    if (po) {
+      setSupplier(po.supplier);
+      setWarehouse(po.warehouse);
+    }
+    setItems(initialItems.map((item) => ({ ...item })));
+    setGrnNumber("");
+    setSubmittedAt("");
+    setStatus("Draft");
+    setQcStatus("Not Inspected");
+    setMessage("");
+  };
 
-  const clearReceivedQuantities =
-    () => {
-      setItems((current) =>
-        current.map((item) => ({
+  const setAllPendingQuantity = () => {
+    setItems((current) =>
+      current.map((item) => {
+        const pending = Math.max(
+          0,
+          item.orderedQty - item.previouslyReceived,
+        );
+        return {
           ...item,
-          receivedQty: 0,
-        }))
-      );
+          receivedQty: pending,
+          acceptedQty: pending,
+          rejectedQty: 0,
+        };
+      }),
+    );
+    setStatus("Draft");
+    setMessage("All pending quantities have been filled.");
+  };
 
-      setStatus("Draft");
-      setMessage(
-        "Current receipt quantities cleared."
-      );
-    };
+  const clearReceivedQuantities = () => {
+    setItems((current) =>
+      current.map((item) => ({
+        ...item,
+        receivedQty: 0,
+        acceptedQty: 0,
+        rejectedQty: 0,
+      })),
+    );
+    setStatus("Draft");
+    setMessage("Current receipt quantities cleared.");
+  };
 
   const addItem = () => {
-    const quantity =
-      Number(newQuantity);
-
-    if (
-      !newProduct.trim() ||
-      !newSku.trim() ||
-      !quantity ||
-      quantity <= 0
-    ) {
-      setMessage(
-        "Enter a product name, SKU and valid quantity."
-      );
+    const quantity = Number(newQuantity);
+    if (!newProduct.trim() || !newSku.trim() || quantity <= 0) {
+      setMessage("Enter a product name, SKU and valid quantity.");
       return;
     }
 
     const newItem: ReceiptItem = {
-      id:
-        Math.max(
-          ...items.map(
-            (item) => item.id
-          ),
-          0
-        ) + 1,
+      id: Math.max(...items.map((item) => item.id), 0) + 1,
       sku: newSku.trim(),
-      product:
-        newProduct.trim(),
+      product: newProduct.trim(),
       orderedQty: quantity,
       previouslyReceived: 0,
       receivedQty: quantity,
+      acceptedQty: quantity,
+      rejectedQty: 0,
       unit: "Units",
       batch: "",
       expiry: "",
+      serialNumbers: "",
+      qcStatus: "Not Inspected",
+      unitCost: Number(newUnitCost) || 0,
+      rejectionReason: "",
     };
 
-    setItems((current) => [
-      ...current,
-      newItem,
-    ]);
-
+    setItems((current) => [...current, newItem]);
     setNewProduct("");
     setNewSku("");
     setNewQuantity("");
+    setNewUnitCost("0");
     setShowAddItem(false);
-    setMessage(
-      "Item added to the GRN."
-    );
+    setMessage("Item added to the GRN.");
   };
 
-  const removeItem = (
-    id: number
-  ) => {
-    setItems((current) =>
-      current.filter(
-        (item) =>
-          item.id !== id
-      )
-    );
-
-    setMessage(
-      "Item removed from the GRN."
-    );
+  const removeItem = (id: number) => {
+    setItems((current) => current.filter((item) => item.id !== id));
+    setMessage("Item removed from the GRN.");
   };
 
   const validateGRN = () => {
     if (!selectedPO) {
-      setMessage(
-        "Please select a purchase order."
-      );
+      setMessage("Please select a purchase order.");
       return false;
     }
-
     if (!receiptDate) {
-      setMessage(
-        "Please select the receipt date."
-      );
+      setMessage("Please select the receipt date.");
       return false;
     }
-
     if (items.length === 0) {
-      setMessage(
-        "Add at least one item to the GRN."
-      );
+      setMessage("Add at least one item to the GRN.");
       return false;
     }
-
     if (hasOverReceipt) {
-      setMessage(
-        "Received quantity cannot exceed the pending quantity."
-      );
+      setMessage("Received quantity cannot exceed the pending PO quantity.");
       return false;
     }
-
-    if (totalCurrentReceived <= 0) {
-      setMessage(
-        "Enter at least one received quantity."
-      );
+    if (totals.totalCurrentReceived <= 0) {
+      setMessage("Enter at least one received quantity.");
       return false;
     }
-
+    if (hasAcceptanceMismatch) {
+      setMessage("Accepted + rejected quantity must equal received quantity for every item.");
+      return false;
+    }
+    if (items.some((item) => item.rejectedQty > 0 && !item.rejectionReason.trim())) {
+      setMessage("Enter a rejection reason for every rejected quantity.");
+      return false;
+    }
+    if (items.some((item) => item.receivedQty > 0 && !item.batch.trim())) {
+      setMessage("Batch / lot is required for received items in this GRN.");
+      return false;
+    }
     return true;
   };
 
-  const openConfirmation = () => {
-    setMessage("");
+  const appendLedgerEntries = (
+    receipt: GoodsReceipt,
+    acceptedItems: ReceiptItem[],
+  ) => {
+    const ledger = readJSON<Record<string, unknown>[]>(
+      "inventory-stock-ledger",
+      [],
+    );
 
-    if (!validateGRN()) {
-      return;
-    }
+    const now = new Date().toISOString();
+    const entries = acceptedItems
+      .filter((item) => item.acceptedQty > 0)
+      .map((item, index) => ({
+        id: `LEDGER-GRN-${Date.now()}-${index}`,
+        transactionId: `TXN-${receipt.grnNumber}-${item.sku}`,
+        type: "IN",
+        transactionType: "IN",
+        referenceId: receipt.grnNumber,
+        referenceType: "Goods Receipt",
+        product: item.product,
+        sku: item.sku,
+        warehouse: receipt.warehouse,
+        quantityBefore: 0,
+        quantityChange: item.acceptedQty,
+        quantityAfter: item.acceptedQty,
+        availableStock: item.acceptedQty,
+        user: receipt.createdBy,
+        reason: `Goods received against ${receipt.purchaseOrder}`,
+        batch: item.batch,
+        expiry: item.expiry,
+        timestamp: now,
+      }));
 
-    setShowConfirm(true);
+    writeJSON("inventory-stock-ledger", [...entries, ...ledger]);
   };
 
-  const saveGRN = () => {
-  setShowConfirm(false);
+  const updateInventory = (receipt: GoodsReceipt) => {
+    const products = readJSON<Record<string, unknown>[]>(
+      "inventory-products",
+      [],
+    );
+    if (!products.length) return;
 
-  const nextStatus: ReceiptStatus =
-    totalRemaining === 0
-      ? "Received"
-      : "Partially Received";
+    const updated = products.map((product) => {
+      const productSku = String(product.sku ?? product.SKU ?? "");
+      const matching = receipt.items.find(
+        (item) => item.sku.toLowerCase() === productSku.toLowerCase(),
+      );
+      if (!matching || matching.acceptedQty <= 0) return product;
 
-  const generatedGRN =
-    `GRN-${new Date().getFullYear()}-${String(
-      Date.now()
-    ).slice(-6)}`;
+      const currentOnHand = Number(
+        product.onHand ?? product.stock ?? product.quantity ?? 0,
+      );
+      const currentAvailable = Number(
+        product.available ?? product.availableStock ?? currentOnHand,
+      );
+      return {
+        ...product,
+        onHand: currentOnHand + matching.acceptedQty,
+        stock: currentOnHand + matching.acceptedQty,
+        quantity: currentOnHand + matching.acceptedQty,
+        available: currentAvailable + matching.acceptedQty,
+        availableStock: currentAvailable + matching.acceptedQty,
+        lastGoodsReceipt: receipt.grnNumber,
+        lastStockUpdate: receipt.submittedAt,
+        warehouse: receipt.warehouse,
+      };
+    });
 
-  const now =
-    new Date().toLocaleString("en-IN");
+    writeJSON("inventory-products", updated);
+  };
 
-  setStatus(nextStatus);
-  setGrnNumber(generatedGRN);
-  setSubmittedAt(now);
-
-  localStorage.setItem(
-    "stockflow-last-grn",
-    JSON.stringify({
-      grnNumber: generatedGRN,
-      submittedAt: now,
-      status: nextStatus,
+  const saveDraft = () => {
+    const draftId = grnNumber || `DRAFT-${Date.now()}`;
+    const now = new Date().toLocaleString("en-IN");
+    const draft: GoodsReceipt = {
+      id: draftId,
+      grnNumber: grnNumber || draftId,
       purchaseOrder: selectedPO,
       supplier,
       warehouse,
       receiptDate,
       deliveryNote,
       invoiceNumber,
+      status: "Draft",
+      qcStatus,
+      submittedAt: submittedAt || now,
+      createdBy,
       items,
-      totalOrdered,
-      totalPreviouslyReceived,
-      totalCurrentReceived,
-      totalRemaining,
-    })
-  );
+      totalOrdered: totals.totalOrdered,
+      totalPreviouslyReceived: totals.totalPreviouslyReceived,
+      totalCurrentReceived: totals.totalCurrentReceived,
+      totalAccepted: totals.totalAccepted,
+      totalRejected: totals.totalRejected,
+      totalRemaining: totals.totalRemaining,
+    };
 
-  setMessage(
-    totalRemaining === 0
-      ? `GRN ${generatedGRN} submitted successfully. Purchase order is fully received.`
-      : `GRN ${generatedGRN} submitted successfully. Purchase order remains partially received.`
-  );
-};
+    const next = [
+      draft,
+      ...history.filter((receipt) => receipt.id !== draft.id),
+    ];
+    setHistory(next);
+    writeJSON("stockflow-goods-receipts", next);
+    writeJSON("stockflow-last-grn", draft);
+    setGrnNumber(draft.grnNumber);
+    setSubmittedAt(draft.submittedAt);
+    setMessage("GRN saved as draft.");
+  };
 
-  const saveDraft = () => {
-    setStatus("Draft");
+  const saveGRN = () => {
+    setShowConfirm(false);
+    if (!validateGRN()) return;
+
+    const nextStatus: ReceiptStatus =
+      totals.totalRemaining === 0 ? "Received" : "Partially Received";
+    const generatedGRN =
+      grnNumber && !grnNumber.startsWith("DRAFT-")
+        ? grnNumber
+        : `GRN-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const now = new Date().toLocaleString("en-IN");
+    const finalQC: QCStatus = hasQCFailure
+      ? "Failed"
+      : totals.totalRejected > 0
+        ? "Partial"
+        : items.every((item) => item.qcStatus === "Passed")
+          ? "Passed"
+          : "Not Inspected";
+
+    const receipt: GoodsReceipt = {
+      id: generatedGRN,
+      grnNumber: generatedGRN,
+      purchaseOrder: selectedPO,
+      supplier,
+      warehouse,
+      receiptDate,
+      deliveryNote,
+      invoiceNumber,
+      status: nextStatus,
+      qcStatus: finalQC,
+      submittedAt: now,
+      createdBy,
+      items: items.map((item) => ({ ...item })),
+      totalOrdered: totals.totalOrdered,
+      totalPreviouslyReceived: totals.totalPreviouslyReceived,
+      totalCurrentReceived: totals.totalCurrentReceived,
+      totalAccepted: totals.totalAccepted,
+      totalRejected: totals.totalRejected,
+      totalRemaining: totals.totalRemaining,
+    };
+
+    const next = [
+      receipt,
+      ...history.filter((entry) => entry.purchaseOrder !== selectedPO || entry.grnNumber !== generatedGRN),
+    ];
+
+    setHistory(next);
+    setStatus(nextStatus);
+    setQcStatus(finalQC);
+    setGrnNumber(generatedGRN);
+    setSubmittedAt(now);
+    writeJSON("stockflow-goods-receipts", next);
+    writeJSON("stockflow-last-grn", receipt);
+
+    updateInventory(receipt);
+    appendLedgerEntries(receipt, receipt.items);
 
     setMessage(
-      "GRN saved as draft."
+      totals.totalRemaining === 0
+        ? `GRN ${generatedGRN} submitted and inventory updated. Purchase order is fully received.`
+        : `GRN ${generatedGRN} submitted and inventory updated. ${totals.totalRemaining} units remain pending.`,
     );
   };
 
+  const openConfirmation = () => {
+    setMessage("");
+    if (!validateGRN()) return;
+    setShowConfirm(true);
+  };
+
+  const exportCSV = () => {
+    const rows = historyFiltered.flatMap((receipt) =>
+      receipt.items.map((item) => ({
+        GRN: receipt.grnNumber,
+        PO: receipt.purchaseOrder,
+        Supplier: receipt.supplier,
+        Warehouse: receipt.warehouse,
+        ReceiptDate: receipt.receiptDate,
+        Status: receipt.status,
+        QCStatus: receipt.qcStatus,
+        SKU: item.sku,
+        Product: item.product,
+        OrderedQty: item.orderedQty,
+        PreviouslyReceived: item.previouslyReceived,
+        ReceivedQty: item.receivedQty,
+        AcceptedQty: item.acceptedQty,
+        RejectedQty: item.rejectedQty,
+        Batch: item.batch,
+        Expiry: item.expiry,
+        UnitCost: item.unitCost,
+      })),
+    );
+
+    if (!rows.length) {
+      setMessage("There are no receipt records to export.");
+      return;
+    }
+
+    const headers = Object.keys(rows[0]);
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) =>
+            `"${String(row[header as keyof typeof row] ?? "").replaceAll('"', '""')}"`,
+          )
+          .join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "goods-receipts.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const resetForm = () => {
+    setGrnNumber("");
+    setSubmittedAt("");
+    setStatus("Draft");
+    setQcStatus("Not Inspected");
+    setDeliveryNote("");
+    setInvoiceNumber("");
+    setItems(initialItems.map((item) => ({ ...item })));
+    setMessage("New GRN form is ready.");
+  };
+
   return (
-    <main className="min-h-screen bg-[#f6f8fb] p-4 md:p-6">
-
-      <div className="mx-auto max-w-7xl">
-
-        {/* HEADER */}
-
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
-          <div>
-
-            <div className="flex items-center gap-3">
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#12213a] text-lg font-bold text-white">
-                GRN
+    <PageLayout>
+      <main className="min-h-screen bg-[#f6f8fb] p-4 md:p-6">
+        <div className="mx-auto max-w-[1500px]">
+          <header className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#12213a] text-sm font-black text-white shadow-lg">
+                  GRN
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-2xl font-black tracking-tight text-[#12213a] md:text-3xl">
+                      Goods Receipt Notes
+                    </h1>
+                    <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                      Inventory Inbound
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Receive goods against purchase orders, capture QC details,
+                    update stock and maintain a receipt audit trail.
+                  </p>
+                </div>
               </div>
-
-              <div>
-
-                <h1 className="text-2xl font-bold text-[#12213a] md:text-3xl">
-                  Goods Receipt Note
-                </h1>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Record received goods against
-                  purchase orders with partial
-                  receipt support.
-                </p>
-
-              </div>
-
             </div>
 
-          </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowHistory((value) => !value)}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50"
+              >
+                {showHistory ? "Hide History" : "GRN History"}
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-xl bg-[#12213a] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1c3152]"
+              >
+                + New GRN
+              </button>
+              <span
+                className={`rounded-full px-3 py-2 text-xs font-bold ${statusClasses[status]}`}
+              >
+                ● {status}
+              </span>
+            </div>
+          </header>
 
-          <div className="flex items-center gap-3">
+          <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              ["PO Units", totals.totalOrdered, "Total ordered"],
+              ["Current Receipt", totals.totalCurrentReceived, "Units in this GRN"],
+              ["Accepted", totals.totalAccepted, "Stock eligible"],
+              ["Rejected", totals.totalRejected, "QC rejected"],
+              ["Pending", totals.totalRemaining, "Open after receipt"],
+            ].map(([label, value, sub], index) => (
+              <div
+                key={String(label)}
+                className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+              >
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                  {label}
+                </p>
+                <p
+                  className={`mt-2 text-2xl font-black ${
+                    index === 4
+                      ? "text-orange-500"
+                      : index === 3
+                        ? "text-red-500"
+                        : index === 2
+                          ? "text-green-600"
+                          : index === 1
+                            ? "text-blue-600"
+                            : "text-[#12213a]"
+                  }`}
+                >
+                  {value}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">{sub}</p>
+              </div>
+            ))}
+          </section>
 
-            <span
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                status === "Received"
-                  ? "bg-green-50 text-green-600"
-                  : status ===
-                    "Partially Received"
-                  ? "bg-amber-50 text-amber-600"
-                  : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              ● {status}
-            </span>
-
-          </div>
-
-        </div>
-
-        {/* SUMMARY CARDS */}
-
-        <div className="mb-6 grid gap-4 md:grid-cols-4">
-
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Ordered
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-[#12213a]">
-              {totalOrdered}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Total units on PO
-            </p>
-
-          </div>
-
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Current Receipt
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-blue-600">
-              {totalCurrentReceived}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Units in this GRN
-            </p>
-
-          </div>
-
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Remaining
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-orange-500">
-              {totalRemaining}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              Pending after this receipt
-            </p>
-
-          </div>
-
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Receipt Progress
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-green-600">
-              {Math.min(
-                100,
-                receiptPercentage
-              )}
-              %
-            </p>
-
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
-
+          <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="font-black text-[#12213a]">Receipt Overview</h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  {grnNumber || "Unsaved GRN"} · {selectedPO}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${qcClasses[qcStatus]}`}>
+                  QC: {qcStatus}
+                </span>
+                <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[11px] font-bold text-gray-600">
+                  Value: {formatCurrency(totals.receiptValue)}
+                </span>
+              </div>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
               <div
                 className="h-full rounded-full bg-green-500 transition-all"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    receiptPercentage
-                  )}%`,
-                }}
+                style={{ width: `${totals.receiptPercentage}%` }}
               />
-
             </div>
+            <div className="mt-2 flex justify-between text-[11px] font-semibold text-gray-500">
+              <span>{totals.receiptPercentage}% PO received after this GRN</span>
+              <span>{totals.totalRemaining} units pending</span>
+            </div>
+          </section>
 
-          </div>
-
-        </div>
-
-                {/* GRN SUBMISSION DETAILS */}
-
-        {grnNumber && (
-          <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
-
-            <div className="mb-4">
-
-              <h2 className="text-lg font-semibold text-[#12213a]">
-                GRN Submission Details
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Details of the latest submitted goods receipt.
+          <section className="mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-6 py-5">
+              <h2 className="font-black text-[#12213a]">Receipt Information</h2>
+              <p className="mt-1 text-xs text-gray-500">
+                Link the GRN to its source purchase order and delivery documents.
               </p>
-
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-5 p-6 md:grid-cols-2 xl:grid-cols-4">
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Purchase Order
+                </span>
+                <select
+                  value={selectedPO}
+                  onChange={(event) => handlePOChange(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                >
+                  {purchaseOrders.map((po) => (
+                    <option key={po.id} value={po.id}>
+                      {po.id} — {po.supplier}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-              <div className="rounded-xl bg-blue-50 p-4">
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Supplier
+                </span>
+                <input
+                  value={supplier}
+                  onChange={(event) => setSupplier(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                />
+              </label>
 
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  GRN Number
-                </p>
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Warehouse
+                </span>
+                <input
+                  value={warehouse}
+                  onChange={(event) => setWarehouse(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                />
+              </label>
 
-                <p className="mt-2 text-lg font-bold text-blue-700">
-                  {grnNumber}
-                </p>
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Receipt Date
+                </span>
+                <input
+                  type="date"
+                  value={receiptDate}
+                  onChange={(event) => setReceiptDate(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                />
+              </label>
 
-              </div>
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Delivery Note
+                </span>
+                <input
+                  value={deliveryNote}
+                  onChange={(event) => setDeliveryNote(event.target.value)}
+                  placeholder="DN-XXXX"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Supplier Invoice
+                </span>
+                <input
+                  value={invoiceNumber}
+                  onChange={(event) => setInvoiceNumber(event.target.value)}
+                  placeholder="INV-XXXX"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Receipt Owner
+                </span>
+                <input
+                  value={createdBy}
+                  onChange={(event) => setCreatedBy(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                />
+              </label>
 
               <div className="rounded-xl bg-gray-50 p-4">
-
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Submitted At
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                  PO Value
                 </p>
-
-                <p className="mt-2 text-sm font-semibold text-[#12213a]">
-                  {submittedAt || "—"}
+                <p className="mt-2 text-lg font-black text-[#12213a]">
+                  {formatCurrency(selectedPurchaseOrder?.total ?? 0)}
                 </p>
-
+                <p className="mt-1 text-[11px] text-gray-500">
+                  {selectedPurchaseOrder?.date ?? "—"} · {warehouse}
+                </p>
               </div>
+            </div>
+          </section>
 
-              <div className="rounded-xl bg-green-50 p-4">
-
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Status
+          <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="font-black text-[#12213a]">Goods Received & QC</h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  Record actual receipt quantities, batch/serial traceability and inspection results.
                 </p>
-
-                <p className="mt-2 text-lg font-bold text-green-700">
-                  {status}
-                </p>
-
               </div>
-
-            </div>
-
-          </div>
-        )}
-
-        {/* PO DETAILS */}
-
-        <section className="mb-6 rounded-2xl border bg-white shadow-sm">
-
-          <div className="border-b px-6 py-5">
-
-            <h2 className="text-lg font-semibold text-[#12213a]">
-              Receipt Information
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Select the purchase order and enter
-              delivery details.
-            </p>
-
-          </div>
-
-          <div className="grid gap-5 p-6 md:grid-cols-2 lg:grid-cols-4">
-
-            <div>
-
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Purchase Order
-              </label>
-
-              <select
-                value={selectedPO}
-                onChange={(event) =>
-                  handlePOChange(
-                    event.target.value
-                  )
-                }
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              >
-                {purchaseOrders.map(
-                  (po) => (
-                    <option
-                      key={po.id}
-                      value={po.id}
-                    >
-                      {po.id} —{" "}
-                      {po.supplier}
-                    </option>
-                  )
-                )}
-              </select>
-
-            </div>
-
-            <div>
-
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Supplier
-              </label>
-
-              <input
-                value={supplier}
-                onChange={(event) =>
-                  setSupplier(
-                    event.target.value
-                  )
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
-
-            <div>
-
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Warehouse
-              </label>
-
-              <input
-                value={warehouse}
-                onChange={(event) =>
-                  setWarehouse(
-                    event.target.value
-                  )
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
-
-            <div>
-
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Receipt Date
-              </label>
-
-              <input
-                type="date"
-                value={receiptDate}
-                onChange={(event) =>
-                  setReceiptDate(
-                    event.target.value
-                  )
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
-
-            <div>
-
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Delivery Note
-              </label>
-
-              <input
-                value={deliveryNote}
-                onChange={(event) =>
-                  setDeliveryNote(
-                    event.target.value
-                  )
-                }
-                placeholder="DN-XXXX"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
-
-            <div>
-
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Supplier Invoice
-              </label>
-
-              <input
-                value={invoiceNumber}
-                onChange={(event) =>
-                  setInvoiceNumber(
-                    event.target.value
-                  )
-                }
-                placeholder="INV-XXXX"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-
-            </div>
-
-            <div className="lg:col-span-2">
-
-              {selectedPurchaseOrder && (
-                <div className="flex h-full items-center rounded-lg bg-gray-50 px-4 py-3">
-
-                  <div>
-
-                    <p className="text-xs uppercase tracking-wide text-gray-400">
-                      Selected PO Value
-                    </p>
-
-                    <p className="mt-1 text-lg font-bold text-[#12213a]">
-                      {formatCurrency(
-                        selectedPurchaseOrder.total
-                      )}
-                    </p>
-
-                  </div>
-
-                  <div className="ml-auto text-right">
-
-                    <p className="text-xs text-gray-400">
-                      PO Date
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-gray-700">
-                      {
-                        selectedPurchaseOrder.date
-                      }
-                    </p>
-
-                  </div>
-
-                </div>
-              )}
-
-            </div>
-
-          </div>
-
-        </section>
-
-        {/* ITEMS */}
-
-        <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-
-          <div className="flex flex-col gap-4 border-b px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
-
-            <div>
-
-              <h2 className="text-lg font-semibold text-[#12213a]">
-                Goods Received
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Enter the actual quantity received
-                for each purchase order item.
-              </p>
-
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-
-              <button
-                type="button"
-                onClick={
-                  setAllPendingQuantity
-                }
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Receive All Pending
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  clearReceivedQuantities
-                }
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Clear Current Receipt
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowAddItem(true)
-                }
-                className="rounded-lg bg-[#12213a] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1c3152]"
-              >
-                + Add Item
-              </button>
-
-            </div>
-
-          </div>
-
-          {/* PARTIAL RECEIPT NOTICE */}
-
-          {hasPartialReceipt && (
-            <div className="border-b border-amber-100 bg-amber-50 px-6 py-4">
-
-              <div className="flex gap-3">
-
-                <div className="text-lg">
-                  ⚠️
-                </div>
-
-                <div>
-
-                  <p className="text-sm font-semibold text-amber-800">
-                    Partial receipt detected
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-amber-700">
-                    Some items are being received
-                    in quantities lower than the
-                    pending PO quantity. The
-                    remaining quantity will stay
-                    open for a future GRN.
-                  </p>
-
-                </div>
-
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={setAllPendingQuantity}
+                  className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                >
+                  Receive All Pending
+                </button>
+                <button
+                  type="button"
+                  onClick={clearReceivedQuantities}
+                  className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddItem(true)}
+                  className="rounded-xl bg-[#12213a] px-3 py-2 text-xs font-bold text-white hover:bg-[#1c3152]"
+                >
+                  + Add Item
+                </button>
               </div>
-
             </div>
-          )}
 
-          <div className="overflow-x-auto">
+            {(hasOverReceipt || hasAcceptanceMismatch) && (
+              <div className="border-b border-red-100 bg-red-50 px-6 py-4 text-xs font-semibold text-red-700">
+                {hasOverReceipt
+                  ? "One or more received quantities exceed the pending PO quantity."
+                  : "Accepted and rejected quantities must equal the received quantity."}
+              </div>
+            )}
 
-            <table className="w-full min-w-[1200px] text-left">
-
-              <thead className="border-b bg-gray-50">
-
-                <tr>
-
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Product
-                  </th>
-
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Ordered
-                  </th>
-
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Previously Received
-                  </th>
-
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Pending
-                  </th>
-
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Receive Now
-                  </th>
-
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Batch / Lot
-                  </th>
-
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Expiry
-                  </th>
-
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Action
-                  </th>
-
-                </tr>
-
-              </thead>
-
-              <tbody className="divide-y">
-
-                {items.map(
-                  (item) => {
-                    const pendingBefore =
-                      calculateItemAvailable(
-                        item
-                      );
-
-                    const remaining =
-                      calculateItemRemaining(
-                        item
-                      );
-
-                    const overReceived =
-                      item.receivedQty >
-                      pendingBefore;
-
-                    return (
-                      <tr
-                        key={item.id}
-                        className="hover:bg-gray-50"
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1750px] text-left">
+                <thead className="border-b border-gray-100 bg-gray-50">
+                  <tr>
+                    {[
+                      "Product",
+                      "Ordered",
+                      "Previously",
+                      "Pending",
+                      "Receive Now",
+                      "Accepted",
+                      "Rejected",
+                      "Batch / Lot",
+                      "Expiry",
+                      "Serial Numbers",
+                      "QC",
+                      "Unit Cost",
+                      "Action",
+                    ].map((heading) => (
+                      <th
+                        key={heading}
+                        className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-500"
                       >
-
-                        <td className="px-5 py-4">
-
-                          <p className="font-semibold text-gray-800">
-                            {item.product}
-                          </p>
-
-                          <p className="mt-1 text-xs text-gray-400">
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {items.map((item) => {
+                    const pendingBefore = Math.max(
+                      0,
+                      item.orderedQty - item.previouslyReceived,
+                    );
+                    const remaining = Math.max(
+                      0,
+                      pendingBefore - item.receivedQty,
+                    );
+                    const over = item.receivedQty > pendingBefore;
+                    return (
+                      <tr key={item.id} className="align-top hover:bg-gray-50/70">
+                        <td className="px-4 py-4">
+                          <p className="font-bold text-gray-800">{item.product}</p>
+                          <p className="mt-1 text-[11px] font-semibold text-gray-400">
                             {item.sku}
                           </p>
-
                         </td>
-
-                        <td className="px-5 py-4">
-
-                          <span className="font-semibold text-gray-700">
-                            {item.orderedQty}
-                          </span>
-
-                          <span className="ml-1 text-xs text-gray-400">
-                            {item.unit}
-                          </span>
-
+                        <td className="px-4 py-4 text-sm font-bold text-gray-700">
+                          {item.orderedQty} {item.unit}
                         </td>
-
-                        <td className="px-5 py-4 text-sm text-gray-600">
+                        <td className="px-4 py-4 text-sm text-gray-600">
                           {item.previouslyReceived}
                         </td>
-
-                        <td className="px-5 py-4">
-
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                              pendingBefore ===
-                              0
-                                ? "bg-green-50 text-green-600"
-                                : "bg-orange-50 text-orange-600"
-                            }`}
-                          >
+                        <td className="px-4 py-4">
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${pendingBefore === 0 ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"}`}>
                             {pendingBefore}
                           </span>
-
+                          <p className="mt-1 text-[10px] text-gray-400">
+                            {remaining} after
+                          </p>
                         </td>
-
-                        <td className="px-5 py-4">
-
-                          <div>
-
-                            <input
-                              type="number"
-                              min="0"
-                              value={
-                                item.receivedQty
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                updateReceivedQuantity(
-                                  item.id,
-                                  event.target
-                                    .value
-                                )
-                              }
-                              className={`w-28 rounded-lg border px-3 py-2 text-sm font-semibold outline-none focus:ring-2 ${
-                                overReceived
-                                  ? "border-red-300 bg-red-50 text-red-700 focus:border-red-500 focus:ring-red-100"
-                                  : "border-gray-300 focus:border-blue-500 focus:ring-blue-100"
-                              }`}
-                            />
-
-                            {overReceived && (
-                              <p className="mt-1 text-[10px] font-medium text-red-600">
-                                Exceeds pending
-                                quantity
-                              </p>
-                            )}
-
-                          </div>
-
-                        </td>
-
-                        <td className="px-5 py-4">
-
+                        <td className="px-4 py-4">
                           <input
-                            value={
-                              item.batch
+                            type="number"
+                            min="0"
+                            value={item.receivedQty}
+                            onChange={(event) =>
+                              updateReceivedQuantity(item.id, event.target.value)
                             }
-                            onChange={(
-                              event
-                            ) =>
-                              updateBatch(
-                                item.id,
-                                event.target
-                                  .value
-                              )
-                            }
-                            placeholder="Batch / Lot"
-                            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+                            className={`w-24 rounded-lg border px-2.5 py-2 text-sm font-bold outline-none focus:ring-4 ${
+                              over
+                                ? "border-red-300 bg-red-50 text-red-700 focus:border-red-500 focus:ring-red-50"
+                                : "border-gray-200 focus:border-blue-500 focus:ring-blue-50"
+                            }`}
                           />
-
+                          {over && (
+                            <p className="mt-1 text-[9px] font-bold text-red-600">
+                              Exceeds pending
+                            </p>
+                          )}
                         </td>
-
-                        <td className="px-5 py-4">
-
+                        <td className="px-4 py-4">
+                          <input
+                            type="number"
+                            min="0"
+                            max={item.receivedQty}
+                            value={item.acceptedQty}
+                            onChange={(event) =>
+                              updateItem(item.id, {
+                                acceptedQty: Math.min(
+                                  Math.max(0, Number(event.target.value) || 0),
+                                  item.receivedQty,
+                                ),
+                                rejectedQty: Math.max(
+                                  0,
+                                  item.receivedQty -
+                                    Math.min(
+                                      Math.max(0, Number(event.target.value) || 0),
+                                      item.receivedQty,
+                                    ),
+                                ),
+                              })
+                            }
+                            className="w-24 rounded-lg border border-gray-200 px-2.5 py-2 text-sm font-bold text-green-700 outline-none focus:border-green-500"
+                          />
+                        </td>
+                        <td className="px-4 py-4">
+                          <input
+                            type="number"
+                            min="0"
+                            max={item.receivedQty}
+                            value={item.rejectedQty}
+                            onChange={(event) =>
+                              updateRejectedQuantity(item.id, event.target.value)
+                            }
+                            className="w-24 rounded-lg border border-gray-200 px-2.5 py-2 text-sm font-bold text-red-700 outline-none focus:border-red-500"
+                          />
+                          {item.rejectedQty > 0 && (
+                            <input
+                              value={item.rejectionReason}
+                              onChange={(event) =>
+                                updateItem(item.id, {
+                                  rejectionReason: event.target.value,
+                                })
+                              }
+                              placeholder="Reason"
+                              className="mt-2 w-28 rounded-lg border border-red-100 bg-red-50 px-2 py-1.5 text-[10px] outline-none"
+                            />
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          <input
+                            value={item.batch}
+                            onChange={(event) =>
+                              updateItem(item.id, { batch: event.target.value })
+                            }
+                            placeholder="BATCH / LOT"
+                            className="w-32 rounded-lg border border-gray-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500"
+                          />
+                        </td>
+                        <td className="px-4 py-4">
                           <input
                             type="date"
-                            value={
-                              item.expiry
+                            value={item.expiry}
+                            onChange={(event) =>
+                              updateItem(item.id, { expiry: event.target.value })
                             }
-                            onChange={(
-                              event
-                            ) =>
-                              updateExpiry(
-                                item.id,
-                                event.target
-                                  .value
-                              )
-                            }
-                            className="w-36 rounded-lg border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+                            className="w-36 rounded-lg border border-gray-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500"
                           />
-
                         </td>
-
-                        <td className="px-5 py-4">
-
+                        <td className="px-4 py-4">
+                          <input
+                            value={item.serialNumbers}
+                            onChange={(event) =>
+                              updateItem(item.id, {
+                                serialNumbers: event.target.value,
+                              })
+                            }
+                            placeholder="SN001, SN002..."
+                            className="w-40 rounded-lg border border-gray-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500"
+                          />
+                        </td>
+                        <td className="px-4 py-4">
+                          <select
+                            value={item.qcStatus}
+                            onChange={(event) =>
+                              updateItem(item.id, {
+                                qcStatus: event.target.value as QCStatus,
+                              })
+                            }
+                            className={`rounded-lg border-0 px-2.5 py-2 text-[11px] font-bold outline-none ${qcClasses[item.qcStatus]}`}
+                          >
+                            <option>Not Inspected</option>
+                            <option>Passed</option>
+                            <option>Partial</option>
+                            <option>Failed</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-4">
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.unitCost}
+                            onChange={(event) =>
+                              updateItem(item.id, {
+                                unitCost: Math.max(0, Number(event.target.value) || 0),
+                              })
+                            }
+                            className="w-28 rounded-lg border border-gray-200 px-2.5 py-2 text-xs font-semibold outline-none focus:border-blue-500"
+                          />
+                        </td>
+                        <td className="px-4 py-4">
                           <button
                             type="button"
-                            onClick={() =>
-                              removeItem(
-                                item.id
-                              )
-                            }
-                            className="rounded-md px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                            onClick={() => removeItem(item.id)}
+                            className="rounded-lg px-2.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50"
                           >
                             Remove
                           </button>
-
                         </td>
-
                       </tr>
                     );
-                  }
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid gap-4 border-t border-gray-100 bg-gray-50 px-6 py-5 md:grid-cols-5">
+              {[
+                ["Ordered", totals.totalOrdered],
+                ["Previously", totals.totalPreviouslyReceived],
+                ["Current", totals.totalCurrentReceived],
+                ["Accepted", totals.totalAccepted],
+                ["Rejected", totals.totalRejected],
+              ].map(([label, value]) => (
+                <div key={String(label)}>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    {label}
+                  </p>
+                  <p className="mt-1 text-lg font-black text-[#12213a]">{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="font-black text-[#12213a]">Post Goods Receipt</h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  Posting records the GRN, adds accepted quantity to inventory and creates inbound stock-ledger entries.
+                </p>
+                {message && (
+                  <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-700">
+                    {message}
+                  </div>
                 )}
-
-              </tbody>
-
-            </table>
-
-          </div>
-
-          {/* TABLE FOOTER */}
-
-          <div className="grid gap-4 border-t bg-gray-50 px-6 py-5 md:grid-cols-4">
-
-            <div>
-
-              <p className="text-xs text-gray-500">
-                Total Ordered
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-gray-800">
-                {totalOrdered}
-              </p>
-
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={saveDraft}
+                  className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
+                >
+                  Save Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={openConfirmation}
+                  className="rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-green-700"
+                >
+                  ✓ Submit GRN
+                </button>
+              </div>
             </div>
+          </section>
 
-            <div>
+          {showHistory && (
+            <section className="mt-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="border-b border-gray-100 px-6 py-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h2 className="font-black text-[#12213a]">Goods Receipt History</h2>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Search posted and draft GRNs stored in the frontend ledger.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={exportCSV}
+                    className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                  >
+                    Export CSV
+                  </button>
+                </div>
 
-              <p className="text-xs text-gray-500">
-                Previously Received
-              </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search GRN, PO, supplier, SKU..."
+                    className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+                  <select
+                    value={historyStatus}
+                    onChange={(event) =>
+                      setHistoryStatus(event.target.value as "All" | ReceiptStatus)
+                    }
+                    className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="All">All statuses</option>
+                    <option>Draft</option>
+                    <option>Pending QC</option>
+                    <option>Partially Received</option>
+                    <option>Received</option>
+                    <option>Rejected</option>
+                  </select>
+                  <select
+                    value={historyWarehouse}
+                    onChange={(event) => setHistoryWarehouse(event.target.value)}
+                    className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option>All</option>
+                    {[...new Set(purchaseOrders.map((po) => po.warehouse))].map(
+                      (value) => (
+                        <option key={value}>{value}</option>
+                      ),
+                    )}
+                  </select>
+                </div>
+              </div>
 
-              <p className="mt-1 text-lg font-bold text-gray-800">
-                {totalPreviouslyReceived}
-              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1050px] text-left">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {["GRN", "PO", "Supplier", "Warehouse", "Date", "Units", "QC", "Status", "Action"].map(
+                        (heading) => (
+                          <th
+                            key={heading}
+                            className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500"
+                          >
+                            {heading}
+                          </th>
+                        ),
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {historyFiltered.map((receipt) => (
+                      <tr key={receipt.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-4 text-sm font-black text-[#12213a]">
+                          {receipt.grnNumber}
+                        </td>
+                        <td className="px-5 py-4 text-xs font-semibold text-gray-600">
+                          {receipt.purchaseOrder}
+                        </td>
+                        <td className="px-5 py-4 text-xs font-semibold text-gray-700">
+                          {receipt.supplier}
+                        </td>
+                        <td className="px-5 py-4 text-xs text-gray-600">
+                          {receipt.warehouse}
+                        </td>
+                        <td className="px-5 py-4 text-xs text-gray-600">
+                          {receipt.receiptDate}
+                        </td>
+                        <td className="px-5 py-4 text-sm font-bold text-gray-700">
+                          {receipt.totalAccepted}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${qcClasses[receipt.qcStatus]}`}>
+                            {receipt.qcStatus}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${statusClasses[receipt.status]}`}>
+                            {receipt.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReceipt(receipt)}
+                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-bold text-gray-700 hover:bg-gray-50"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-            </div>
-
-            <div>
-
-              <p className="text-xs text-gray-500">
-                Current GRN
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-blue-600">
-                {totalCurrentReceived}
-              </p>
-
-            </div>
-
-            <div>
-
-              <p className="text-xs text-gray-500">
-                Remaining
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-orange-500">
-                {totalRemaining}
-              </p>
-
-            </div>
-
-          </div>
-
-        </section>
-
-        {/* ACTION AREA */}
-
-        <section className="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
-
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-
-            <div>
-
-              <h2 className="font-semibold text-[#12213a]">
-                Submit Goods Receipt
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Review the quantities and submit
-                the GRN to update inventory.
-              </p>
-
-              {message && (
-                <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                  {message}
+              {!historyFiltered.length && (
+                <div className="px-6 py-12 text-center">
+                  <p className="font-bold text-gray-700">No GRNs found</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Submitted and saved GRNs will appear here.
+                  </p>
                 </div>
               )}
-
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-
-              <button
-                type="button"
-                onClick={
-                  saveDraft
-                }
-                className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Save Draft
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  openConfirmation
-                }
-                className="rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700"
-              >
-                Submit GRN
-              </button>
-
-            </div>
-
-          </div>
-
-        </section>
-
-      </div>
-
-      {/* ADD ITEM MODAL */}
-
-      {showAddItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-
-            <div className="flex items-center justify-between border-b px-6 py-5">
-
-              <div>
-
-                <h2 className="font-bold text-[#12213a]">
-                  Add GRN Item
-                </h2>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Add an additional item to this
-                  receipt.
-                </p>
-
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowAddItem(
-                    false
-                  )
-                }
-                className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
-              >
-                ✕
-              </button>
-
-            </div>
-
-            <div className="space-y-4 p-6">
-
-              <div>
-
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Product Name
-                </label>
-
-                <input
-                  value={newProduct}
-                  onChange={(event) =>
-                    setNewProduct(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Enter product name"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                />
-
-              </div>
-
-              <div>
-
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  SKU
-                </label>
-
-                <input
-                  value={newSku}
-                  onChange={(event) =>
-                    setNewSku(
-                      event.target.value
-                    )
-                  }
-                  placeholder="SKU-XXXX"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                />
-
-              </div>
-
-              <div>
-
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Ordered Quantity
-                </label>
-
-                <input
-                  type="number"
-                  min="1"
-                  value={newQuantity}
-                  onChange={(event) =>
-                    setNewQuantity(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Quantity"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                />
-
-              </div>
-
-            </div>
-
-            <div className="flex justify-end gap-3 border-t bg-gray-50 px-6 py-4">
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowAddItem(
-                    false
-                  )
-                }
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  addItem
-                }
-                className="rounded-lg bg-[#12213a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1c3152]"
-              >
-                Add Item
-              </button>
-
-            </div>
-
-          </div>
-
+            </section>
+          )}
         </div>
-      )}
 
-            {/* CONFIRMATION MODAL */}
+        {showAddItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+                <div>
+                  <h2 className="font-black text-[#12213a]">Add GRN Item</h2>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Add an additional line to this receipt.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddItem(false)}
+                  className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
+                >
+                  ✕
+                </button>
+              </div>
 
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="space-y-4 p-6">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold text-gray-600">Product</span>
+                  <input
+                    value={newProduct}
+                    onChange={(event) => setNewProduct(event.target.value)}
+                    placeholder="Product name"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold text-gray-600">SKU</span>
+                  <input
+                    value={newSku}
+                    onChange={(event) => setNewSku(event.target.value)}
+                    placeholder="SKU-XXXX"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-bold text-gray-600">Quantity</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newQuantity}
+                      onChange={(event) => setNewQuantity(event.target.value)}
+                      placeholder="0"
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-bold text-gray-600">Unit Cost</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newUnitCost}
+                      onChange={(event) => setNewUnitCost(event.target.value)}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    />
+                  </label>
+                </div>
+              </div>
 
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+              <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddItem(false)}
+                  className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="rounded-xl bg-[#12213a] px-5 py-2 text-sm font-bold text-white"
+                >
+                  Add Item
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
-            <div className="flex items-center justify-between border-b px-6 py-5">
-
-              <div className="flex items-center gap-3">
-
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center gap-3 border-b border-gray-100 px-6 py-5">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-green-100 text-xl">
                   ✓
                 </div>
-
                 <div>
-
-                  <h2 className="text-lg font-bold text-[#12213a]">
-                    Confirm Goods Receipt
-                  </h2>
-
+                  <h2 className="font-black text-[#12213a]">Confirm Goods Receipt</h2>
                   <p className="mt-1 text-xs text-gray-500">
-                    Review the receipt before submitting.
+                    Verify stock and QC quantities before posting.
                   </p>
-
                 </div>
-
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setShowConfirm(false)
-                }
-                className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
-              >
-                ✕
-              </button>
+              <div className="space-y-5 p-6">
+                <div className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4 md:grid-cols-4">
+                  {[
+                    ["PO", selectedPO],
+                    ["Supplier", supplier],
+                    ["Accepted", String(totals.totalAccepted)],
+                    ["Rejected", String(totals.totalRejected)],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+                        {label}
+                      </p>
+                      <p className="mt-1 truncate text-sm font-bold text-[#12213a]">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
 
+                {totals.totalRemaining > 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-black text-amber-800">
+                      Partial receipt
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-amber-700">
+                      {totals.totalRemaining} units will remain pending against the purchase order.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                    <p className="text-sm font-black text-green-800">
+                      Full receipt
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-green-700">
+                      All pending PO quantities will be received.
+                    </p>
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-xs font-semibold leading-5 text-blue-700">
+                    On confirmation, accepted quantities are added to the
+                    frontend inventory store and an inbound stock-ledger record
+                    is created for each received SKU.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(false)}
+                  className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-bold text-gray-700"
+                >
+                  Go Back
+                </button>
+                <button
+                  type="button"
+                  onClick={saveGRN}
+                  className="rounded-xl bg-green-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-green-700"
+                >
+                  ✓ Confirm & Post
+                </button>
+              </div>
             </div>
-
-            <div className="space-y-5 p-6">
-
-              {/* PO SUMMARY */}
-
-              <div className="rounded-xl bg-gray-50 p-4">
-
-                <div className="grid grid-cols-2 gap-4">
-
-                  <div>
-
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                      Purchase Order
-                    </p>
-
-                    <p className="mt-1 text-sm font-bold text-[#12213a]">
-                      {selectedPO}
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                      Supplier
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-gray-700">
-                      {supplier}
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                      Warehouse
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-gray-700">
-                      {warehouse}
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                      Receipt Date
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-gray-700">
-                      {receiptDate}
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-              {/* RECEIPT SUMMARY */}
-
-              <div className="grid grid-cols-3 gap-3">
-
-                <div className="rounded-lg border p-3 text-center">
-
-                  <p className="text-[10px] font-semibold uppercase text-gray-400">
-                    Ordered
-                  </p>
-
-                  <p className="mt-1 text-xl font-bold text-[#12213a]">
-                    {totalOrdered}
-                  </p>
-
-                </div>
-
-                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-center">
-
-                  <p className="text-[10px] font-semibold uppercase text-blue-500">
-                    Receiving
-                  </p>
-
-                  <p className="mt-1 text-xl font-bold text-blue-700">
-                    {totalCurrentReceived}
-                  </p>
-
-                </div>
-
-                <div className="rounded-lg border border-orange-100 bg-orange-50 p-3 text-center">
-
-                  <p className="text-[10px] font-semibold uppercase text-orange-500">
-                    Remaining
-                  </p>
-
-                  <p className="mt-1 text-xl font-bold text-orange-700">
-                    {totalRemaining}
-                  </p>
-
-                </div>
-
-              </div>
-
-              {/* PARTIAL RECEIPT */}
-
-              {totalRemaining > 0 && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-
-                  <div className="flex gap-3">
-
-                    <div className="text-lg">
-                      ⚠️
-                    </div>
-
-                    <div>
-
-                      <p className="text-sm font-semibold text-amber-800">
-                        Partial receipt
-                      </p>
-
-                      <p className="mt-1 text-xs leading-5 text-amber-700">
-                        {totalRemaining} units will remain
-                        pending on the purchase order.
-                        You can create another GRN when
-                        the remaining goods arrive.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-                </div>
-              )}
-
-              {totalRemaining === 0 && (
-                <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-
-                  <div className="flex gap-3">
-
-                    <div className="text-lg">
-                      ✅
-                    </div>
-
-                    <div>
-
-                      <p className="text-sm font-semibold text-green-800">
-                        Full receipt
-                      </p>
-
-                      <p className="mt-1 text-xs leading-5 text-green-700">
-                        All pending quantities will be
-                        received and the purchase order
-                        will be marked as fully received.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-                </div>
-              )}
-
-              {/* WARNING */}
-
-              <div className="rounded-lg border border-gray-200 bg-white p-4">
-
-                <p className="text-xs leading-5 text-gray-500">
-                  By submitting this GRN, the received
-                  quantities will be recorded against the
-                  selected purchase order and inventory
-                  quantities will be updated.
-                </p>
-
-              </div>
-
-            </div>
-
-            {/* MODAL ACTIONS */}
-
-            <div className="flex justify-end gap-3 border-t bg-gray-50 px-6 py-4">
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowConfirm(false)
-                }
-                className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100"
-              >
-                Go Back
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  saveGRN
-                }
-                className="rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700"
-              >
-                ✓ Confirm & Submit
-              </button>
-
-            </div>
-
           </div>
+        )}
 
-        </div>
-      )}
+        {selectedReceipt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-black text-[#12213a]">
+                      {selectedReceipt.grnNumber}
+                    </h2>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${statusClasses[selectedReceipt.status]}`}>
+                      {selectedReceipt.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {selectedReceipt.purchaseOrder} · {selectedReceipt.supplier} · {selectedReceipt.warehouse}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReceipt(null)}
+                  className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
+                >
+                  ✕
+                </button>
+              </div>
 
-    </main>
+              <div className="max-h-[65vh] overflow-auto p-6">
+                <div className="mb-5 grid gap-3 md:grid-cols-4">
+                  {[
+                    ["Receipt Date", selectedReceipt.receiptDate],
+                    ["Submitted", selectedReceipt.submittedAt],
+                    ["Accepted", String(selectedReceipt.totalAccepted)],
+                    ["Rejected", String(selectedReceipt.totalRejected)],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl bg-gray-50 p-4">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+                        {label}
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#12213a]">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-gray-100">
+                  <table className="w-full min-w-[900px] text-left">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {["SKU", "Product", "Received", "Accepted", "Rejected", "Batch", "Expiry", "QC"].map(
+                          (heading) => (
+                            <th
+                              key={heading}
+                              className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500"
+                            >
+                              {heading}
+                            </th>
+                          ),
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {selectedReceipt.items.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-4 py-3 text-xs font-bold">{item.sku}</td>
+                          <td className="px-4 py-3 text-xs">{item.product}</td>
+                          <td className="px-4 py-3 text-xs font-bold">{item.receivedQty}</td>
+                          <td className="px-4 py-3 text-xs font-bold text-green-700">{item.acceptedQty}</td>
+                          <td className="px-4 py-3 text-xs font-bold text-red-700">{item.rejectedQty}</td>
+                          <td className="px-4 py-3 text-xs">{item.batch || "—"}</td>
+                          <td className="px-4 py-3 text-xs">{item.expiry || "—"}</td>
+                          <td className="px-4 py-3">
+                            <span className={`rounded-full px-2 py-1 text-[9px] font-bold ${qcClasses[item.qcStatus]}`}>
+                              {item.qcStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex justify-end border-t border-gray-100 bg-gray-50 px-6 py-4">
+                <button
+                  type="button"
+                  onClick={() => setSelectedReceipt(null)}
+                  className="rounded-xl bg-[#12213a] px-5 py-2.5 text-sm font-bold text-white"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </PageLayout>
   );
 }

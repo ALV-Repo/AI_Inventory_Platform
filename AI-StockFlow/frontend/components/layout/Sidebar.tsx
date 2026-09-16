@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const operateItems = [
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Point of sale", href: "/sales" },
+  { label: "Sales Management", href: "/sales" },
   { label: "Inventory", href: "/inventory" },
   { label: "Purchase orders", href: "/purchase-orders" },
   { label: "Customers", href: "/customers" },

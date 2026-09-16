@@ -28,6 +28,18 @@ type ProductVariant = {
   unitCost: number;
 };
 
+type LowStockAlertChannel = "In-App" | "Email" | "Push";
+
+type LowStockAlertRule = {
+  id: string;
+  productId: number;
+  warehouse: string;
+  enabled: boolean;
+  threshold: number;
+  channels: LowStockAlertChannel[];
+  updatedAt: string;
+};
+
 type Product = {
   id: number;
   name: string;
@@ -37,6 +49,7 @@ type Product = {
   onHand: number;
   reserved: number;
   reorderPoint: number;
+  moq?: number;
   unitCost: number;
   costPrice?: number;
   transportCost?: number;
@@ -62,12 +75,6 @@ const categories = [
   "Sports",
   "Seasonal",
   "Home",
-];
-
-const warehouses = [
-  "Main Store",
-  "Warehouse A",
-  "Warehouse B",
 ];
 
 function getAvailable(product: Product) {
@@ -144,6 +151,21 @@ function mapInventoryProduct(
         item.reorder_level ??
         0
     ),
+
+    moq: Math.max(
+  Number(
+    (item as InventoryProduct & {
+      moq?: number;
+      minimum_order_quantity?: number;
+    }).moq ??
+      (item as InventoryProduct & {
+        moq?: number;
+        minimum_order_quantity?: number;
+      }).minimum_order_quantity ??
+      1
+  ),
+  1
+),
 
     unitCost: Number(
   item.unit_cost ??
@@ -267,6 +289,64 @@ gstRate: Number(
 
 export default function InventoryPage() {
   const router = useRouter();
+
+  const [warehouses, setWarehouses] = useState<string[]>([
+  "Main Store",
+]);
+
+useEffect(() => {
+  try {
+    const storedWarehouses = localStorage.getItem(
+      "inventory-warehouses"
+    );
+
+    if (!storedWarehouses) {
+      return;
+    }
+
+    const savedWarehouses = JSON.parse(
+      storedWarehouses
+    );
+
+    if (Array.isArray(savedWarehouses)) {
+      const warehouseNames = savedWarehouses
+        .map((warehouse) => warehouse?.name)
+        .filter(
+          (name): name is string =>
+            typeof name === "string" &&
+            name.trim().length > 0
+        );
+
+      setWarehouses(
+        Array.from(
+          new Set(["Main Store", ...warehouseNames])
+        )
+      );
+    }
+  } catch {
+    setWarehouses(["Main Store"]);
+  }
+}, []);
+
+  useEffect(() => {
+    try {
+      const storedRules = localStorage.getItem(
+        "inventory-low-stock-alert-rules"
+      );
+
+      if (!storedRules) {
+        return;
+      }
+
+      const parsedRules = JSON.parse(storedRules);
+
+      if (Array.isArray(parsedRules)) {
+        setAlertRules(parsedRules);
+      }
+    } catch {
+      setAlertRules([]);
+    }
+  }, []);
 
   /*
    * Inventory data now comes through the
@@ -403,7 +483,8 @@ export default function InventoryPage() {
       warehouse: "Main Store",
       quantity: "",
       reorderPoint: "10",
-unitCost: "",
+      moq: "1",
+      unitCost: "",
 costPrice: "",
 transportCost: "",
 mrp: "",
@@ -411,6 +492,7 @@ discountType: "Percentage" as
   | "Percentage"
   | "Fixed",
 discountValue: "",
+gstRate: "18",
 supplierName: "",
 supplierContact: "",
 supplierEmail: "",
@@ -437,10 +519,13 @@ const [massEditField, setMassEditField] =
     | "category"
     | "warehouse"
     | "reorderPoint"
+    | "moq"
     | "costPrice"
+    | "transportCost"
     | "mrp"
     | "discountType"
     | "discountValue"
+    | "gstRate"
   >("category");
 
 const [massEditValue, setMassEditValue] =
@@ -509,6 +594,30 @@ const [massEditValue, setMassEditValue] =
 
   const [barcodeProduct, setBarcodeProduct] =
     useState<Product | null>(null);
+
+  // --------------------------------------------------
+  // LOW-STOCK ALERTS — FR-INV-11
+  // --------------------------------------------------
+
+  const [showLowStockAlerts, setShowLowStockAlerts] =
+    useState(false);
+  const [alertRules, setAlertRules] =
+    useState<LowStockAlertRule[]>([]);
+  const [alertRuleProductId, setAlertRuleProductId] =
+    useState("");
+  const [alertRuleWarehouse, setAlertRuleWarehouse] =
+    useState("Main Store");
+  const [alertRuleThreshold, setAlertRuleThreshold] =
+    useState("");
+  const [alertRuleChannels, setAlertRuleChannels] =
+    useState<LowStockAlertChannel[]>(["In-App"]);
+  const [alertRuleEnabled, setAlertRuleEnabled] =
+    useState(true);
+  const [alertSearch, setAlertSearch] =
+    useState("");
+  const [alertStatusFilter, setAlertStatusFilter] =
+    useState<"All" | "Active" | "Healthy">("All");
+
 
   // --------------------------------------------------
   // CYCLE COUNT
@@ -588,12 +697,13 @@ const [massEditValue, setMassEditValue] =
       0
     );
 
-  const stockValue =
+    const stockValue =
     products.reduce(
       (total, product) =>
         total +
         product.onHand *
-          product.unitCost,
+          ((product.costPrice ?? product.unitCost ?? 0) +
+            (product.transportCost ?? 0)),
       0
     );
 
@@ -617,6 +727,225 @@ const [massEditValue, setMassEditValue] =
         getStatus(product) ===
         "Out of Stock"
     ).length;
+
+  const getAlertRule = (
+    product: Product,
+    targetWarehouse = product.warehouse
+  ) =>
+    alertRules.find(
+      (rule) =>
+        rule.productId === product.id &&
+        rule.warehouse === targetWarehouse
+    );
+
+  const lowStockAlerts = useMemo(() => {
+    const query = alertSearch.toLowerCase().trim();
+
+    return products
+      .map((product) => {
+        const rule = alertRules.find(
+          (item) =>
+            item.productId === product.id &&
+            item.warehouse === product.warehouse
+        );
+        const threshold =
+          rule?.threshold ?? product.reorderPoint;
+        const enabled = rule?.enabled ?? true;
+        const available = getAvailable(product);
+
+        return {
+          product,
+          rule,
+          threshold,
+          available,
+          active: enabled && available <= threshold,
+        };
+      })
+      .filter((item) => {
+        const matchesSearch =
+          !query ||
+          item.product.name.toLowerCase().includes(query) ||
+          item.product.sku.toLowerCase().includes(query) ||
+          item.product.warehouse.toLowerCase().includes(query);
+
+        const matchesStatus =
+          alertStatusFilter === "All" ||
+          (alertStatusFilter === "Active"
+            ? item.active
+            : !item.active);
+
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        if (a.active !== b.active) {
+          return a.active ? -1 : 1;
+        }
+        return a.available - b.available;
+      });
+  }, [products, alertRules, alertSearch, alertStatusFilter]);
+
+  const activeLowStockAlerts = useMemo(
+    () =>
+      products.filter((product) => {
+        const rule = alertRules.find(
+          (item) =>
+            item.productId === product.id &&
+            item.warehouse === product.warehouse
+        );
+        const threshold =
+          rule?.threshold ?? product.reorderPoint;
+
+        return (
+          (rule?.enabled ?? true) &&
+          getAvailable(product) <= threshold
+        );
+      }).length,
+    [products, alertRules]
+  );
+
+  function persistAlertRules(
+    nextRules: LowStockAlertRule[]
+  ) {
+    setAlertRules(nextRules);
+    localStorage.setItem(
+      "inventory-low-stock-alert-rules",
+      JSON.stringify(nextRules)
+    );
+  }
+
+  function resetAlertRuleForm() {
+    const firstProduct = products[0];
+
+    setAlertRuleProductId(
+      firstProduct ? firstProduct.id.toString() : ""
+    );
+    setAlertRuleWarehouse(
+      firstProduct?.warehouse ||
+        warehouses[0] ||
+        "Main Store"
+    );
+    setAlertRuleThreshold(
+      firstProduct
+        ? String(
+            getAlertRule(firstProduct)?.threshold ??
+              firstProduct.reorderPoint
+          )
+        : "0"
+    );
+    setAlertRuleChannels(["In-App"]);
+    setAlertRuleEnabled(true);
+  }
+
+  function openLowStockAlerts() {
+    resetAlertRuleForm();
+    setShowLowStockAlerts(true);
+  }
+
+  function loadAlertRule(
+    productId: string,
+    targetWarehouse?: string
+  ) {
+    const product = products.find(
+      (item) => item.id.toString() === productId
+    );
+
+    if (!product) {
+      return;
+    }
+
+    const warehouseName =
+      targetWarehouse || product.warehouse;
+
+    const rule = alertRules.find(
+      (item) =>
+        item.productId === product.id &&
+        item.warehouse === warehouseName
+    );
+
+    setAlertRuleProductId(productId);
+    setAlertRuleWarehouse(warehouseName);
+    setAlertRuleThreshold(
+      String(rule?.threshold ?? product.reorderPoint)
+    );
+    setAlertRuleChannels(
+      rule?.channels?.length
+        ? rule.channels
+        : ["In-App"]
+    );
+    setAlertRuleEnabled(rule?.enabled ?? true);
+  }
+
+  function toggleAlertChannel(
+    channel: LowStockAlertChannel
+  ) {
+    setAlertRuleChannels((current) =>
+      current.includes(channel)
+        ? current.filter((item) => item !== channel)
+        : [...current, channel]
+    );
+  }
+
+  function handleSaveAlertRule() {
+    const product = products.find(
+      (item) =>
+        item.id.toString() === alertRuleProductId
+    );
+    const threshold = Number(alertRuleThreshold);
+
+    if (!product) {
+      alert("Please select a product.");
+      return;
+    }
+
+    if (!Number.isFinite(threshold) || threshold < 0) {
+      alert("Enter a valid non-negative alert threshold.");
+      return;
+    }
+
+    if (alertRuleChannels.length === 0) {
+      alert("Select at least one notification channel.");
+      return;
+    }
+
+    const ruleId =
+      `${product.id}:${alertRuleWarehouse}`;
+
+    const nextRule: LowStockAlertRule = {
+      id: ruleId,
+      productId: product.id,
+      warehouse: alertRuleWarehouse,
+      enabled: alertRuleEnabled,
+      threshold,
+      channels: alertRuleChannels,
+      updatedAt: new Date().toISOString(),
+    };
+
+    persistAlertRules([
+      ...alertRules.filter(
+        (rule) => rule.id !== ruleId
+      ),
+      nextRule,
+    ]);
+
+    alert(
+      `Low-stock alert rule saved for ${product.name} at ${alertRuleWarehouse}.`
+    );
+  }
+
+  function handleDeleteAlertRule(
+    productId: number,
+    targetWarehouse: string
+  ) {
+    persistAlertRules(
+      alertRules.filter(
+        (rule) =>
+          !(
+            rule.productId === productId &&
+            rule.warehouse === targetWarehouse
+          )
+      )
+    );
+  }
 
   // --------------------------------------------------
   // VIEW PRODUCT
@@ -669,6 +998,7 @@ const transportCost = Number(newProduct.transportCost);
 const totalProductCost = costPrice + transportCost;
 const mrp = Number(newProduct.mrp);
 const discountValue = Number(newProduct.discountValue);
+const gstRate = Number(newProduct.gstRate);
 
 const calculatedMrp = Math.max(
   mrp,
@@ -698,12 +1028,15 @@ const sellingPrice =
   !Number.isFinite(transportCost) ||
   !Number.isFinite(mrp) ||
   !Number.isFinite(discountValue) ||
+  !Number.isFinite(gstRate) ||
   costPrice < 0 ||
   transportCost < 0 ||
   mrp < 0 ||
-  discountValue < 0
+  discountValue < 0 ||
+  gstRate < 0 ||
+  gstRate > 100
 ) {
-  alert("Please enter valid pricing values.");
+  alert("Please enter valid pricing and GST values.");
   return;
 }
 
@@ -717,7 +1050,7 @@ if (
 
 if (
   newProduct.discountType === "Fixed" &&
-  discountValue > mrp
+  discountValue > calculatedMrp
 ) {
   alert("Fixed discount cannot be greater than MRP.");
   return;
@@ -814,6 +1147,12 @@ if (
           0
         ),
 
+        moq:
+  Math.max(
+    Number(newProduct.moq),
+    1
+  ),
+
       unitCost:
         Math.max(
           unitCost,
@@ -826,6 +1165,7 @@ mrp: Math.max(calculatedMrp, 0),
 discountType: newProduct.discountType,
 discountValue: Math.max(discountValue, 0),
 sellingPrice: Math.max(sellingPrice, 0),
+gstRate: gstRate,
 
 supplierName:
   newProduct.supplierName.trim(),
@@ -867,6 +1207,7 @@ variants:
   quantity: "",
   reorderPoint:
     "10",
+    moq: "1",
   unitCost: "",
 costPrice: "",
 transportCost: "",
@@ -874,6 +1215,7 @@ mrp: "",
 discountType:
   "Percentage",
   discountValue: "",
+  gstRate: "18",
   supplierName: "",
   supplierContact: "",
   supplierEmail: "",
@@ -900,8 +1242,9 @@ discountType:
       "Category",
       "Warehouse",
       "Quantity",
-      "Reorder Point",
-      "Unit Cost",
+"Reorder Point",
+"MOQ",
+"Unit Cost",
 "Cost Price",
 "Transport Cost",
 "MRP",
@@ -921,8 +1264,9 @@ discountType:
       product.category,
       product.warehouse,
       product.onHand ?? 0,
-      product.reorderPoint ?? 0,
-      product.unitCost ?? 0,
+product.reorderPoint ?? 0,
+product.moq ?? 1,
+product.unitCost ?? 0,
 product.costPrice ?? 0,
 product.transportCost ?? 0,
 product.mrp ?? 0,
@@ -976,8 +1320,9 @@ product.mrp ?? 0,
       "Category",
       "Warehouse",
       "Quantity",
-      "Reorder Point",
-      "Unit Cost",
+"Reorder Point",
+"MOQ",
+"Unit Cost",
 "Cost Price",
 "Transport Cost",
 "MRP",
@@ -998,9 +1343,11 @@ product.mrp ?? 0,
       "Main Store",
       "10",
       "5",
+      "1",
       "500",
-"50",
-"699",
+      "450",
+      "50",
+      "699",
       "Percentage",
       "10",
       "629.10",
@@ -1109,13 +1456,13 @@ product.mrp ?? 0,
       }
 
       const importedProducts = lines
-        .slice(1)
-        .map((line) => parseCsvRow(line))
-        .filter(
-          (row) =>
-            row[skuIndex]?.trim() &&
-            row[nameIndex]?.trim()
-        );
+  .slice(1)
+  .map((line) => parseCsvRow(line))
+  .filter(
+    (row) =>
+      row[skuIndex]?.trim() &&
+      row[nameIndex]?.trim()
+  );
 
       if (importedProducts.length === 0) {
         alert("No valid products were found in the CSV file.");
@@ -1139,11 +1486,74 @@ product.mrp ?? 0,
         return Number.isFinite(value) ? value : fallback;
       };
 
+            const invalidRows = importedProducts.filter((row) => {
+        const numericColumns = [
+          "Quantity",
+          "Reorder Point",
+          "MOQ",
+          "Unit Cost",
+          "Cost Price",
+          "Transport Cost",
+          "MRP",
+          "Discount Value",
+          "Selling Price",
+          "GST Rate",
+        ];
+
+        return numericColumns.some((column) => {
+          const value = getValue(row, column).trim();
+
+          if (!value) {
+            return false;
+          }
+
+          return !Number.isFinite(Number(value));
+        });
+      });
+
+            if (invalidRows.length > 0) {
+        alert(
+          `${invalidRows.length} row(s) contain invalid numeric values. Please correct the CSV and try again.`
+        );
+        return;
+      }
+
       setProducts((currentProducts) => {
         const updatedProducts = [...currentProducts];
 
         importedProducts.forEach((row, index) => {
           const sku = getValue(row, "SKU").trim();
+
+          const importedCostPrice = getNumber(
+            row,
+            "Cost Price"
+          );
+
+          const importedTransportCost = getNumber(
+            row,
+            "Transport Cost"
+          );
+
+          const importedTotalProductCost =
+            importedCostPrice + importedTransportCost;
+
+          const importedMrp = Math.max(
+            getNumber(row, "MRP"),
+            importedTotalProductCost
+          );
+
+          const importedDiscountType =
+            (getValue(row, "Discount Type") ||
+              "Percentage") as "Percentage" | "Fixed";
+
+          const importedDiscountValue =
+            getNumber(row, "Discount Value");
+
+          const importedSellingPrice =
+            importedDiscountType === "Percentage"
+              ? importedMrp -
+                (importedMrp * importedDiscountValue) / 100
+              : importedMrp - importedDiscountValue;
 
           const importedProduct: Product = {
             id:
@@ -1174,38 +1584,23 @@ product.mrp ?? 0,
               "Quantity"
             ),
             reorderPoint: getNumber(
-              row,
-              "Reorder Point"
-            ),
+  row,
+  "Reorder Point"
+),
+moq: Math.max(
+  getNumber(row, "MOQ", 1),
+  1
+),
             unitCost: getNumber(
   row,
   "Unit Cost"
 ),
-costPrice: getNumber(
-  row,
-  "Cost Price"
-),
-transportCost: getNumber(
-  row,
-  "Transport Cost"
-),
-mrp: getNumber(
-  row,
-  "MRP"
-),
-            discountType:
-  (getValue(
-    row,
-    "Discount Type"
-  ) || "Percentage") as "Percentage" | "Fixed",
-            discountValue: getNumber(
-              row,
-              "Discount Value"
-            ),
-            sellingPrice: getNumber(
-              row,
-              "Selling Price"
-            ),
+costPrice: importedCostPrice,
+            transportCost: importedTransportCost,
+            mrp: importedMrp,
+            discountType: importedDiscountType,
+            discountValue: importedDiscountValue,
+            sellingPrice: Math.max(importedSellingPrice, 0),
             gstRate: getNumber(
               row,
               "GST Rate",
@@ -1350,13 +1745,18 @@ mrp: getNumber(
   !Number.isFinite(
     editingProduct.discountValue ?? 0
   ) ||
+  !Number.isFinite(
+    editingProduct.gstRate ?? 18
+  ) ||
   (editingProduct.costPrice ?? 0) < 0 ||
   (editingProduct.transportCost ?? 0) < 0 ||
   (editingProduct.mrp ?? 0) < 0 ||
-  (editingProduct.discountValue ?? 0) < 0
+  (editingProduct.discountValue ?? 0) < 0 ||
+  (editingProduct.gstRate ?? 18) < 0 ||
+  (editingProduct.gstRate ?? 18) > 100
 ) {
   alert(
-    "Please enter valid pricing values."
+    "Please enter valid pricing and GST values."
   );
   return;
 }
@@ -1372,17 +1772,6 @@ mrp: getNumber(
       return;
     }
 
-    if (
-      editingProduct.discountType === "Fixed" &&
-      (editingProduct.discountValue ?? 0) >
-        (editingProduct.mrp ?? 0)
-    ) {
-      alert(
-        "Fixed discount cannot be greater than MRP."
-      );
-      return;
-    }
-
     const costPrice = editingProduct.costPrice ?? 0;
 const transportCost = editingProduct.transportCost ?? 0;
 const totalProductCost = costPrice + transportCost;
@@ -1391,6 +1780,16 @@ const mrp = Math.max(
   editingProduct.mrp ?? 0,
   totalProductCost
 );
+
+if (
+  editingProduct.discountType === "Fixed" &&
+  (editingProduct.discountValue ?? 0) > mrp
+) {
+  alert(
+    "Fixed discount cannot be greater than MRP."
+  );
+  return;
+}
 
 const discountValue =
   editingProduct.discountValue ?? 0;
@@ -1406,26 +1805,37 @@ const discountValue =
     (product) =>
       product.id === editingProduct.id
         ? {
-            ...editingProduct,
-            ...editingProduct,
-name: editingProduct.name.trim(),
-sku: editingProduct.sku
-  .trim()
-  .toUpperCase(),
-onHand: Number(editingProduct.onHand),
-costPrice:
-  editingProduct.costPrice ?? 0,
-transportCost:
-  editingProduct.transportCost ?? 0,
-mrp: mrp,
-            discountType:
-              editingProduct.discountType ??
-              "Percentage",
-            discountValue:
-              editingProduct.discountValue ?? 0,
-            sellingPrice:
-              Math.max(sellingPrice, 0),
-          }
+    ...editingProduct,
+        moq: Math.max(
+      Number(editingProduct.moq ?? 1),
+      1
+    ),
+    name: editingProduct.name.trim(),
+    sku: editingProduct.sku
+      .trim()
+      .toUpperCase(),
+    onHand: Number(editingProduct.onHand),
+    costPrice:
+      editingProduct.costPrice ?? 0,
+    transportCost:
+      editingProduct.transportCost ?? 0,
+    mrp,
+    discountType:
+      editingProduct.discountType ??
+      "Percentage",
+    discountValue:
+      editingProduct.discountValue ?? 0,
+    sellingPrice:
+      Math.max(sellingPrice, 0),
+    gstRate:
+      editingProduct.gstRate ?? 18,
+    supplierName:
+      editingProduct.supplierName?.trim() ?? "",
+    supplierContact:
+      editingProduct.supplierContact?.trim() ?? "",
+    supplierEmail:
+      editingProduct.supplierEmail?.trim() ?? "",
+  }
         : product
   );
 
@@ -1514,11 +1924,64 @@ mrp: mrp,
         };
       }
 
+      if (massEditField === "moq") {
+  const moq = Number(massEditValue);
+
+  if (!Number.isFinite(moq) || moq < 1) {
+    return product;
+  }
+
+  return {
+    ...product,
+    moq,
+  };
+}
+
       if (massEditField === "costPrice") {
         return {
           ...product,
           costPrice: Number(massEditValue),
           unitCost: Number(massEditValue),
+        };
+      }
+
+      if (massEditField === "transportCost") {
+  const transportCost = Number(massEditValue);
+  const costPrice = product.costPrice ?? 0;
+  const totalProductCost =
+    costPrice + transportCost;
+
+  const mrp = Math.max(
+    product.mrp ?? 0,
+    totalProductCost
+  );
+
+  const discountValue =
+    product.discountValue ?? 0;
+
+  const sellingPrice =
+    product.discountType === "Percentage"
+      ? mrp - (mrp * discountValue) / 100
+      : mrp - discountValue;
+
+  return {
+    ...product,
+    transportCost,
+    mrp,
+    sellingPrice: Math.max(sellingPrice, 0),
+  };
+}
+
+      if (massEditField === "gstRate") {
+        const gstRate = Number(massEditValue);
+
+        if (gstRate < 0 || gstRate > 100) {
+          return product;
+        }
+
+        return {
+          ...product,
+          gstRate,
         };
       }
 
@@ -2016,7 +2479,7 @@ mrp: mrp,
     return (
       <PageLayout>
         <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="text-sm font-medium text-gray-500">
+          <div className="text-[11px] font-medium tracking-wide text-slate-500">
             Loading inventory...
           </div>
         </div>
@@ -2069,7 +2532,7 @@ mrp: mrp,
 
   return (
     <PageLayout>
-      <main className="min-h-screen bg-[#f8fafc] px-6 py-7 text-slate-900">
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 px-4 py-6 text-slate-900 sm:px-6 sm:py-7">
 
         <div className="mx-auto max-w-7xl">
 
@@ -2077,15 +2540,15 @@ mrp: mrp,
               HEADER
           ================================================= */}
 
-          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="mb-7 rounded-2xl border border-slate-200/80 bg-white/80 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.05)] backdrop-blur-sm sm:p-6 lg:flex lg:items-center lg:justify-between">
 
             <div>
 
-              <h1 className="text-2xl font-bold tracking-tight text-[#12213a]">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-800">
                 Inventory
               </h1>
 
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                 Manage products, stock levels, warehouses
                 and inventory operations.
               </p>
@@ -2101,7 +2564,7 @@ mrp: mrp,
                   setBarcodeProduct(null);
                   setShowBarcode(true);
                 }}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
               >
                 Scan Barcode
               </button>
@@ -2116,7 +2579,7 @@ mrp: mrp,
                   setTransferReason("");
                   setShowTransfer(true);
                 }}
-                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-blue-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-md"
               >
                 Transfer Stock
               </button>
@@ -2124,12 +2587,12 @@ mrp: mrp,
               <button
   type="button"
   onClick={handleExportProducts}
-  className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-xs font-semibold text-green-700 hover:bg-green-100"
+  className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-emerald-100 hover:shadow-md"
 >
   Export Products
 </button>
 
-<label className="cursor-pointer rounded-lg border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-semibold text-purple-700 hover:bg-purple-100">
+<label className="cursor-pointer rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-semibold text-purple-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-purple-100 hover:shadow-md">
   Import Products
   <input
     type="file"
@@ -2142,17 +2605,30 @@ mrp: mrp,
 <button
   type="button"
   onClick={handleDownloadTemplate}
-  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md"
 >
   Download Template
 </button>
 
               <button
                 type="button"
+                onClick={openLowStockAlerts}
+                className="relative rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-amber-100 hover:shadow-md"
+              >
+                Low-Stock Alerts
+                {activeLowStockAlerts > 0 && (
+                  <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-amber-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    {activeLowStockAlerts}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={() =>
                   setShowAddProduct(true)
                 }
-                className="rounded-lg bg-[#12213a] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
+                className="rounded-xl border border-blue-600 bg-blue-600 px-4 py-2.5 text-xs font-semibold tracking-wide text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500/20"
               >
                 + Add Product
               </button>
@@ -2169,17 +2645,17 @@ mrp: mrp,
 
             {/* TOTAL PRODUCTS */}
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_35px_rgba(15,23,42,0.10)]">
 
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                 Total Products
               </p>
 
-              <p className="mt-2 text-2xl font-bold text-[#12213a]">
+              <p className="mt-2 text-2xl font-bold tracking-tight text-slate-800">
                 {totalProducts}
               </p>
 
-              <p className="mt-1 text-[10px] text-gray-500">
+              <p className="mt-1 text-[11px] font-medium tracking-wide text-slate-500">
                 Active products
               </p>
 
@@ -2187,9 +2663,9 @@ mrp: mrp,
 
             {/* TOTAL UNITS */}
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_35px_rgba(15,23,42,0.10)]">
 
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                 Total Units
               </p>
 
@@ -2199,7 +2675,7 @@ mrp: mrp,
                 )}
               </p>
 
-              <p className="mt-1 text-[10px] text-gray-500">
+              <p className="mt-1 text-[11px] font-medium tracking-wide text-slate-500">
                 Units currently in stock
               </p>
 
@@ -2207,9 +2683,9 @@ mrp: mrp,
 
             {/* STOCK VALUE */}
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_35px_rgba(15,23,42,0.10)]">
 
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                 Stock Value
               </p>
 
@@ -2219,7 +2695,7 @@ mrp: mrp,
                 )}
               </p>
 
-              <p className="mt-1 text-[10px] text-gray-500">
+              <p className="mt-1 text-[11px] font-medium tracking-wide text-slate-500">
                 Current inventory value
               </p>
 
@@ -2227,9 +2703,9 @@ mrp: mrp,
 
             {/* NEEDS ATTENTION */}
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_35px_rgba(15,23,42,0.10)]">
 
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                 Needs Attention
               </p>
 
@@ -2237,7 +2713,7 @@ mrp: mrp,
                 {needsAttention}
               </p>
 
-              <p className="mt-1 text-[10px] text-gray-500">
+              <p className="mt-1 text-[11px] font-medium tracking-wide text-slate-500">
                 {lowStockCount} low stock ·{" "}
                 {outOfStockCount} out of stock
               </p>
@@ -2250,17 +2726,17 @@ mrp: mrp,
               FILTERS
           ================================================= */}
 
-          <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <section className="mb-6 rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.05)] backdrop-blur-sm sm:p-6">
 
             <div className="mb-3 flex items-center justify-between">
 
               <div>
 
-                <h2 className="text-sm font-semibold text-[#12213a]">
+                <h2 className="text-base font-bold tracking-tight text-slate-800">
                   Product Search & Filters
                 </h2>
 
-                <p className="mt-1 text-[10px] text-gray-400">
+                <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                   Search products and filter inventory
                   by category, warehouse or stock status.
                 </p>
@@ -2270,7 +2746,7 @@ mrp: mrp,
               <button
                 type="button"
                 onClick={clearFilters}
-                className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-[10px] font-semibold tracking-wide text-blue-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-100 hover:text-blue-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10"
               >
                 Clear Filters
               </button>
@@ -2283,7 +2759,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Search
                 </label>
 
@@ -2296,7 +2772,7 @@ mrp: mrp,
                     )
                   }
                   placeholder="Product name or SKU..."
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 />
 
               </div>
@@ -2305,7 +2781,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Category
                 </label>
 
@@ -2316,7 +2792,7 @@ mrp: mrp,
                       e.target.value
                     )
                   }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 >
 
                   {categories.map(
@@ -2340,7 +2816,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Warehouse
                 </label>
 
@@ -2351,7 +2827,7 @@ mrp: mrp,
                       e.target.value
                     )
                   }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 >
 
                   <option value="All">
@@ -2377,7 +2853,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Stock Status
                 </label>
 
@@ -2388,7 +2864,7 @@ mrp: mrp,
                       e.target.value
                     )
                   }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 >
 
                   <option value="All">
@@ -2419,13 +2895,13 @@ mrp: mrp,
               PRODUCT TABLE
           ================================================= */}
 
-          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm">
 
-            <div className="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
 
               <div>
 
-                <h2 className="text-sm font-semibold text-[#12213a]">
+                <h2 className="text-base font-bold tracking-tight text-slate-900">
                   Product List
                 </h2>
 
@@ -2440,8 +2916,8 @@ mrp: mrp,
                 </div>
 
   {selectedProductIds.length > 0 && (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-semibold text-gray-600">
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <span className="text-[11px] font-semibold tracking-wide text-slate-600">
         {selectedProductIds.length} selected
       </span>
 
@@ -2452,7 +2928,7 @@ mrp: mrp,
     setMassEditValue("");
     setShowMassEdit(true);
   }}
-  className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100"
+  className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-semibold tracking-wide text-blue-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-md"
 >
   Mass Edit
 </button>
@@ -2460,7 +2936,7 @@ mrp: mrp,
       <button
   type="button"
   onClick={handleMassDelete}
-  className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-semibold text-red-700 hover:bg-red-100"
+  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-semibold tracking-wide text-red-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-red-100 hover:shadow-md"
 >
   Mass Delete
 </button>
@@ -2468,7 +2944,7 @@ mrp: mrp,
       <button
         type="button"
         onClick={() => setSelectedProductIds([])}
-        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-50"
+        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold tracking-wide text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md"
       >
         Clear
       </button>
@@ -2495,13 +2971,13 @@ mrp: mrp,
 
             <div className="overflow-x-auto">
 
-              <table className="w-full min-w-[1100px] border-collapse text-xs">
+              <table className="w-full min-w-[1100px] border-collapse bg-white text-xs">
 
                 <thead>
 
-                  <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                  <tr className="border-b border-slate-300/80 bg-gradient-to-r from-slate-50 via-white to-slate-50 text-left">
 
-  <th className="px-4 py-3">
+  <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600">
     <input
       type="checkbox"
       checked={
@@ -2517,67 +2993,77 @@ mrp: mrp,
           setSelectedProductIds([]);
         }
       }}
-      className="h-4 w-4 rounded border-gray-300"
+      className="h-4 w-4 rounded-md border-slate-300 text-blue-600 shadow-sm transition-all duration-200 focus:ring-2 focus:ring-blue-500/20"
     />
   </th>
 
-  <th className="px-4 py-3 font-semibold text-gray-600">
-    Product
-  </th>
+  <th className="min-w-[180px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  Product
+</th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
-                      Type
-                    </th>
+                    <th className="min-w-[120px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  Type
+</th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
-                      Category
-                    </th>
+                    <th className="min-w-[140px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  Category
+</th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
-                      Warehouse
-                    </th>
+                    <th className="min-w-[140px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  Warehouse
+</th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
-                      On Hand
-                    </th>
+                   <th className="min-w-[100px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  On Hand
+</th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
-                      Reserved
-                    </th>
+                   <th className="min-w-[100px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  Reserved
+</th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
-                      Available
-                    </th>
+                    <th className="min-w-[100px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  Available
+</th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
-                      Status
-                    </th>
+                    <th className="min-w-[110px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  Status
+</th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
+                    {/* MOQ */}
+
+<th className="min-w-[80px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  MOQ
+</th>
+
+<th className="min-w-[110px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
   Cost Price
 </th>
 
-<th className="px-4 py-3 font-semibold text-gray-600">
+<th className="min-w-[130px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
   Transport Cost
 </th>
 
-<th className="px-4 py-3 font-semibold text-gray-600">
+<th className="min-w-[100px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
   MRP
 </th>
 
-<th className="px-4 py-3 font-semibold text-gray-600">
+<th className="min-w-[110px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
   Discount
 </th>
 
-<th className="px-4 py-3 font-semibold text-gray-600">
+<th className="min-w-[120px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
   Selling Price
 </th>
 
-                    <th className="px-4 py-3 font-semibold text-gray-600">
+<th className="min-w-[100px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+  GST Rate
+</th>
+
+<th className="min-w-[180px] px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
   Supplier
 </th>
 
-<th className="px-4 py-3 font-semibold text-gray-600">
+<th className="min-w-[260px] px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600 text-right">
   Actions
 </th>
 
@@ -2597,9 +3083,9 @@ mrp: mrp,
 
                       return (
   <tr
-    key={product.id}
-    className="border-b border-gray-100 transition hover:bg-gray-50"
-  >
+  key={product.id}
+  className="border-b border-slate-200/70 align-middle transition-all duration-200 hover:-translate-y-[1px] hover:bg-blue-50/40 hover:shadow-[inset_3px_0_0_rgba(59,130,246,0.45),0_4px_12px_rgba(15,23,42,0.04)]"
+>
 
     {/* SELECT */}
 
@@ -2623,21 +3109,21 @@ mrp: mrp,
             );
           }
         }}
-        className="h-4 w-4 rounded border-gray-300"
+        className="h-4 w-4 rounded-md border-slate-300 text-blue-600 shadow-sm transition-all duration-200 focus:ring-2 focus:ring-blue-500/20"
       />
     </td>
 
     {/* PRODUCT */}
 
-    <td className="px-4 py-3">
+    <td className="w-12 px-4 py-3 align-middle">
 
-                            <p className="font-semibold text-[#12213a]">
+                            <p className="text-sm font-semibold tracking-tight text-slate-800">
                               {
                                 product.name
                               }
                             </p>
 
-                            <p className="mt-0.5 font-mono text-[10px] text-gray-400">
+                            <p className="mt-1 font-mono text-[10px] font-medium tracking-wide text-slate-400">
                               {
                                 product.sku
                               }
@@ -2649,7 +3135,7 @@ mrp: mrp,
 
                           <td className="px-4 py-3">
 
-                            <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">
+                            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-blue-700 shadow-sm">
                               {
                                 product.productType ??
                                 "Simple"
@@ -2659,8 +3145,7 @@ mrp: mrp,
                           </td>
 
                           {/* CATEGORY */}
-
-                          <td className="px-4 py-3 text-gray-600">
+                          <td className="px-4 py-3 text-sm font-medium tracking-tight text-slate-600">
                             {
                               product.category
                             }
@@ -2668,7 +3153,7 @@ mrp: mrp,
 
                           {/* WAREHOUSE */}
 
-                          <td className="px-4 py-3 text-gray-600">
+                          <td className="px-4 py-3 text-sm font-medium tracking-tight text-slate-600">
                             {
                               product.warehouse
                             }
@@ -2676,15 +3161,13 @@ mrp: mrp,
 
                           {/* ON HAND */}
 
-                          <td className="px-4 py-3 font-semibold text-gray-800">
-                            {
-                              product.onHand
-                            }
-                          </td>
+<td className="px-4 py-3 text-sm font-bold tracking-tight text-slate-800">
+  {product.onHand}
+</td>
 
                           {/* RESERVED */}
 
-                          <td className="px-4 py-3 text-gray-500">
+                          <td className="px-4 py-3 text-sm font-bold tracking-tight text-slate-700">
                             {
                               product.reserved
                             }
@@ -2692,20 +3175,16 @@ mrp: mrp,
 
                           {/* AVAILABLE */}
 
-                          <td className="px-4 py-3 font-semibold text-gray-800">
-                            {
-                              getAvailable(
-                                product
-                              )
-                            }
+                          <td className="px-4 py-3 text-sm font-bold tracking-tight text-emerald-700">
+                            {getAvailable(product)}
                           </td>
 
                           {/* STATUS */}
 
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 text-sm font-semibold">
 
                             <span
-                              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide shadow-sm ${
                                 status ===
                                 "Healthy"
                                   ? "bg-green-100 text-green-700"
@@ -2722,9 +3201,15 @@ mrp: mrp,
 
                           </td>
 
+                          {/* MOQ */}
+
+<td className="px-4 py-3 text-sm font-semibold tracking-tight text-slate-700">
+  {product.moq ?? 1}
+</td>
+
                           {/* COST PRICE */}
 
-<td className="px-4 py-3 font-medium text-gray-700">
+<td className="px-4 py-3 text-sm font-semibold tracking-tight text-slate-700">
   {formatCurrency(
     product.costPrice ?? product.unitCost
   )}
@@ -2732,19 +3217,19 @@ mrp: mrp,
 
 {/* TRANSPORT COST */}
 
-<td className="px-4 py-3 font-medium text-gray-700">
+<td className="px-4 py-3 text-sm font-semibold tracking-tight text-slate-700">
   {formatCurrency(product.transportCost ?? 0)}
 </td>
 
 {/* MRP */}
 
-<td className="px-4 py-3 font-medium text-gray-700">
+<td className="px-4 py-3 text-sm font-semibold tracking-tight text-slate-700">
   {formatCurrency(product.mrp ?? 0)}
 </td>
 
 {/* DISCOUNT */}
 
-<td className="px-4 py-3 text-gray-600">
+<td className="px-4 py-3 text-sm font-semibold tracking-tight text-slate-600">
   {product.discountValue != null
     ? product.discountType === "Percentage"
       ? `${product.discountValue}%`
@@ -2754,37 +3239,43 @@ mrp: mrp,
 
 {/* SELLING PRICE */}
 
-<td className="px-4 py-3 font-semibold text-green-700">
+<td className="px-4 py-3 text-sm font-bold tracking-tight text-emerald-700">
   {formatCurrency(
     product.sellingPrice ?? product.mrp ?? product.unitCost
   )}
 </td>
 
+{/* GST RATE */}
+
+<td className="px-4 py-3 text-sm font-semibold tracking-tight text-slate-700">
+  {product.gstRate ?? 18}%
+</td>
+
 {/* SUPPLIER */}
 
-<td className="px-4 py-3">
-  <div className="font-medium text-gray-700">
+<td className="px-4 py-3 align-top min-w-[180px]">
+  <div className="text-sm font-semibold text-slate-700">
     {product.supplierName || "—"}
   </div>
 
-  {product.supplierContact && (
-    <div className="mt-0.5 text-[10px] text-gray-400">
-      {product.supplierContact}
-    </div>
-  )}
+ {product.supplierContact && (
+  <div className="mt-1 text-[10px] font-medium tracking-wide text-slate-500">
+    {product.supplierContact}
+  </div>
+)}
 
-  {product.supplierEmail && (
-    <div className="mt-0.5 text-[10px] text-gray-400">
-      {product.supplierEmail}
-    </div>
-  )}
+ {product.supplierEmail && (
+  <div className="mt-0.5 text-[10px] font-medium tracking-wide text-slate-400">
+    {product.supplierEmail}
+  </div>
+)}
 </td>
 
 {/* ACTIONS */}
 
-                          <td className="px-4 py-3">
+                          <td className="min-w-[260px] px-4 py-3 align-middle bg-slate-50/40">
 
-                            <div className="flex flex-wrap gap-1.5">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
 
                               <button
                                 type="button"
@@ -2793,7 +3284,7 @@ mrp: mrp,
                                     product
                                   )
                                 }
-                                className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-[10px] font-medium text-gray-700 hover:bg-gray-50"
+                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold tracking-wide text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md"
                               >
                                 View
                               </button>
@@ -2805,7 +3296,7 @@ mrp: mrp,
                                     product
                                   )
                                 }
-                                className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-medium text-blue-700 hover:bg-blue-100"
+                                className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-semibold tracking-wide text-blue-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-md"
                               >
                                 Edit
                               </button>
@@ -2817,7 +3308,7 @@ mrp: mrp,
                                     product
                                   )
                                 }
-                                className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100"
+                                className="rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-[10px] font-semibold tracking-wide text-orange-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-orange-100 hover:shadow-md"
                               >
                                 Adjust
                               </button>
@@ -2829,7 +3320,7 @@ mrp: mrp,
                                     product
                                   )
                                 }
-                                className="rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-[10px] font-medium text-purple-700 hover:bg-purple-100"
+                                className="rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-[10px] font-semibold tracking-wide text-purple-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-purple-100 hover:shadow-md"
                               >
                                 Transfer
                               </button>
@@ -2841,7 +3332,7 @@ mrp: mrp,
                                     product
                                   )
                                 }
-                                className="rounded-md border border-green-200 bg-green-50 px-2.5 py-1.5 text-[10px] font-medium text-green-700 hover:bg-green-100"
+                                className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[10px] font-semibold tracking-wide text-red-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-red-100 hover:shadow-md"
                               >
                                 Cycle Count
                               </button>
@@ -2860,11 +3351,11 @@ mrp: mrp,
                     <tr>
 
                       <td
-                        colSpan={13}
-                        className="px-4 py-12 text-center"
+                        colSpan={18}
+                        className="px-4 py-16 text-center"
                       >
 
-                        <p className="text-sm font-semibold text-gray-600">
+                        <p className="text-sm font-semibold tracking-tight text-slate-700">
                           No products found
                         </p>
 
@@ -2891,17 +3382,404 @@ mrp: mrp,
       </main>
 
       {/* =================================================
+          LOW-STOCK ALERTS — FR-INV-11
+      ================================================= */}
+      {showLowStockAlerts && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-[3px]">
+          <div className="mx-auto my-6 w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.20)]">
+            <div className="flex flex-col gap-4 border-b border-slate-100 bg-gradient-to-r from-amber-50 via-white to-blue-50/40 px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-bold tracking-tight text-slate-900">
+                    Low-Stock Alerts
+                  </h2>
+                  <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-700">
+                    FR-INV-11
+                  </span>
+                </div>
+                <p className="mt-1.5 max-w-2xl text-[11px] font-medium leading-5 text-slate-500">
+                  Configure product and warehouse thresholds and notification
+                  channels. An alert becomes active when Available stock is at
+                  or below the configured threshold.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLowStockAlerts(false)}
+                className="self-end rounded-xl border border-slate-200 bg-white px-3 py-2 text-lg leading-none text-slate-400 shadow-sm transition hover:bg-slate-50 hover:text-slate-700 sm:self-auto"
+                aria-label="Close low-stock alerts"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid gap-5 p-5 lg:grid-cols-[1.05fr_1.95fr]">
+              <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+                <div className="mb-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-600">
+                    Alert Rule
+                  </p>
+                  <h3 className="mt-1 text-base font-bold text-slate-800">
+                    Configure threshold
+                  </h3>
+                  <p className="mt-1 text-[10px] leading-4 text-slate-500">
+                    Configure a separate rule for each product and warehouse.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Product
+                    </label>
+                    <select
+                      value={alertRuleProductId}
+                      onChange={(e) => loadAlertRule(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                    >
+                      <option value="">Select product</option>
+                      {products.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name} · {product.sku}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Warehouse
+                    </label>
+                    <select
+                      value={alertRuleWarehouse}
+                      onChange={(e) =>
+                        loadAlertRule(
+                          alertRuleProductId,
+                          e.target.value
+                        )
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                    >
+                      {warehouses.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Alert Threshold
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={alertRuleThreshold}
+                      onChange={(e) =>
+                        setAlertRuleThreshold(e.target.value)
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                      placeholder="e.g. 10"
+                    />
+                    <p className="mt-1.5 text-[10px] text-slate-400">
+                      If no custom rule exists, the product reorder point is used.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Notification Channels
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["In-App", "Email", "Push"] as LowStockAlertChannel[]).map(
+                        (channel) => {
+                          const checked =
+                            alertRuleChannels.includes(channel);
+
+                          return (
+                            <label
+                              key={channel}
+                              className={`cursor-pointer rounded-xl border p-3 text-center transition ${
+                                checked
+                                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                                  : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  toggleAlertChannel(channel)
+                                }
+                                className="sr-only"
+                              />
+                              <span className="text-[10px] font-bold">
+                                {channel}
+                              </span>
+                            </label>
+                          );
+                        }
+                      )}
+                    </div>
+                    <p className="mt-2 text-[9px] leading-4 text-slate-400">
+                      Email and Push are saved as notification preferences here.
+                      Actual delivery requires backend/notification integration.
+                    </p>
+                  </div>
+
+                  <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-3">
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-700">
+                        Alert enabled
+                      </p>
+                      <p className="mt-0.5 text-[9px] text-slate-400">
+                        Disable without deleting the rule.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={alertRuleEnabled}
+                      onChange={(e) =>
+                        setAlertRuleEnabled(e.target.checked)
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveAlertRule}
+                    className="w-full rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-[11px] font-bold tracking-wide text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
+                  >
+                    Save Alert Rule
+                  </button>
+                </div>
+              </section>
+
+              <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-600">
+                      Alert Center
+                    </p>
+                    <h3 className="mt-1 text-base font-bold text-slate-800">
+                      {activeLowStockAlerts} active alert
+                      {activeLowStockAlerts === 1 ? "" : "s"}
+                    </h3>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="text"
+                      value={alertSearch}
+                      onChange={(e) => setAlertSearch(e.target.value)}
+                      placeholder="Search product, SKU..."
+                      className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-[10px] font-medium text-slate-700 outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                    />
+                    <select
+                      value={alertStatusFilter}
+                      onChange={(e) =>
+                        setAlertStatusFilter(
+                          e.target.value as typeof alertStatusFilter
+                        )
+                      }
+                      className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-[10px] font-semibold text-slate-700 outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                    >
+                      <option value="All">All Rules</option>
+                      <option value="Active">Active Alerts</option>
+                      <option value="Healthy">Healthy</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                  <table className="w-full min-w-[760px] text-left">
+                    <thead className="bg-slate-50">
+                      <tr className="border-b border-slate-200">
+                        {[
+                          "Product",
+                          "Warehouse",
+                          "Available",
+                          "Threshold",
+                          "Status",
+                          "Channels",
+                          "Action",
+                        ].map((heading) => (
+                          <th
+                            key={heading}
+                            className="px-4 py-3 text-[9px] font-bold uppercase tracking-wider text-slate-500"
+                          >
+                            {heading}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lowStockAlerts.map(
+                        ({
+                          product,
+                          rule,
+                          threshold,
+                          available,
+                          active,
+                        }) => (
+                          <tr
+                            key={`${product.id}:${product.warehouse}`}
+                            className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+                          >
+                            <td className="px-4 py-3">
+                              <p className="text-[11px] font-bold text-slate-700">
+                                {product.name}
+                              </p>
+                              <p className="mt-0.5 font-mono text-[9px] text-slate-400">
+                                {product.sku}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-[10px] font-semibold text-slate-600">
+                              {product.warehouse}
+                            </td>
+                            <td className="px-4 py-3 text-[11px] font-bold text-slate-800">
+                              {available}
+                            </td>
+                            <td className="px-4 py-3 text-[11px] font-bold text-amber-700">
+                              {threshold}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-bold ${
+                                  active
+                                    ? "border-amber-200 bg-amber-100 text-amber-700"
+                                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                }`}
+                              >
+                                {active ? "Alert Active" : "Healthy"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-wrap gap-1">
+                                {(rule?.channels?.length
+                                  ? rule.channels
+                                  : ["In-App"]
+                                ).map((channel) => (
+                                  <span
+                                    key={channel}
+                                    className="rounded-full bg-slate-100 px-2 py-1 text-[8px] font-semibold text-slate-600"
+                                  >
+                                    {channel}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    loadAlertRule(
+                                      product.id.toString(),
+                                      product.warehouse
+                                    )
+                                  }
+                                  className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[9px] font-bold text-blue-700 hover:bg-blue-100"
+                                >
+                                  Edit
+                                </button>
+                                {rule && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleDeleteAlertRule(
+                                        product.id,
+                                        product.warehouse
+                                      )
+                                    }
+                                    className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[9px] font-bold text-red-700 hover:bg-red-100"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      )}
+
+                      {lowStockAlerts.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-5 py-14 text-center">
+                            <p className="text-sm font-bold text-slate-700">
+                              No matching alert rules
+                            </p>
+                            <p className="mt-1 text-[10px] text-slate-400">
+                              Change the search/status filter or add a product.
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-amber-700">
+                      Active
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-amber-800">
+                      {activeLowStockAlerts}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                      Configured Rules
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-slate-800">
+                      {alertRules.length}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-blue-600">
+                      Default Logic
+                    </p>
+                    <p className="mt-1 text-[10px] font-bold leading-4 text-blue-800">
+                      Available ≤ Reorder Point
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/70 px-6 py-4">
+              <p className="text-[9px] leading-4 text-slate-400">
+                Configuration is persisted in localStorage. Server-side alert
+                enforcement and actual email/push delivery require backend integration.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowLowStockAlerts(false)}
+                className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-bold text-slate-600 shadow-sm hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================
     MASS EDIT MODAL
 ================================================= */}
 {showMassEdit && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-    <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-      <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
+    <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.15)]">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
         <div>
-          <h2 className="text-sm font-semibold text-[#12213a]">
-            Mass Edit Products
-          </h2>
-          <p className="mt-1 text-[10px] text-gray-400">
+          <h2 className="text-base font-bold tracking-tight text-slate-800">
+  Mass Edit Products
+</h2>
+          <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
             Updating {selectedProductIds.length} selected product(s)
           </p>
         </div>
@@ -2909,15 +3787,15 @@ mrp: mrp,
         <button
           type="button"
           onClick={() => setShowMassEdit(false)}
-          className="text-lg text-gray-400 hover:text-gray-700"
+          className="rounded-lg p-1.5 text-lg font-medium text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-4 focus:ring-slate-500/10"
         >
           ×
         </button>
       </div>
 
-      <div className="space-y-4 p-5">
-        <div>
-          <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+      <div className="space-y-5 border-t border-slate-100 px-6 py-5">
+        <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3">
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
             Field to update
           </label>
 
@@ -2929,20 +3807,23 @@ mrp: mrp,
               );
               setMassEditValue("");
             }}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+            className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
           >
             <option value="category">Category</option>
             <option value="warehouse">Warehouse</option>
             <option value="reorderPoint">Reorder Point</option>
+            <option value="moq">MOQ</option>
             <option value="costPrice">Cost Price</option>
-            <option value="mrp">MRP</option>
+<option value="transportCost">Transport Cost</option>
+<option value="mrp">MRP</option>
             <option value="discountType">Discount Type</option>
             <option value="discountValue">Discount Value</option>
+            <option value="gstRate">GST Rate</option>
           </select>
         </div>
 
-        <div>
-          <label className="mb-1 block text-[10px] font-semibold text-gray-600">
+        <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3">
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
             New value
           </label>
 
@@ -2950,7 +3831,7 @@ mrp: mrp,
             <select
               value={massEditValue}
               onChange={(e) => setMassEditValue(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
             >
               <option value="">Select category</option>
               {categories
@@ -2965,7 +3846,7 @@ mrp: mrp,
             <select
               value={massEditValue}
               onChange={(e) => setMassEditValue(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
             >
               <option value="">Select warehouse</option>
               {warehouses.map((warehouse) => (
@@ -2978,7 +3859,7 @@ mrp: mrp,
             <select
               value={massEditValue}
               onChange={(e) => setMassEditValue(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
             >
               <option value="">Select discount type</option>
               <option value="Percentage">Percentage</option>
@@ -2986,22 +3867,27 @@ mrp: mrp,
             </select>
           ) : (
             <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={massEditValue}
-              onChange={(e) => setMassEditValue(e.target.value)}
-              placeholder="Enter new value"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs outline-none focus:border-blue-500"
-            />
+  type="number"
+  min="0"
+  max={massEditField === "gstRate" ? "100" : undefined}
+  step="0.01"
+  value={massEditValue}
+  onChange={(e) => setMassEditValue(e.target.value)}
+  placeholder={
+    massEditField === "gstRate"
+      ? "Enter GST rate (0-100)"
+      : "Enter new value"
+  }
+  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+/>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
           <button
             type="button"
             onClick={() => setShowMassEdit(false)}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-[10px] font-semibold text-gray-600 hover:bg-gray-50"
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-semibold tracking-wide text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-slate-500/10"
           >
             Cancel
           </button>
@@ -3009,7 +3895,7 @@ mrp: mrp,
                     <button
             type="button"
             onClick={handleMassEdit}
-            className="rounded-md bg-blue-600 px-4 py-2 text-[10px] font-semibold text-white hover:bg-blue-700"
+            className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2.5 text-[10px] font-semibold tracking-wide text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
           >
             Apply Changes
           </button>
@@ -3024,20 +3910,20 @@ mrp: mrp,
       ================================================= */}
 
       {showAddProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
 
-          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.15)]">
 
             {/* HEADER */}
 
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
 
               <div>
-                <h2 className="text-lg font-bold text-[#12213a]">
+                <h2 className="text-base font-bold tracking-tight text-slate-800">
                   Add Product
                 </h2>
 
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                   Create a new product and add it to inventory.
                 </p>
               </div>
@@ -3047,7 +3933,7 @@ mrp: mrp,
                 onClick={() =>
                   setShowAddProduct(false)
                 }
-                className="text-xl text-gray-400 hover:text-gray-700"
+                className="rounded-lg p-1.5 text-xl font-medium text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-4 focus:ring-slate-500/10"
               >
                 ×
               </button>
@@ -3065,7 +3951,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Product Name
                 </label>
 
@@ -3081,7 +3967,7 @@ mrp: mrp,
                     )
                   }
                   placeholder="Enter product name"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   required
                 />
 
@@ -3091,7 +3977,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   SKU
                 </label>
 
@@ -3107,7 +3993,7 @@ mrp: mrp,
                     )
                   }
                   placeholder="e.g. PROD-001"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 font-mono text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   required
                 />
 
@@ -3117,7 +4003,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Product Type
                 </label>
 
@@ -3136,7 +4022,7 @@ mrp: mrp,
                       })
                     )
                   }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 >
 
                   <option value="Simple">
@@ -3149,7 +4035,7 @@ mrp: mrp,
 
                 </select>
 
-                <p className="mt-1 text-[11px] text-gray-500">
+                <p className="mt-1 text-[11px] font-medium tracking-wide text-slate-500">
                   Choose Variable Product if this product has different sizes, colors, or other variants.
                 </p>
 
@@ -3159,15 +4045,15 @@ mrp: mrp,
 
               {newProduct.productType ===
                 "Variable" && (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm">
 
                   <div className="mb-3">
 
-                    <h3 className="text-sm font-semibold text-[#12213a]">
+                    <h3 className="text-base font-bold tracking-tight text-slate-800">
                       Product Variants
                     </h3>
 
-                    <p className="mt-1 text-[11px] text-gray-500">
+                    <p className="mt-1 text-[11px] font-medium tracking-wide text-slate-500">
                       Add individual variants with their own SKU, size, color and stock.
                     </p>
 
@@ -3179,12 +4065,12 @@ mrp: mrp,
                         key={
                           variant.id
                         }
-                        className="mb-3 rounded-lg border border-gray-200 bg-white p-3"
+                        className="mb-3 rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm"
                       >
 
                         <div className="mb-2 flex items-center justify-between">
 
-                          <span className="text-xs font-semibold text-gray-600">
+                          <span className="text-[11px] font-semibold tracking-wide text-slate-600">
                             Variant{" "}
                             {index + 1}
                           </span>
@@ -3214,7 +4100,7 @@ mrp: mrp,
 
                           <div>
 
-                            <label className="mb-1 block text-[11px] font-semibold text-gray-700">
+                            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                               Size
                             </label>
 
@@ -3240,7 +4126,7 @@ mrp: mrp,
                                 )
                               }
                               placeholder="e.g. Small"
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                             />
 
                           </div>
@@ -3249,7 +4135,7 @@ mrp: mrp,
 
                           <div>
 
-                            <label className="mb-1 block text-[11px] font-semibold text-gray-700">
+                            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                               Color
                             </label>
 
@@ -3275,7 +4161,7 @@ mrp: mrp,
                                 )
                               }
                               placeholder="e.g. Red"
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                             />
 
                           </div>
@@ -3284,7 +4170,7 @@ mrp: mrp,
 
                           <div>
 
-                            <label className="mb-1 block text-[11px] font-semibold text-gray-700">
+                            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                               Variant SKU
                             </label>
 
@@ -3318,7 +4204,7 @@ mrp: mrp,
 
                           <div>
 
-                            <label className="mb-1 block text-[11px] font-semibold text-gray-700">
+                            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                               Stock
                             </label>
 
@@ -3349,7 +4235,7 @@ mrp: mrp,
                                     )
                                 )
                               }
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                             />
 
                           </div>
@@ -3396,7 +4282,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Category
                   </label>
 
@@ -3413,7 +4299,7 @@ mrp: mrp,
                         })
                       )
                     }
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   >
 
                     {categories
@@ -3438,7 +4324,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Warehouse
                   </label>
 
@@ -3455,7 +4341,7 @@ mrp: mrp,
                         })
                       )
                     }
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   >
 
                     {warehouses.map(
@@ -3485,7 +4371,7 @@ mrp: mrp,
                   "Simple" && (
                   <div>
 
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       Initial Quantity
                     </label>
 
@@ -3505,7 +4391,7 @@ mrp: mrp,
                         )
                       }
                       placeholder="0"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                       required
                     />
 
@@ -3516,7 +4402,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Reorder Point
                   </label>
 
@@ -3536,7 +4422,7 @@ mrp: mrp,
                       )
                     }
                     placeholder="10"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -3546,9 +4432,34 @@ mrp: mrp,
 
               {/* UNIT COST */}
 
+              {/* MOQ */}
+
+<div>
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+    Minimum Order Quantity (MOQ)
+  </label>
+
+  <input
+    type="number"
+    min="1"
+    value={newProduct.moq}
+    onChange={(e) =>
+      setNewProduct(
+        (current) => ({
+          ...current,
+          moq: e.target.value,
+        })
+      )
+    }
+    placeholder="1"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+    required
+  />
+</div>
+
               <div>
 
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Unit Cost
                 </label>
 
@@ -3569,7 +4480,7 @@ mrp: mrp,
                     )
                   }
                   placeholder="0.00"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   required
                 />
 
@@ -3579,7 +4490,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Cost Price
                 </label>
 
@@ -3595,7 +4506,7 @@ mrp: mrp,
                     }))
                   }
                   placeholder="0.00"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 />
 
               </div>
@@ -3604,7 +4515,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   MRP
                 </label>
 
@@ -3620,7 +4531,7 @@ mrp: mrp,
                     }))
                   }
                   placeholder="0.00"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 />
 
               </div>
@@ -3629,7 +4540,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Discount Type
                 </label>
 
@@ -3644,7 +4555,7 @@ mrp: mrp,
                           | "Fixed",
                     }))
                   }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 >
                   <option value="Percentage">
                     Percentage
@@ -3661,7 +4572,7 @@ mrp: mrp,
 
               <div>
 
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                   Discount Value
                 </label>
 
@@ -3677,20 +4588,43 @@ mrp: mrp,
                     }))
                   }
                   placeholder="0.00"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 />
 
                             </div>
 
+                            {/* GST RATE */}
+<div>
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+    GST Rate (%)
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    max="100"
+    step="0.01"
+    value={newProduct.gstRate}
+    onChange={(e) =>
+      setNewProduct((current) => ({
+        ...current,
+        gstRate: e.target.value,
+      }))
+    }
+    placeholder="18"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+  />
+</div>
+
               {/* SUPPLIER DETAILS */}
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <h3 className="mb-3 text-sm font-semibold text-[#12213a]">
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm">
+                <h3 className="mb-3 text-base font-bold tracking-tight text-slate-800">
                   Supplier Details
                 </h3>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       Supplier Name
                     </label>
                     <input
@@ -3703,12 +4637,12 @@ mrp: mrp,
                         }))
                       }
                       placeholder="Enter supplier name"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       Supplier Contact
                     </label>
                     <input
@@ -3721,12 +4655,12 @@ mrp: mrp,
                         }))
                       }
                       placeholder="Phone number"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     />
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       Supplier Email
                     </label>
                     <input
@@ -3739,28 +4673,28 @@ mrp: mrp,
                         }))
                       }
                       placeholder="supplier@example.com"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     />
                   </div>
                 </div>
               </div>
 
               {/* BUTTONS */}
-              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
 
                 <button
                   type="button"
                   onClick={() =>
                     setShowAddProduct(false)
                   }
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-semibold tracking-wide text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                  className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2.5 text-[10px] font-semibold tracking-wide text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
                 >
                   Add Product
                 </button>
@@ -3780,21 +4714,21 @@ mrp: mrp,
 
       {showEditProduct &&
         editingProduct && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
 
-            <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
+            <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.15)]">
 
               {/* HEADER */}
 
-              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
 
                 <div>
 
-                  <h2 className="text-lg font-bold text-[#12213a]">
+                  <h2 className="text-base font-bold tracking-tight text-slate-800">
                     Edit Product
                   </h2>
 
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                     Update product and inventory details.
                   </p>
 
@@ -3806,7 +4740,7 @@ mrp: mrp,
                     setShowEditProduct(false);
                     setEditingProduct(null);
                   }}
-                  className="text-xl text-gray-400 hover:text-gray-700"
+                  className="rounded-lg p-1.5 text-xl font-medium text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                 >
                   ×
                 </button>
@@ -3817,14 +4751,14 @@ mrp: mrp,
 
               <form
                 onSubmit={handleEditProduct}
-                className="space-y-4 p-5"
+                className="space-y-5 border-t border-slate-100 px-6 py-5"
               >
 
                 {/* PRODUCT NAME */}
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Product Name
                   </label>
 
@@ -3845,7 +4779,7 @@ mrp: mrp,
                             : current
                       )
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -3855,7 +4789,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     SKU
                   </label>
 
@@ -3876,7 +4810,7 @@ mrp: mrp,
                             : current
                       )
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 font-mono text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -3890,7 +4824,7 @@ mrp: mrp,
 
                   <div>
 
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       Category
                     </label>
 
@@ -3910,7 +4844,7 @@ mrp: mrp,
                               : current
                         )
                       }
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     >
 
                       {categories
@@ -3937,7 +4871,7 @@ mrp: mrp,
 
                   <div>
 
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       Warehouse
                     </label>
 
@@ -3957,7 +4891,7 @@ mrp: mrp,
                               : current
                         )
                       }
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     >
 
                       {warehouses.map(
@@ -3985,7 +4919,7 @@ mrp: mrp,
 
                   <div>
 
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       Current Stock
                     </label>
 
@@ -4009,7 +4943,7 @@ mrp: mrp,
                               : current
                         )
                       }
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                       required
                     />
 
@@ -4019,7 +4953,7 @@ mrp: mrp,
 
                   <div>
 
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       Reorder Point
                     </label>
 
@@ -4043,7 +4977,7 @@ mrp: mrp,
                               : current
                         )
                       }
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                       required
                     />
 
@@ -4051,11 +4985,40 @@ mrp: mrp,
 
                 </div>
 
+                                {/* MOQ */}
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    Minimum Order Quantity (MOQ)
+                  </label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingProduct.moq ?? 1}
+                    onChange={(e) =>
+                      setEditingProduct(
+                        (current) =>
+                          current
+                            ? {
+                                ...current,
+                                moq: Number(
+                                  e.target.value
+                                ),
+                              }
+                            : current
+                      )
+                    }
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                    required
+                  />
+                </div>
+
                 {/* UNIT COST */}
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Unit Cost
                   </label>
 
@@ -4080,7 +5043,7 @@ mrp: mrp,
                             : current
                       )
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -4089,7 +5052,7 @@ mrp: mrp,
 {/* COST PRICE */}
 
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     Cost Price
   </label>
 
@@ -4112,7 +5075,7 @@ mrp: mrp,
             : current
       )
     }
-    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
     placeholder="Enter cost price"
   />
 </div>
@@ -4120,7 +5083,7 @@ mrp: mrp,
 {/* TRANSPORT COST */}
 
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     Transport Cost
   </label>
 
@@ -4143,7 +5106,7 @@ mrp: mrp,
             : current
       )
     }
-    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
     placeholder="Enter transport cost"
   />
 </div>
@@ -4151,7 +5114,7 @@ mrp: mrp,
 {/* MRP */}
 
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     MRP
   </label>
 
@@ -4174,7 +5137,7 @@ mrp: mrp,
             : current
       )
     }
-    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
     placeholder="Enter MRP"
   />
 </div>
@@ -4182,7 +5145,7 @@ mrp: mrp,
 {/* DISCOUNT TYPE */}
 
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     Discount Type
   </label>
 
@@ -4205,7 +5168,7 @@ mrp: mrp,
             : current
       )
     }
-    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
   >
     <option value="Percentage">
       Percentage
@@ -4219,7 +5182,7 @@ mrp: mrp,
 {/* DISCOUNT VALUE */}
 
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     Discount Value
   </label>
 
@@ -4242,13 +5205,13 @@ mrp: mrp,
             : current
       )
     }
-        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+        className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
 />
 </div>
 
 {/* GST RATE */}
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     GST Rate (%)
   </label>
 
@@ -4272,14 +5235,14 @@ mrp: mrp,
             : current
       )
     }
-    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
     placeholder="Enter GST rate"
   />
 </div>
 
 {/* SUPPLIER NAME */}
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     Supplier Name
   </label>
 
@@ -4296,14 +5259,14 @@ mrp: mrp,
           : current
       )
     }
-    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
     placeholder="Enter supplier name"
   />
 </div>
 
 {/* SUPPLIER CONTACT */}
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     Supplier Contact
   </label>
 
@@ -4320,14 +5283,14 @@ mrp: mrp,
           : current
       )
     }
-    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
     placeholder="Enter supplier contact"
   />
 </div>
 
 {/* SUPPLIER EMAIL */}
 <div>
-  <label className="mb-1 block text-xs font-semibold text-gray-700">
+  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
     Supplier Email
   </label>
 
@@ -4344,7 +5307,7 @@ mrp: mrp,
           : current
       )
     }
-    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
     placeholder="Enter supplier email"
   />
 </div>
@@ -4384,13 +5347,13 @@ mrp: mrp,
 
                                 <div className="flex items-center justify-between">
 
-                                  <span className="text-[11px] font-semibold text-gray-700">
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                                     Variant{" "}
                                     {index +
                                       1}
                                   </span>
 
-                                  <span className="font-mono text-[10px] text-gray-500">
+                                  <span className="font-mono text-[10px] font-medium tracking-wide text-slate-400">
                                     {
                                       variant.sku
                                     }
@@ -4398,7 +5361,7 @@ mrp: mrp,
 
                                 </div>
 
-                                <p className="mt-1 text-[10px] text-gray-500">
+                                <p className="mt-1 text-[11px] font-medium tracking-wide text-slate-500">
 
                                   {variant.size
                                     ? `Size: ${variant.size}`
@@ -4432,7 +5395,7 @@ mrp: mrp,
 
                 {/* BUTTONS */}
 
-                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
 
                   <button
                     type="button"
@@ -4440,14 +5403,14 @@ mrp: mrp,
                       setShowEditProduct(false);
                       setEditingProduct(null);
                     }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-semibold tracking-wide text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                   >
                     Cancel
                   </button>
 
                   <button
                     type="submit"
-                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                    className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2.5 text-[10px] font-semibold tracking-wide text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
                   >
                     Save Changes
                   </button>
@@ -4467,21 +5430,21 @@ mrp: mrp,
 
       {showAdjustment &&
         selectedProduct && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
 
-            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.15)]">
 
               {/* HEADER */}
 
-              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
 
                 <div>
 
-                  <h2 className="text-lg font-bold text-[#12213a]">
+                  <h2 className="text-base font-bold tracking-tight text-slate-800">
                     Adjust Stock
                   </h2>
 
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                     Update stock quantity for{" "}
                     {selectedProduct.name}.
                   </p>
@@ -4494,7 +5457,7 @@ mrp: mrp,
                     setShowAdjustment(false);
                     setSelectedProduct(null);
                   }}
-                  className="text-xl text-gray-400 hover:text-gray-700"
+                  className="rounded-lg p-1.5 text-xl font-medium text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                 >
                   ×
                 </button>
@@ -4505,28 +5468,28 @@ mrp: mrp,
 
               <form
                 onSubmit={handleAdjustment}
-                className="space-y-4 p-5"
+                className="space-y-5 border-t border-slate-100 px-6 py-5"
               >
 
                 {/* PRODUCT */}
 
-                <div className="rounded-lg bg-gray-50 p-3">
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm">
 
-                  <p className="text-xs font-semibold text-gray-500">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Product
                   </p>
 
-                  <p className="mt-1 text-sm font-bold text-gray-900">
+                  <p className="mt-1 text-sm font-bold tracking-tight text-slate-800">
                     {selectedProduct.name}
                   </p>
 
-                  <p className="mt-1 font-mono text-xs text-gray-500">
+                  <p className="mt-1 font-mono text-[10px] font-medium tracking-wide text-slate-400">
                     {selectedProduct.sku}
                   </p>
 
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-[11px] font-medium text-slate-500">
                     Current stock:{" "}
-                    <span className="font-semibold text-gray-900">
+                    <span className="font-bold text-slate-800">
                       {selectedProduct.onHand}
                     </span>
                   </p>
@@ -4537,7 +5500,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Adjustment Type
                   </label>
 
@@ -4552,7 +5515,7 @@ mrp: mrp,
                           | "decrease"
                       )
                     }
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   >
 
                     <option value="increase">
@@ -4571,7 +5534,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Quantity
                   </label>
 
@@ -4587,7 +5550,7 @@ mrp: mrp,
                       )
                     }
                     placeholder="Enter quantity"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -4597,7 +5560,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Reason
                   </label>
 
@@ -4612,7 +5575,7 @@ mrp: mrp,
                     }
                     placeholder="Enter reason for adjustment"
                     rows={3}
-                    className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -4620,7 +5583,7 @@ mrp: mrp,
 
                 {/* BUTTONS */}
 
-                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
 
                   <button
                     type="button"
@@ -4628,14 +5591,14 @@ mrp: mrp,
                       setShowAdjustment(false);
                       setSelectedProduct(null);
                     }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-semibold tracking-wide text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                   >
                     Cancel
                   </button>
 
                   <button
                     type="submit"
-                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                    className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2.5 text-[10px] font-semibold tracking-wide text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
                   >
                     Save Adjustment
                   </button>
@@ -4655,21 +5618,21 @@ mrp: mrp,
 
       {showTransfer &&
         transferProduct && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
 
-            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.15)]">
 
               {/* HEADER */}
 
-              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
 
                 <div>
 
-                  <h2 className="text-lg font-bold text-[#12213a]">
+                  <h2 className="text-base font-bold tracking-tight text-slate-800">
                     Transfer Stock
                   </h2>
 
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                     Transfer inventory to another warehouse.
                   </p>
 
@@ -4681,7 +5644,7 @@ mrp: mrp,
                     setShowTransfer(false);
                     setTransferProduct(null);
                   }}
-                  className="text-xl text-gray-400 hover:text-gray-700"
+                  className="rounded-lg p-1.5 text-xl font-medium text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                 >
                   ×
                 </button>
@@ -4692,28 +5655,28 @@ mrp: mrp,
 
               <form
                 onSubmit={handleTransfer}
-                className="space-y-4 p-5"
+                className="space-y-5 border-t border-slate-100 px-6 py-5"
               >
 
                 {/* PRODUCT */}
 
-                <div className="rounded-lg bg-gray-50 p-3">
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm">
 
-                  <p className="text-xs font-semibold text-gray-500">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Product
                   </p>
 
-                  <p className="mt-1 text-sm font-bold text-gray-900">
+                  <p className="mt-1 text-sm font-bold tracking-tight text-slate-800">
                     {transferProduct.name}
                   </p>
 
-                  <p className="mt-1 font-mono text-xs text-gray-500">
+                  <p className="mt-1 font-mono text-[10px] font-medium tracking-wide text-slate-400">
                     {transferProduct.sku}
                   </p>
 
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-[11px] font-medium text-slate-500">
                     Available stock:{" "}
-                    <span className="font-semibold text-gray-900">
+                    <span className="font-bold text-slate-800">
                       {transferProduct.onHand}
                     </span>
                   </p>
@@ -4728,7 +5691,7 @@ mrp: mrp,
 
                   <div>
 
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       From Warehouse
                     </label>
 
@@ -4739,7 +5702,7 @@ mrp: mrp,
                           e.target.value
                         )
                       }
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     >
 
                       <option value="">
@@ -4765,7 +5728,7 @@ mrp: mrp,
 
                   <div>
 
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                       To Warehouse
                     </label>
 
@@ -4776,7 +5739,7 @@ mrp: mrp,
                           e.target.value
                         )
                       }
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     >
 
                       <option value="">
@@ -4804,7 +5767,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Quantity
                   </label>
 
@@ -4823,7 +5786,7 @@ mrp: mrp,
                       )
                     }
                     placeholder="Enter quantity"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -4833,7 +5796,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Reason
                   </label>
 
@@ -4848,7 +5811,7 @@ mrp: mrp,
                     }
                     placeholder="Enter transfer reason"
                     rows={3}
-                    className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -4856,7 +5819,7 @@ mrp: mrp,
 
                 {/* BUTTONS */}
 
-                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
 
                   <button
                     type="button"
@@ -4864,14 +5827,14 @@ mrp: mrp,
                       setShowTransfer(false);
                       setTransferProduct(null);
                     }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-semibold tracking-wide text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                   >
                     Cancel
                   </button>
 
                   <button
                     type="submit"
-                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                    className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2.5 text-[10px] font-semibold tracking-wide text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
                   >
                     Transfer Stock
                   </button>
@@ -4891,18 +5854,18 @@ mrp: mrp,
 
       {showCycleCount &&
         cycleProduct && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
 
-            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.15)]">
 
-              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
 
                 <div>
-                  <h2 className="text-lg font-bold text-[#12213a]">
+                  <h2 className="text-base font-bold tracking-tight text-slate-800">
                     Cycle Count
                   </h2>
 
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                     Record the physically counted stock.
                   </p>
                 </div>
@@ -4913,7 +5876,7 @@ mrp: mrp,
                     setShowCycleCount(false);
                     setCycleProduct(null);
                   }}
-                  className="text-xl text-gray-400 hover:text-gray-700"
+                  className="rounded-lg p-1.5 text-xl font-medium text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                 >
                   ×
                 </button>
@@ -4922,26 +5885,26 @@ mrp: mrp,
 
               <form
                 onSubmit={handleCycleCount}
-                className="space-y-4 p-5"
+                className="space-y-5 border-t border-slate-100 px-6 py-5"
               >
 
-                <div className="rounded-lg bg-gray-50 p-3">
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm">
 
-                  <p className="text-xs font-semibold text-gray-500">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Product
                   </p>
 
-                  <p className="mt-1 text-sm font-bold text-gray-900">
+                  <p className="mt-1 text-sm font-bold tracking-tight text-slate-800">
                     {cycleProduct.name}
                   </p>
 
-                  <p className="mt-1 font-mono text-xs text-gray-500">
+                  <p className="mt-1 font-mono text-[10px] font-medium tracking-wide text-slate-400">
                     {cycleProduct.sku}
                   </p>
 
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-[11px] font-medium text-slate-500">
                     System stock:{" "}
-                    <span className="font-semibold text-gray-900">
+                    <span className="font-bold text-slate-800">
                       {cycleProduct.onHand}
                     </span>
                   </p>
@@ -4950,7 +5913,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Counted Quantity
                   </label>
 
@@ -4964,7 +5927,7 @@ mrp: mrp,
                       )
                     }
                     placeholder="Enter physically counted quantity"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                     required
                   />
 
@@ -4972,7 +5935,7 @@ mrp: mrp,
 
                 <div>
 
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                     Reason / Notes
                   </label>
 
@@ -4985,12 +5948,12 @@ mrp: mrp,
                     }
                     placeholder="Enter count notes"
                     rows={3}
-                    className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                    className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   />
 
                 </div>
 
-                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
 
                   <button
                     type="button"
@@ -4998,14 +5961,14 @@ mrp: mrp,
                       setShowCycleCount(false);
                       setCycleProduct(null);
                     }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-semibold tracking-wide text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                   >
                     Cancel
                   </button>
 
                   <button
                     type="submit"
-                    className="rounded-lg bg-[#12213a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                    className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2.5 text-[10px] font-semibold tracking-wide text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
                   >
                     Save Count
                   </button>
@@ -5025,18 +5988,18 @@ mrp: mrp,
       ================================================= */}
 
       {showBarcode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
 
-          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.15)]">
 
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
 
               <div>
-                <h2 className="text-lg font-bold text-[#12213a]">
+                <h2 className="text-base font-bold tracking-tight text-slate-800">
                   Barcode Scanner
                 </h2>
 
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                   Scan or enter a product barcode.
                 </p>
               </div>
@@ -5048,16 +6011,16 @@ mrp: mrp,
                   setBarcodeValue("");
                   setBarcodeProduct(null);
                 }}
-                className="text-xl text-gray-400 hover:text-gray-700"
+                className="rounded-lg p-1.5 text-xl font-medium text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-4 focus:ring-slate-500/10"
               >
                 ×
               </button>
 
             </div>
 
-            <div className="space-y-5 p-5">
+            <div className="space-y-5 border-t border-slate-100 px-6 py-5">
 
-              <div className="flex h-44 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50">
+              <div className="flex h-44 items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-gradient-to-br from-slate-50 to-blue-50/40">
 
                 <div className="text-center">
 
@@ -5065,11 +6028,11 @@ mrp: mrp,
                     ▣
                   </div>
 
-                  <p className="mt-3 text-sm font-semibold text-gray-700">
+                  <p className="mt-3 text-sm font-semibold tracking-tight text-slate-700">
                     Ready to scan
                   </p>
 
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1.5 text-[11px] font-medium tracking-wide text-slate-500">
                     Enter the barcode manually below.
                   </p>
 
@@ -5094,13 +6057,13 @@ mrp: mrp,
                     )
                   }
                   placeholder="Enter barcode / SKU"
-                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   autoFocus
                 />
 
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#12213a] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1d3055]"
+                  className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2.5 text-[10px] font-semibold tracking-wide text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/20"
                 >
                   Search
                 </button>
@@ -5108,17 +6071,17 @@ mrp: mrp,
               </form>
 
               {barcodeProduct && (
-                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm">
 
                   <div className="flex items-start justify-between gap-4">
 
                     <div>
 
-                      <p className="text-sm font-bold text-gray-900">
+                      <p className="text-sm font-bold tracking-tight text-slate-800">
                         {barcodeProduct.name}
                       </p>
 
-                      <p className="mt-1 font-mono text-xs text-gray-500">
+                      <p className="mt-1 font-mono text-[10px] font-medium tracking-wide text-slate-400">
                         {barcodeProduct.sku}
                       </p>
 
@@ -5142,37 +6105,37 @@ mrp: mrp,
 
                   <div className="mt-4 grid grid-cols-3 gap-3">
 
-                    <div className="rounded-lg bg-gray-50 p-3">
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm">
 
-                      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                         On Hand
                       </p>
 
-                      <p className="mt-1 text-lg font-bold text-gray-900">
+                      <p className="mt-1 text-lg font-bold tracking-tight text-slate-800">
                         {barcodeProduct.onHand}
                       </p>
 
                     </div>
 
-                    <div className="rounded-lg bg-gray-50 p-3">
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm">
 
-                      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                         Available
                       </p>
 
-                      <p className="mt-1 text-lg font-bold text-gray-900">
+                      <p className="mt-1 text-lg font-bold tracking-tight text-slate-800">
                         {getAvailable(barcodeProduct)}
                       </p>
 
                     </div>
 
-                    <div className="rounded-lg bg-gray-50 p-3">
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-sm">
 
-                      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                         Warehouse
                       </p>
 
-                      <p className="mt-1 truncate text-sm font-bold text-gray-900">
+                      <p className="mt-1 truncate text-sm font-bold tracking-tight text-slate-800">
                         {barcodeProduct.warehouse}
                       </p>
 
@@ -5183,7 +6146,7 @@ mrp: mrp,
                 </div>
               )}
 
-              <div className="flex justify-end border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-end border-t border-slate-100 pt-4">
 
                 <button
                   type="button"
@@ -5192,7 +6155,7 @@ mrp: mrp,
                     setBarcodeValue("");
                     setBarcodeProduct(null);
                   }}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-semibold tracking-wide text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-slate-500/10"
                 >
                   Close
                 </button>
@@ -5210,7 +6173,7 @@ mrp: mrp,
           FOOTER
       ================================================= */}
 
-      <div className="py-8 text-center text-[10px] text-gray-400">
+      <div className="border-t border-slate-200/70 py-8 text-center text-[10px] font-medium tracking-wide text-slate-400">
         AI StockFlow • Inventory Management
       </div>
 

@@ -496,15 +496,31 @@ export default function CopilotPage() {
     }
 
     if (
-      lowerQuery.includes(
-        "supplier"
-      ) ||
-      lowerQuery.includes(
-        "fastest"
-      )
-    ) {
-      return "Supplier performance should be compared using delivery time, reliability, and order history. The fastest supplier can be identified once supplier delivery records are connected.";
-    }
+  lowerQuery.includes("price") &&
+  lowerQuery.includes("supplier")
+) {
+  return "AI supplier price comparison: Tech Supplies India currently offers the most competitive purchase price for the matched products in the available StockFlow records. Before creating a purchase order, compare the supplier's unit price, MOQ, delivery time, and payment terms. Recommendation: prefer the supplier with the lowest effective cost when service and delivery conditions are acceptable.";
+}
+
+if (
+  lowerQuery.includes("price monitoring") ||
+  lowerQuery.includes("price change") ||
+  lowerQuery.includes("price changes") ||
+  lowerQuery.includes("price increase")
+) {
+  return "AI price monitoring: Review recent supplier and purchase prices for significant changes before creating new purchase orders. Price increases can raise the effective inventory cost, while price decreases may create an opportunity to negotiate or purchase at a better rate. Recommendation: compare the latest supplier price with the previous purchase price and review any significant variance.";
+}
+
+if (
+  lowerQuery.includes(
+    "supplier"
+  ) ||
+  lowerQuery.includes(
+    "fastest"
+  )
+) {
+  return "Supplier performance should be compared using delivery time, reliability, order history, price, MOQ, and payment terms. The recommended supplier should provide the best overall purchasing value rather than simply the lowest price.";
+}
 
     if (
       lowerQuery.includes(
@@ -764,6 +780,155 @@ export default function CopilotPage() {
             </span>
 
           </div>
+
+          {/* AI RECOMMENDATIONS */}
+<div className="mb-5 rounded-xl border border-blue-100 bg-white p-5 shadow-sm">
+  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-sm">
+          ✦
+        </span>
+
+        <div>
+          <h2 className="text-sm font-bold text-gray-900">
+            AI Recommendations
+          </h2>
+
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            Suggested actions based on current StockFlow records.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <span className="w-fit rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold text-blue-700">
+      AI INSIGHTS
+    </span>
+  </div>
+
+  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <button
+      type="button"
+      onClick={() =>
+        askCopilot("Which products will run out next week?")
+      }
+      disabled={loading}
+      className="group rounded-lg border border-red-100 bg-red-50/50 p-4 text-left transition hover:-translate-y-0.5 hover:border-red-200 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-xl">🔴</span>
+        <span className="text-xs text-gray-400 transition group-hover:text-red-500">
+          →
+        </span>
+      </div>
+
+      <p className="mt-3 text-sm font-semibold text-gray-900">
+        Reorder at-risk stock
+      </p>
+
+      <p className="mt-1 text-[11px] leading-5 text-gray-500">
+        Identify products that may run out soon and review their reorder needs.
+      </p>
+    </button>
+
+    <button
+      type="button"
+      onClick={() =>
+        askCopilot("Which products are not moving?")
+      }
+      disabled={loading}
+      className="group rounded-lg border border-amber-100 bg-amber-50/50 p-4 text-left transition hover:-translate-y-0.5 hover:border-amber-200 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-xl">🟡</span>
+        <span className="text-xs text-gray-400 transition group-hover:text-amber-500">
+          →
+        </span>
+      </div>
+
+      <p className="mt-3 text-sm font-semibold text-gray-900">
+        Reduce dead stock
+      </p>
+
+      <p className="mt-1 text-[11px] leading-5 text-gray-500">
+        Find non-moving products and consider discounts, bundles, or promotions.
+      </p>
+    </button>
+
+    <button
+      type="button"
+      onClick={() =>
+        askCopilot("What is my current inventory value?")
+      }
+      disabled={loading}
+      className="group rounded-lg border border-emerald-100 bg-emerald-50/50 p-4 text-left transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-xl">💰</span>
+        <span className="text-xs text-gray-400 transition group-hover:text-emerald-500">
+          →
+        </span>
+      </div>
+
+      <p className="mt-3 text-sm font-semibold text-gray-900">
+        Review inventory value
+      </p>
+
+      <p className="mt-1 text-[11px] leading-5 text-gray-500">
+        Review the current stock value before making purchasing decisions.
+      </p>
+    </button>
+
+    <button
+      type="button"
+      onClick={() =>
+        askCopilot("Which supplier delivers the fastest?")
+      }
+      disabled={loading}
+      className="group rounded-lg border border-violet-100 bg-violet-50/50 p-4 text-left transition hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-xl">🚚</span>
+        <span className="text-xs text-gray-400 transition group-hover:text-violet-500">
+          →
+        </span>
+      </div>
+
+      <p className="mt-3 text-sm font-semibold text-gray-900">
+        Review supplier performance
+      </p>
+
+      <p className="mt-1 text-[11px] leading-5 text-gray-500">
+        Compare supplier delivery performance before creating new purchase orders.
+      </p>
+    </button>
+    <button
+  type="button"
+  onClick={() =>
+    askCopilot("Compare supplier prices")
+  }
+  disabled={loading}
+  className="group rounded-lg border border-cyan-100 bg-cyan-50/50 p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-200 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+>
+  <div className="flex items-start justify-between gap-3">
+    <span className="text-xl">💰</span>
+
+    <span className="text-xs text-gray-400 transition group-hover:text-cyan-500">
+      →
+    </span>
+  </div>
+
+  <p className="mt-3 text-sm font-semibold text-gray-900">
+    Compare supplier prices
+  </p>
+
+  <p className="mt-1 text-[11px] leading-5 text-gray-500">
+    Compare supplier pricing, MOQ, delivery time, and payment terms before purchasing.
+  </p>
+</button>
+  </div>
+</div>
 
           {/* MAIN CONTENT */}
 

@@ -5,6 +5,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import PageLayout from "../../../components/layout/PageLayout";
 
 type Warehouse = {
   id: number;
@@ -16,6 +17,10 @@ type Warehouse = {
   used: number;
   products: number;
   status: "Active" | "Inactive";
+  address?: string;
+  phone?: string;
+  email?: string;
+  type?: "Distribution" | "Retail" | "Storage" | "Transit";
 };
 
 const initialWarehouses: Warehouse[] = [
@@ -69,7 +74,9 @@ export default function WarehousePage() {
   const [warehouses, setWarehouses] =
     useState<Warehouse[]>(initialWarehouses);
 
-    const [inventoryProducts, setInventoryProducts] =
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const [inventoryProducts, setInventoryProducts] =
   useState<
     Array<{
       id: number;
@@ -123,7 +130,7 @@ export default function WarehousePage() {
   } catch {
     setInventoryProducts([]);
   }
-}, []);
+}, [refreshKey]);
 
 useEffect(() => {
   try {
@@ -143,7 +150,7 @@ useEffect(() => {
   } catch {
     // Keep initial warehouses if saved data is invalid.
   }
-}, []);
+}, [refreshKey]);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] =
@@ -158,6 +165,35 @@ useEffect(() => {
   const [location, setLocation] = useState("");
   const [manager, setManager] = useState("");
   const [capacity, setCapacity] = useState(1000);
+  const [warehouseType, setWarehouseType] =
+    useState<Warehouse["type"]>("Distribution");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [locationFilter, setLocationFilter] = useState("All Locations");
+  const [typeFilter, setTypeFilter] = useState("All Types");
+
+  const locations = useMemo(
+    () => [
+      "All Locations",
+      ...Array.from(new Set(warehouses.map((warehouse) => warehouse.location))).sort(),
+    ],
+    [warehouses]
+  );
+
+  const warehouseTypes = useMemo(
+    () => [
+      "All Types",
+      ...Array.from(
+        new Set(
+          warehouses
+            .map((warehouse) => warehouse.type)
+            .filter(Boolean) as string[]
+        )
+      ).sort(),
+    ],
+    [warehouses]
+  );
 
   const filteredWarehouses = useMemo(() => {
     const value = search.trim().toLowerCase();
@@ -174,9 +210,22 @@ useEffect(() => {
         statusFilter === "All" ||
         warehouse.status === statusFilter;
 
-      return matchesSearch && matchesStatus;
+      const matchesLocation =
+        locationFilter === "All Locations" ||
+        warehouse.location === locationFilter;
+
+      const matchesType =
+        typeFilter === "All Types" ||
+        warehouse.type === typeFilter;
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesLocation &&
+        matchesType
+      );
     });
-  }, [warehouses, search, statusFilter]);
+  }, [warehouses, search, statusFilter, locationFilter, typeFilter]);
 
   const warehouseStock = useMemo(() => {
   return warehouses.map((warehouse) => {
@@ -268,6 +317,10 @@ const newWarehouse: Warehouse = {
       used: 0,
       products: 0,
       status: "Active",
+      address: address.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      type: warehouseType,
     };
 
     setWarehouses((previous) => {
@@ -289,6 +342,10 @@ const newWarehouse: Warehouse = {
     setLocation("");
     setManager("");
     setCapacity(1000);
+    setWarehouseType("Distribution");
+    setAddress("");
+    setPhone("");
+    setEmail("");
     setShowCreateForm(false);
 
     alert("Warehouse created successfully.");
@@ -313,6 +370,33 @@ const toggleWarehouseStatus = (id: number) => {
       JSON.stringify(updatedWarehouses)
     );
 
+    try {
+      const savedAuditLogs = localStorage.getItem("audit-logs");
+      const auditLogs = savedAuditLogs ? JSON.parse(savedAuditLogs) : [];
+      const target = warehouses.find((warehouse) => warehouse.id === id);
+      const nextStatus = target?.status === "Active" ? "Inactive" : "Active";
+
+      localStorage.setItem(
+        "audit-logs",
+        JSON.stringify([
+          {
+            id: `AUD-WH-${Date.now()}`,
+            timestamp: new Date().toLocaleString("en-IN"),
+            user: "Admin User",
+            role: "Admin",
+            action: nextStatus === "Active" ? "Activated" : "Deactivated",
+            module: "Warehouse",
+            description: `${target?.name ?? "Warehouse"} status changed to ${nextStatus}`,
+            status: "Success",
+            ip: "Local",
+          },
+          ...auditLogs,
+        ])
+      );
+    } catch {
+      // Audit persistence is best-effort in frontend mode.
+    }
+
     return updatedWarehouses;
   });
 
@@ -335,6 +419,19 @@ const deleteWarehouse = (id: number) => {
   );
 
   if (!warehouse) {
+    return;
+  }
+
+  const linkedProducts = inventoryProducts.filter(
+    (product) =>
+      product.warehouse.trim().toLowerCase() ===
+      warehouse.name.trim().toLowerCase()
+  );
+
+  if (linkedProducts.length > 0) {
+    alert(
+      `Cannot delete "${warehouse.name}" because ${linkedProducts.length} inventory product record(s) are linked to it. Deactivate it instead.`
+    );
     return;
   }
 
@@ -364,6 +461,19 @@ const deleteWarehouse = (id: number) => {
   alert("Warehouse deleted successfully.");
 };
 
+  const totalOnHand = warehouseStock.reduce(
+    (sum, stock) => sum + stock.onHand,
+    0
+  );
+  const totalReserved = warehouseStock.reduce(
+    (sum, stock) => sum + stock.reserved,
+    0
+  );
+  const totalAvailable = warehouseStock.reduce(
+    (sum, stock) => sum + stock.available,
+    0
+  );
+
   const capacityPercentage = (warehouse: Warehouse) => {
     if (warehouse.capacity === 0) return 0;
 
@@ -373,7 +483,8 @@ const deleteWarehouse = (id: number) => {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <PageLayout>
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 text-slate-900">
       <div className="mx-auto max-w-7xl px-6 py-8">
 
         {/* HEADER */}
@@ -392,13 +503,22 @@ const deleteWarehouse = (id: number) => {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowCreateForm(true)}
-            className="rounded-lg bg-[#12213a] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1c3154]"
-          >
-            + Add Warehouse
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setRefreshKey((value) => value + 1)}
+              className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-blue-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-50"
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(true)}
+              className="rounded-xl bg-[#12213a] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#1c3154]"
+            >
+              + Add Warehouse
+            </button>
+          </div>
         </div>
 
         {/* SUMMARY */}
@@ -452,9 +572,9 @@ const deleteWarehouse = (id: number) => {
             </p>
 
             <p className="mt-2 text-3xl font-bold text-blue-600">
-              {Math.round(
-                (usedCapacity / totalCapacity) * 100
-              )}
+              {totalCapacity > 0
+                ? Math.round((usedCapacity / totalCapacity) * 100)
+                : 0}
               %
             </p>
 
@@ -465,10 +585,40 @@ const deleteWarehouse = (id: number) => {
 
         </div>
 
+        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
+              Total On Hand
+            </p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {totalOnHand.toLocaleString("en-IN")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">Across all warehouses</p>
+          </div>
+          <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-orange-600">
+              Reserved
+            </p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {totalReserved.toLocaleString("en-IN")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">Allocated inventory</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">
+              Available
+            </p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {totalAvailable.toLocaleString("en-IN")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">On hand less reserved</p>
+          </div>
+        </div>
+
         {/* SEARCH + FILTER */}
         <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 
             <div>
               <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -509,6 +659,54 @@ const deleteWarehouse = (id: number) => {
               </select>
             </div>
 
+            <div>
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                Location
+              </label>
+              <select
+                value={locationFilter}
+                onChange={(event) => setLocationFilter(event.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+              >
+                {locations.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                Warehouse Type
+              </label>
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+              >
+                {warehouseTypes.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setStatusFilter("All");
+                setLocationFilter("All Locations");
+                setTypeFilter("All Types");
+              }}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+            >
+              Clear Filters
+            </button>
           </div>
         </section>
 
@@ -538,6 +736,9 @@ const deleteWarehouse = (id: number) => {
 
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Location
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Type
                   </th>
 
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -601,6 +802,11 @@ const deleteWarehouse = (id: number) => {
 
                       <td className="px-6 py-5 text-sm text-slate-700">
                         {warehouse.location}
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                          {warehouse.type ?? "Storage"}
+                        </span>
                       </td>
 
                       <td className="px-6 py-5 text-sm text-slate-700">
@@ -708,7 +914,7 @@ const deleteWarehouse = (id: number) => {
                 {filteredWarehouses.length === 0 && (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       className="px-6 py-12 text-center"
                     >
                       <p className="font-semibold text-slate-700">
@@ -820,7 +1026,25 @@ const deleteWarehouse = (id: number) => {
                   />
                 </div>
 
-                <div className="md:col-span-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Warehouse Type
+                  </label>
+                  <select
+                    value={warehouseType}
+                    onChange={(event) =>
+                      setWarehouseType(event.target.value as Warehouse["type"])
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="Distribution">Distribution</option>
+                    <option value="Retail">Retail</option>
+                    <option value="Storage">Storage</option>
+                    <option value="Transit">Transit</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="mb-2 block text-sm font-medium">
                     Storage Capacity *
                   </label>
@@ -837,6 +1061,43 @@ const deleteWarehouse = (id: number) => {
                         )
                       )
                     }
+                    className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-sm font-medium">
+                    Address
+                  </label>
+                  <input
+                    value={address}
+                    onChange={(event) => setAddress(event.target.value)}
+                    placeholder="Full warehouse address"
+                    className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Phone
+                  </label>
+                  <input
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="warehouse@company.com"
                     className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
                   />
                 </div>
@@ -920,6 +1181,29 @@ const deleteWarehouse = (id: number) => {
 
                     <p className="mt-1 font-semibold">
                       {selectedWarehouse.manager}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-slate-50 p-4">
+                    <p className="text-xs text-slate-400">
+                      Type
+                    </p>
+
+                    <p className="mt-1 font-semibold">
+                      {selectedWarehouse.type ?? "Storage"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-slate-50 p-4">
+                    <p className="text-xs text-slate-400">
+                      Contact
+                    </p>
+
+                    <p className="mt-1 break-words text-sm font-semibold">
+                      {selectedWarehouse.phone || "Not provided"}
+                    </p>
+                    <p className="mt-1 break-words text-xs text-slate-500">
+                      {selectedWarehouse.email || "No email"}
                     </p>
                   </div>
 
@@ -1112,6 +1396,7 @@ const deleteWarehouse = (id: number) => {
         )}
 
       </div>
-    </main>
+      </main>
+    </PageLayout>
   );
 }

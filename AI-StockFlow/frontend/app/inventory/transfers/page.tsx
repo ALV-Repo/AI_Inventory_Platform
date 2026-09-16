@@ -243,62 +243,81 @@ export default function TransferWorkflowPage() {
   };
 
   const updateTransferStatus = (
-  id: string,
-  newStatus: TransferStatus
-) => {
-  setTransfers((prev) => {
-    const currentTransfer = prev.find(
+    id: string,
+    newStatus: TransferStatus
+  ) => {
+    const currentTransfer = transfers.find(
       (transfer) => transfer.id === id
     );
 
     if (!currentTransfer) {
-      return prev;
+      return;
     }
 
-    if (
-      newStatus === "Received" &&
-      currentTransfer.status !== "Dispatched"
-    ) {
-      return prev;
-    }
+    // Receiving is the only status change that modifies inventory.
+    // Keep all localStorage/state side effects OUT of a React state updater.
+    // This prevents React Strict Mode from executing the stock movement twice.
+    if (newStatus === "Received") {
+      if (currentTransfer.status !== "Dispatched") {
+        return;
+      }
 
-    if (
-      newStatus === "Received" &&
-      currentTransfer.status === "Dispatched"
-    ) {
       try {
-        const storedProducts =
-          localStorage.getItem("inventory-products");
+        // Use the persisted transfer status as an idempotency guard.
+        // If this transfer has already been received, do not move stock again.
+        const storedTransfers = localStorage.getItem(
+          "inventory-transfers"
+        );
+
+        if (storedTransfers) {
+          const parsedTransfers = JSON.parse(storedTransfers);
+          if (Array.isArray(parsedTransfers)) {
+            const persistedTransfer = parsedTransfers.find(
+              (transfer) => transfer.id === id
+            );
+
+            if (
+              persistedTransfer &&
+              persistedTransfer.status !== "Dispatched"
+            ) {
+              return;
+            }
+          }
+        }
+
+        const storedProducts = localStorage.getItem(
+          "inventory-products"
+        );
 
         if (!storedProducts) {
           alert("Inventory products could not be found.");
-          return prev;
+          return;
         }
 
         const inventoryProducts = JSON.parse(storedProducts);
 
         if (!Array.isArray(inventoryProducts)) {
           alert("Inventory data is invalid.");
-          return prev;
+          return;
         }
 
         const sourceIndex = inventoryProducts.findIndex(
           (item) =>
-            String(item.sku || item.code || "").trim().toLowerCase() ===
+            String(item.sku || item.code || "")
+              .trim()
+              .toLowerCase() ===
               currentTransfer.sku.trim().toLowerCase() &&
             String(item.warehouse || "")
               .trim()
               .toLowerCase() ===
-              currentTransfer.fromWarehouse
-                .trim()
-                .toLowerCase()
+              currentTransfer.fromWarehouse.trim().toLowerCase()
         );
 
         if (sourceIndex === -1) {
           alert(
             `Product ${currentTransfer.sku} was not found in ${currentTransfer.fromWarehouse}.`
           );
-          return prev;
+          return;
         }
 
         const sourceProduct = inventoryProducts[sourceIndex];
@@ -313,19 +332,18 @@ export default function TransferWorkflowPage() {
           alert(
             `Insufficient stock in ${currentTransfer.fromWarehouse}. Available: ${sourceStock}, Required: ${currentTransfer.quantity}.`
           );
-          return prev;
+          return;
         }
 
         const updatedProducts = [...inventoryProducts];
+        const sourceStockAfter =
+          sourceStock - currentTransfer.quantity;
 
         updatedProducts[sourceIndex] = {
           ...sourceProduct,
-          onHand: sourceStock - currentTransfer.quantity,
-          on_hand: sourceStock - currentTransfer.quantity,
-          available: Math.max(
-            sourceStock - currentTransfer.quantity,
-            0
-          ),
+          onHand: sourceStockAfter,
+          on_hand: sourceStockAfter,
+          available: Math.max(sourceStockAfter, 0),
         };
 
         const destinationIndex = updatedProducts.findIndex(
@@ -337,10 +355,11 @@ export default function TransferWorkflowPage() {
             String(item.warehouse || "")
               .trim()
               .toLowerCase() ===
-              currentTransfer.toWarehouse
-                .trim()
-                .toLowerCase()
+              currentTransfer.toWarehouse.trim().toLowerCase()
         );
+
+        let destinationStockBefore = 0;
+        let destinationStockAfter = currentTransfer.quantity;
 
         if (destinationIndex !== -1) {
           const destinationProduct =
@@ -353,14 +372,15 @@ export default function TransferWorkflowPage() {
               0
           );
 
+          destinationStockBefore = destinationStock;
+          destinationStockAfter =
+            destinationStock + currentTransfer.quantity;
+
           updatedProducts[destinationIndex] = {
             ...destinationProduct,
-            onHand:
-              destinationStock + currentTransfer.quantity,
-            on_hand:
-              destinationStock + currentTransfer.quantity,
-            available:
-              destinationStock + currentTransfer.quantity,
+            onHand: destinationStockAfter,
+            on_hand: destinationStockAfter,
+            available: destinationStockAfter,
           };
         } else {
           const newId =
@@ -386,13 +406,106 @@ export default function TransferWorkflowPage() {
           "inventory-products",
           JSON.stringify(updatedProducts)
         );
+
+        // Write exactly one OUT and one IN ledger entry for this transfer.
+        // Existing entries for the same transfer are reused to make the
+        // operation idempotent and prevent duplicate React Strict Mode writes.
+        const storedLedger = localStorage.getItem(
+          "inventory-stock-ledger"
+        );
+
+        let ledgerEntries: Array<Record<string, unknown>> = [];
+
+        if (storedLedger) {
+          try {
+            const parsedLedger = JSON.parse(storedLedger);
+            if (Array.isArray(parsedLedger)) {
+              ledgerEntries = parsedLedger;
+            }
+          } catch {
+            ledgerEntries = [];
+          }
+        }
+
+        const reference = currentTransfer.id;
+        const timestamp = new Date().toLocaleString();
+
+        // Clean any duplicate records previously created for this reference.
+        const seenLedgerKeys = new Set<string>();
+        ledgerEntries = ledgerEntries.filter((entry) => {
+          const entryReference = String(entry.reference || "");
+          const movementType = String(entry.movementType || "");
+
+          if (entryReference !== reference) {
+            return true;
+          }
+
+          const key = `${entryReference}-${movementType}`;
+          if (seenLedgerKeys.has(key)) {
+            return false;
+          }
+
+          seenLedgerKeys.add(key);
+          return true;
+        });
+
+        const hasTransferOut = ledgerEntries.some(
+          (entry) =>
+            String(entry.reference || "") === reference &&
+            String(entry.movementType || "") === "Transfer Out"
+        );
+
+        const hasTransferIn = ledgerEntries.some(
+          (entry) =>
+            String(entry.reference || "") === reference &&
+            String(entry.movementType || "") === "Transfer In"
+        );
+
+        if (!hasTransferOut) {
+          ledgerEntries.unshift({
+            id: `LED-${crypto.randomUUID()}-OUT`,
+            timestamp,
+            product: currentTransfer.product,
+            sku: currentTransfer.sku,
+            warehouse: currentTransfer.fromWarehouse,
+            movementType: "Transfer Out",
+            quantity: -currentTransfer.quantity,
+            stockBefore: sourceStock,
+            stockAfter: sourceStockAfter,
+            reason: currentTransfer.reason,
+            reference,
+            user: currentTransfer.requestedBy,
+          });
+        }
+
+        if (!hasTransferIn) {
+          ledgerEntries.unshift({
+            id: `LED-${crypto.randomUUID()}-IN`,
+            timestamp,
+            product: currentTransfer.product,
+            sku: currentTransfer.sku,
+            warehouse: currentTransfer.toWarehouse,
+            movementType: "Transfer In",
+            quantity: currentTransfer.quantity,
+            stockBefore: destinationStockBefore,
+            stockAfter: destinationStockAfter,
+            reason: currentTransfer.reason,
+            reference,
+            user: currentTransfer.requestedBy,
+          });
+        }
+
+        localStorage.setItem(
+          "inventory-stock-ledger",
+          JSON.stringify(ledgerEntries)
+        );
       } catch {
         alert("Failed to update inventory stock.");
-        return prev;
+        return;
       }
     }
 
-    const updatedTransfers = prev.map((transfer) =>
+    const updatedTransfers = transfers.map((transfer) =>
       transfer.id === id
         ? {
             ...transfer,
@@ -406,18 +519,17 @@ export default function TransferWorkflowPage() {
       JSON.stringify(updatedTransfers)
     );
 
-    return updatedTransfers;
-  });
+    setTransfers(updatedTransfers);
 
-  setSelectedTransfer((prev) =>
-    prev
-      ? {
-          ...prev,
-          status: newStatus,
-        }
-      : null
-  );
-};
+    setSelectedTransfer((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: newStatus,
+          }
+        : null
+    );
+  };
 
     return (
     <div className="min-h-screen bg-gray-50 p-6">

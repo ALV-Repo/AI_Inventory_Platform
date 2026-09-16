@@ -3,355 +3,1431 @@
 @tailwind utilities;
 
 /* ============================================================
-   GLOBAL BASE STYLES
-============================================================ */
+   AI STOCKFLOW
+   GLOBAL PROFESSIONAL THEME
+   Light + Dark Mode
+   ============================================================ */
+
+:root {
+  --sf-bg: #f4f9ff;
+  --sf-surface: #ffffff;
+  --sf-card: #ffffff;
+  --sf-elevated: #eaf3ff;
+  --sf-border: #d5e6f7;
+  --sf-text: #12213a;
+  --sf-text-secondary: #35516f;
+  --sf-text-muted: #5b7897;
+  --sf-primary: #2563eb;
+  --sf-primary-hover: #1d4ed8;
+  --sf-success: #16a34a;
+  --sf-warning: #ea580c;
+  --sf-danger: #dc2626;
+  --sf-purple: #9333ea;
+}
+
+/* ============================================================
+   GLOBAL RESET
+   ============================================================ */
 
 html,
 body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+html {
+  min-height: 100%;
+  background: var(--sf-bg);
 }
 
 body {
-  background: #f8fafc;
-  color: #12213a;
+  min-height: 100vh;
+  background: var(--sf-bg);
+  color: var(--sf-text);
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* ============================================================
-   DARK MODE - GLOBAL
-   Keeps text readable on dark backgrounds across ALL pages.
-============================================================ */
+   SMOOTH THEME TRANSITION
+   ============================================================ */
 
-html.stockflow-dark body {
-  background: #0f172a !important;
-  color: #f8fafc !important;
+html,
+body,
+main,
+section,
+article,
+aside,
+header,
+footer,
+nav,
+div,
+button,
+input,
+select,
+textarea,
+table,
+tr,
+td,
+th {
+  box-sizing: border-box;
 }
 
-/* ------------------------------------------------------------
-   Headings / strong text
------------------------------------------------------------- */
+/* ============================================================
+   DARK MODE ROOT
+   ============================================================ */
 
+html.dark,
+html.stockflow-dark {
+  --sf-bg: #071426;
+  --sf-surface: #0b1b31;
+  --sf-card: #102743;
+  --sf-elevated: #173554;
+  --sf-border: #24496f;
+  --sf-text: #f8fbff;
+  --sf-text-secondary: #d7e1ed;
+  --sf-text-muted: #91afd0;
+  --sf-primary: #60a5fa;
+  --sf-primary-hover: #93c5fd;
+  --sf-success: #4ade80;
+  --sf-warning: #fb923c;
+  --sf-danger: #f87171;
+  --sf-purple: #c084fc;
+
+  background-color: #071426 !important;
+  color-scheme: dark;
+}
+
+html.dark body,
+html.stockflow-dark body {
+  background-color: #071426 !important;
+  color: #f8fbff !important;
+}
+
+/* ============================================================
+   PAGE BACKGROUNDS
+   ============================================================ */
+
+html.dark main,
+html.stockflow-dark main {
+  background-color: transparent;
+  color: #f8fbff;
+}
+
+html.dark .min-h-screen,
+html.stockflow-dark .min-h-screen {
+  background-color: #071426 !important;
+}
+
+/* ============================================================
+   STANDARD BACKGROUNDS
+   ============================================================ */
+
+html.dark .bg-white,
+html.stockflow-dark .bg-white {
+  background-color: #102743 !important;
+}
+
+html.dark .bg-slate-50,
+html.stockflow-dark .bg-slate-50 {
+  background-color: #071426 !important;
+}
+
+html.dark .bg-slate-100,
+html.stockflow-dark .bg-slate-100 {
+  background-color: #0b1b31 !important;
+}
+
+html.dark .bg-slate-200,
+html.stockflow-dark .bg-slate-200 {
+  background-color: #173554 !important;
+}
+
+html.dark .bg-gray-50,
+html.stockflow-dark .bg-gray-50 {
+  background-color: #071426 !important;
+}
+
+html.dark .bg-gray-100,
+html.stockflow-dark .bg-gray-100 {
+  background-color: #0b1b31 !important;
+}
+
+html.dark .bg-gray-200,
+html.stockflow-dark .bg-gray-200 {
+  background-color: #173554 !important;
+}
+
+html.dark .bg-neutral-50,
+html.stockflow-dark .bg-neutral-50 {
+  background-color: #071426 !important;
+}
+
+html.dark .bg-neutral-100,
+html.stockflow-dark .bg-neutral-100 {
+  background-color: #0b1b31 !important;
+}
+
+html.dark .bg-neutral-200,
+html.stockflow-dark .bg-neutral-200 {
+  background-color: #173554 !important;
+}
+
+html.dark .bg-zinc-50,
+html.stockflow-dark .bg-zinc-50 {
+  background-color: #071426 !important;
+}
+
+html.dark .bg-zinc-100,
+html.stockflow-dark .bg-zinc-100 {
+  background-color: #0b1b31 !important;
+}
+
+html.dark .bg-zinc-200,
+html.stockflow-dark .bg-zinc-200 {
+  background-color: #173554 !important;
+}
+
+/* ============================================================
+   SEMI TRANSPARENT WHITE SURFACES
+   ============================================================ */
+
+html.dark .bg-white\/90,
+html.stockflow-dark .bg-white\/90 {
+  background-color: rgba(20, 34, 56, 0.94) !important;
+}
+
+html.dark .bg-white\/95,
+html.stockflow-dark .bg-white\/95 {
+  background-color: rgba(20, 34, 56, 0.97) !important;
+}
+
+html.dark .bg-white\/80,
+html.stockflow-dark .bg-white\/80 {
+  background-color: rgba(20, 34, 56, 0.88) !important;
+}
+
+/* ============================================================
+   CUSTOM STOCKFLOW HEX BACKGROUNDS
+   ============================================================ */
+
+html.dark [class*="bg-[#ffffff]"],
+html.stockflow-dark [class*="bg-[#ffffff]"],
+html.dark [class*="bg-[#fff]"],
+html.stockflow-dark [class*="bg-[#fff]"] {
+  background-color: #102743 !important;
+}
+
+html.dark [class*="bg-[#f4f9ff]"],
+html.stockflow-dark [class*="bg-[#f4f9ff]"] {
+  background-color: #071426 !important;
+}
+
+html.dark [class*="bg-[#eaf3ff]"],
+html.stockflow-dark [class*="bg-[#eaf3ff]"] {
+  background-color: #0b1b31 !important;
+}
+
+html.dark [class*="bg-[#d5e6f7]"],
+html.stockflow-dark [class*="bg-[#d5e6f7]"] {
+  background-color: #173554 !important;
+}
+
+html.dark [class*="bg-[#f9fafb]"],
+html.stockflow-dark [class*="bg-[#f9fafb]"] {
+  background-color: #071426 !important;
+}
+
+html.dark [class*="bg-[#12213a]"],
+html.stockflow-dark [class*="bg-[#12213a]"] {
+  background-color: #10223b !important;
+}
+
+html.dark [class*="bg-[#1d3055]"],
+html.stockflow-dark [class*="bg-[#1d3055]"] {
+  background-color: #19365c !important;
+}
+
+/* ============================================================
+   DARK TEXT → WHITE / LIGHT
+   ============================================================ */
+
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700,
+html.stockflow-dark .text-slate-950,
+html.stockflow-dark .text-slate-900,
+html.stockflow-dark .text-slate-800,
+html.stockflow-dark .text-slate-700 {
+  color: #f8fbff !important;
+}
+
+html.dark .text-gray-950,
+html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-gray-700,
+html.stockflow-dark .text-gray-950,
+html.stockflow-dark .text-gray-900,
+html.stockflow-dark .text-gray-800,
+html.stockflow-dark .text-gray-700 {
+  color: #f8fbff !important;
+}
+
+html.dark .text-slate-600,
+html.stockflow-dark .text-slate-600 {
+  color: #bfd4e9 !important;
+}
+
+html.dark .text-gray-600,
+html.stockflow-dark .text-gray-600 {
+  color: #bfd4e9 !important;
+}
+
+html.dark .text-slate-500,
+html.stockflow-dark .text-slate-500 {
+  color: #a2bdd8 !important;
+}
+
+html.dark .text-gray-500,
+html.stockflow-dark .text-gray-500 {
+  color: #a2bdd8 !important;
+}
+
+html.dark .text-slate-400,
+html.stockflow-dark .text-slate-400 {
+  color: #8eadd0 !important;
+}
+
+html.dark .text-gray-400,
+html.stockflow-dark .text-gray-400 {
+  color: #8eadd0 !important;
+}
+
+/* ============================================================
+   HARD-CODED TEXT COLORS
+   ============================================================ */
+
+html.dark [class*="text-[#12213a]"],
+html.stockflow-dark [class*="text-[#12213a]"],
+html.dark [class*="text-[#0f172a]"],
+html.stockflow-dark [class*="text-[#0f172a]"],
+html.dark [class*="text-[#111827]"],
+html.stockflow-dark [class*="text-[#111827]"],
+html.dark [class*="text-[#1e293b]"],
+html.stockflow-dark [class*="text-[#1e293b]"] {
+  color: #ffffff !important;
+}
+
+html.dark [class*="text-[#334155]"],
+html.stockflow-dark [class*="text-[#334155]"] {
+  color: #d7e1ed !important;
+}
+
+html.dark [class*="text-[#475569]"],
+html.stockflow-dark [class*="text-[#475569]"] {
+  color: #bfd4e9 !important;
+}
+
+html.dark [class*="text-[#64748b]"],
+html.stockflow-dark [class*="text-[#64748b]"] {
+  color: #91afd0 !important;
+}
+
+/* ============================================================
+   HEADINGS
+   ============================================================ */
+
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6,
 html.stockflow-dark h1,
 html.stockflow-dark h2,
 html.stockflow-dark h3,
 html.stockflow-dark h4,
 html.stockflow-dark h5,
-html.stockflow-dark h6,
-html.stockflow-dark strong,
-html.stockflow-dark b {
-  color: #f8fafc;
+html.stockflow-dark h6 {
+  color: #f8fbff !important;
 }
 
-/* ------------------------------------------------------------
-   Common Tailwind dark text classes
------------------------------------------------------------- */
-
-html.stockflow-dark .text-gray-900 {
-  color: #f8fafc !important;
-}
-
-html.stockflow-dark .text-gray-800 {
-  color: #f1f5f9 !important;
-}
-
-html.stockflow-dark .text-gray-700 {
-  color: #e2e8f0 !important;
-}
-
-html.stockflow-dark .text-gray-600 {
-  color: #cbd5e1 !important;
-}
-
-html.stockflow-dark .text-gray-500 {
-  color: #94a3b8 !important;
-}
-
-html.stockflow-dark .text-gray-400 {
-  color: #94a3b8 !important;
-}
-
-html.stockflow-dark .text-gray-300 {
-  color: #cbd5e1 !important;
-}
-
-/* ------------------------------------------------------------
-   AI StockFlow primary dark text
-   Many existing pages use #12213a directly.
------------------------------------------------------------- */
-
-html.stockflow-dark [class*="text-[#12213a]"] {
-  color: #f8fafc !important;
-}
-
-/* ------------------------------------------------------------
-   Slate text classes
------------------------------------------------------------- */
-
-html.stockflow-dark .text-slate-900 {
-  color: #f8fafc !important;
-}
-
-html.stockflow-dark .text-slate-800 {
-  color: #f1f5f9 !important;
-}
-
-html.stockflow-dark .text-slate-700 {
-  color: #e2e8f0 !important;
-}
-
-html.stockflow-dark .text-slate-600 {
-  color: #cbd5e1 !important;
-}
-
-html.stockflow-dark .text-slate-500 {
-  color: #94a3b8 !important;
-}
-
-html.stockflow-dark .text-slate-400 {
-  color: #94a3b8 !important;
-}
-
-/* ============================================================
-   DARK MODE - CARDS / PANELS
-============================================================ */
-
-html.stockflow-dark .bg-white {
-  background-color: #1e293b !important;
-}
-
-html.stockflow-dark .bg-gray-50 {
-  background-color: #0f172a !important;
-}
-
-html.stockflow-dark .bg-gray-100 {
-  background-color: #1e293b !important;
-}
-
-html.stockflow-dark .bg-gray-200 {
-  background-color: #334155 !important;
-}
-
-/* ------------------------------------------------------------
-   Cards that already use dark backgrounds
------------------------------------------------------------- */
-
-html.stockflow-dark .bg-\[\#12213a\] {
-  background-color: #172033 !important;
-}
-
-/* ============================================================
-   DARK MODE - BORDERS
-============================================================ */
-
-html.stockflow-dark .border-gray-100 {
-  border-color: #334155 !important;
-}
-
-html.stockflow-dark .border-gray-200 {
-  border-color: #475569 !important;
-}
-
-html.stockflow-dark .border-gray-300 {
-  border-color: #64748b !important;
-}
-
-html.stockflow-dark .border-gray-400 {
-  border-color: #64748b !important;
-}
-
-/* Generic borders used by cards/tables */
-
-html.stockflow-dark .border {
-  border-color: #475569;
-}
-
-/* ============================================================
-   DARK MODE - INPUTS / SELECTS / TEXTAREAS
-============================================================ */
-
-html.stockflow-dark input,
-html.stockflow-dark select,
-html.stockflow-dark textarea {
-  background-color: #1f2937 !important;
-  color: #f8fafc !important;
-  border-color: #475569 !important;
-}
-
-html.stockflow-dark input::placeholder,
-html.stockflow-dark textarea::placeholder {
-  color: #94a3b8 !important;
-}
-
-html.stockflow-dark input:focus,
-html.stockflow-dark select:focus,
-html.stockflow-dark textarea:focus {
-  border-color: #60a5fa !important;
-  outline: none;
-}
-
-/* Disabled fields */
-
-html.stockflow-dark input:disabled,
-html.stockflow-dark select:disabled,
-html.stockflow-dark textarea:disabled {
-  background-color: #334155 !important;
-  color: #cbd5e1 !important;
-}
-
-/* ============================================================
-   DARK MODE - TABLES
-============================================================ */
-
-html.stockflow-dark table {
-  color: #f8fafc;
-}
-
-html.stockflow-dark th {
-  color: #e2e8f0 !important;
-  background-color: #111827 !important;
-}
-
-html.stockflow-dark td {
-  color: #e2e8f0 !important;
-  border-color: #475569 !important;
-}
-
-html.stockflow-dark tr {
-  border-color: #475569 !important;
-}
-
-/* ============================================================
-   DARK MODE - LABELS / SMALL TEXT
-============================================================ */
-
-html.stockflow-dark label {
-  color: #e2e8f0;
-}
-
+html.dark p,
 html.stockflow-dark p {
   color: inherit;
 }
 
-/* ============================================================
-   DARK MODE - LINKS
-============================================================ */
-
-html.stockflow-dark a {
-  color: #60a5fa;
-}
-
-html.stockflow-dark a:hover {
-  color: #93c5fd;
-}
-
-/* Keep navigation text readable */
-
-html.stockflow-dark nav a {
-  color: #e2e8f0;
-}
-
-html.stockflow-dark nav a:hover {
+html.dark strong,
+html.dark b,
+html.stockflow-dark strong,
+html.stockflow-dark b {
   color: #ffffff;
 }
 
 /* ============================================================
-   DARK MODE - BUTTONS
-============================================================ */
+   BORDERS
+   ============================================================ */
 
-html.stockflow-dark button {
-  color: inherit;
+html.dark .border-slate-100,
+html.stockflow-dark .border-slate-100 {
+  border-color: #1d3d60 !important;
 }
 
-html.stockflow-dark button:disabled {
-  opacity: 0.55;
+html.dark .border-slate-200,
+html.stockflow-dark .border-slate-200 {
+  border-color: #24496f !important;
+}
+
+html.dark .border-slate-300,
+html.stockflow-dark .border-slate-300 {
+  border-color: #32618f !important;
+}
+
+html.dark .border-gray-100,
+html.stockflow-dark .border-gray-100 {
+  border-color: #1d3d60 !important;
+}
+
+html.dark .border-gray-200,
+html.stockflow-dark .border-gray-200 {
+  border-color: #24496f !important;
+}
+
+html.dark .border-gray-300,
+html.stockflow-dark .border-gray-300 {
+  border-color: #32618f !important;
+}
+
+html.dark [class*="border-[#d5e6f7]"],
+html.stockflow-dark [class*="border-[#d5e6f7]"],
+html.dark [class*="border-[#bdd4ea]"],
+html.stockflow-dark [class*="border-[#bdd4ea]"] {
+  border-color: #24496f !important;
 }
 
 /* ============================================================
-   DARK MODE - DIVIDERS
-============================================================ */
+   COLORED BORDERS
+   ============================================================ */
 
-html.stockflow-dark .divide-y > :not([hidden]) ~ :not([hidden]) {
-  border-color: #475569 !important;
+html.dark .border-blue-100,
+html.stockflow-dark .border-blue-100 {
+  border-color: #234a78 !important;
+}
+
+html.dark .border-blue-200,
+html.stockflow-dark .border-blue-200 {
+  border-color: #285a92 !important;
+}
+
+html.dark .border-green-100,
+html.stockflow-dark .border-green-100 {
+  border-color: #205c3a !important;
+}
+
+html.dark .border-green-200,
+html.stockflow-dark .border-green-200 {
+  border-color: #267347 !important;
+}
+
+html.dark .border-orange-100,
+html.stockflow-dark .border-orange-100 {
+  border-color: #70451e !important;
+}
+
+html.dark .border-orange-200,
+html.stockflow-dark .border-orange-200 {
+  border-color: #955d26 !important;
+}
+
+html.dark .border-red-100,
+html.stockflow-dark .border-red-100 {
+  border-color: #71333a !important;
+}
+
+html.dark .border-red-200,
+html.stockflow-dark .border-red-200 {
+  border-color: #943f49 !important;
+}
+
+html.dark .border-purple-100,
+html.stockflow-dark .border-purple-100 {
+  border-color: #593278 !important;
+}
+
+html.dark .border-purple-200,
+html.stockflow-dark .border-purple-200 {
+  border-color: #75409c !important;
+}
+
+html.dark .border-pink-100,
+html.stockflow-dark .border-pink-100 {
+  border-color: #713653 !important;
+}
+
+html.dark .border-pink-200,
+html.stockflow-dark .border-pink-200 {
+  border-color: #914563 !important;
+}
+
+html.dark .border-emerald-100,
+html.stockflow-dark .border-emerald-100 {
+  border-color: #205c4c !important;
+}
+
+html.dark .border-emerald-200,
+html.stockflow-dark .border-emerald-200 {
+  border-color: #28745f !important;
 }
 
 /* ============================================================
-   DARK MODE - MODALS
-============================================================ */
+   FORMS
+   ============================================================ */
 
-html.stockflow-dark [role="dialog"] {
-  background-color: #1e293b;
-  color: #f8fafc;
+html.dark input,
+html.dark select,
+html.dark textarea,
+html.stockflow-dark input,
+html.stockflow-dark select,
+html.stockflow-dark textarea {
+  background-color: #102743 !important;
+  color: #ffffff !important;
+  border-color: #32618f !important;
 }
 
-/* ============================================================
-   DARK MODE - COMMON WHITE TEXT
-============================================================ */
+html.dark input::placeholder,
+html.dark textarea::placeholder,
+html.stockflow-dark input::placeholder,
+html.stockflow-dark textarea::placeholder {
+  color: #8ea0b6 !important;
+  opacity: 1;
+}
 
-html.stockflow-dark .text-white {
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus,
+html.stockflow-dark input:focus,
+html.stockflow-dark select:focus,
+html.stockflow-dark textarea:focus {
+  border-color: #60a5fa !important;
+  box-shadow:
+    0 0 0 2px rgba(96, 165, 250, 0.15),
+    0 0 12px rgba(96, 165, 250, 0.08) !important;
+  outline: none !important;
+}
+
+html.dark input:disabled,
+html.dark select:disabled,
+html.dark textarea:disabled,
+html.stockflow-dark input:disabled,
+html.stockflow-dark select:disabled,
+html.stockflow-dark textarea:disabled {
+  background-color: #173554 !important;
+  color: #8395ab !important;
+}
+
+html.dark option,
+html.stockflow-dark option {
+  background-color: #102743 !important;
   color: #ffffff !important;
 }
 
+html.dark label,
+html.stockflow-dark label {
+  color: #d7e1ed !important;
+}
+
 /* ============================================================
-   DARK MODE - PRESERVE STATUS COLORS
-============================================================ */
+   CHECKBOXES / RADIO
+   ============================================================ */
 
-html.stockflow-dark .text-green-600,
-html.stockflow-dark .text-green-700 {
-  color: #4ade80 !important;
+html.dark input[type="checkbox"],
+html.dark input[type="radio"],
+html.stockflow-dark input[type="checkbox"],
+html.stockflow-dark input[type="radio"] {
+  accent-color: #3b82f6;
 }
 
-html.stockflow-dark .text-red-600,
-html.stockflow-dark .text-red-700 {
-  color: #f87171 !important;
+/* ============================================================
+   TABLES
+   ============================================================ */
+
+html.dark table,
+html.stockflow-dark table {
+  color: #e5edf7;
+  border-color: #24496f !important;
 }
 
-html.stockflow-dark .text-orange-600,
-html.stockflow-dark .text-orange-700 {
-  color: #fb923c !important;
+html.dark thead,
+html.stockflow-dark thead {
+  background-color: #0a1c32 !important;
 }
 
+html.dark th,
+html.stockflow-dark th {
+  background-color: #0a1c32 !important;
+  color: #f8fbff !important;
+  border-color: #24496f !important;
+}
+
+html.dark td,
+html.stockflow-dark td {
+  color: #dce6f1 !important;
+  border-color: #24496f !important;
+}
+
+html.dark tbody tr,
+html.stockflow-dark tbody tr {
+  background-color: #102743 !important;
+}
+
+html.dark tbody tr:hover,
+html.stockflow-dark tbody tr:hover {
+  background-color: #1a2d47 !important;
+}
+
+/* ============================================================
+   COLORED TEXT — PRESERVE STATUS MEANING
+   ============================================================ */
+
+html.dark .text-blue-400,
+html.dark .text-blue-500,
+html.dark .text-blue-600,
+html.dark .text-blue-700,
+html.stockflow-dark .text-blue-400,
+html.stockflow-dark .text-blue-500,
 html.stockflow-dark .text-blue-600,
 html.stockflow-dark .text-blue-700 {
   color: #60a5fa !important;
 }
 
-html.stockflow-dark .text-purple-600,
-html.stockflow-dark .text-purple-700 {
+html.dark .text-green-400,
+html.dark .text-green-500,
+html.dark .text-green-600,
+html.dark .text-green-700,
+html.stockflow-dark .text-green-400,
+html.stockflow-dark .text-green-500,
+html.stockflow-dark .text-green-600,
+html.stockflow-dark .text-green-700 {
+  color: #4ade80 !important;
+}
+
+html.dark .text-emerald-400,
+html.dark .text-emerald-500,
+html.dark .text-emerald-600,
+html.stockflow-dark .text-emerald-400,
+html.stockflow-dark .text-emerald-500,
+html.stockflow-dark .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+html.dark .text-orange-400,
+html.dark .text-orange-500,
+html.dark .text-orange-600,
+html.stockflow-dark .text-orange-400,
+html.stockflow-dark .text-orange-500,
+html.stockflow-dark .text-orange-600 {
+  color: #fb923c !important;
+}
+
+html.dark .text-red-400,
+html.dark .text-red-500,
+html.dark .text-red-600,
+html.dark .text-red-700,
+html.stockflow-dark .text-red-400,
+html.stockflow-dark .text-red-500,
+html.stockflow-dark .text-red-600,
+html.stockflow-dark .text-red-700 {
+  color: #f87171 !important;
+}
+
+html.dark .text-purple-400,
+html.dark .text-purple-500,
+html.dark .text-purple-600,
+html.stockflow-dark .text-purple-400,
+html.stockflow-dark .text-purple-500,
+html.stockflow-dark .text-purple-600 {
   color: #c084fc !important;
 }
 
+html.dark .text-pink-400,
+html.dark .text-pink-500,
+html.dark .text-pink-600,
+html.stockflow-dark .text-pink-400,
+html.stockflow-dark .text-pink-500,
+html.stockflow-dark .text-pink-600 {
+  color: #f472b6 !important;
+}
+
+html.dark .text-yellow-400,
+html.dark .text-yellow-500,
+html.dark .text-yellow-600,
+html.stockflow-dark .text-yellow-400,
+html.stockflow-dark .text-yellow-500,
+html.stockflow-dark .text-yellow-600 {
+  color: #facc15 !important;
+}
+
 /* ============================================================
-   DARK MODE - SCROLLBAR
-============================================================ */
+   COLORED BACKGROUNDS — DARK PROFESSIONAL VERSIONS
+   ============================================================ */
 
+html.dark .bg-blue-50,
+html.stockflow-dark .bg-blue-50 {
+  background-color: #102846 !important;
+}
+
+html.dark .bg-blue-100,
+html.stockflow-dark .bg-blue-100 {
+  background-color: #153557 !important;
+}
+
+html.dark .bg-green-50,
+html.stockflow-dark .bg-green-50 {
+  background-color: #0e3021 !important;
+}
+
+html.dark .bg-green-100,
+html.stockflow-dark .bg-green-100 {
+  background-color: #12432d !important;
+}
+
+html.dark .bg-emerald-50,
+html.stockflow-dark .bg-emerald-50 {
+  background-color: #0d332b !important;
+}
+
+html.dark .bg-emerald-100,
+html.stockflow-dark .bg-emerald-100 {
+  background-color: #12483c !important;
+}
+
+html.dark .bg-orange-50,
+html.stockflow-dark .bg-orange-50 {
+  background-color: #392411 !important;
+}
+
+html.dark .bg-orange-100,
+html.stockflow-dark .bg-orange-100 {
+  background-color: #4c2f15 !important;
+}
+
+html.dark .bg-red-50,
+html.stockflow-dark .bg-red-50 {
+  background-color: #38181e !important;
+}
+
+html.dark .bg-red-100,
+html.stockflow-dark .bg-red-100 {
+  background-color: #4a2027 !important;
+}
+
+html.dark .bg-purple-50,
+html.stockflow-dark .bg-purple-50 {
+  background-color: #29183a !important;
+}
+
+html.dark .bg-purple-100,
+html.stockflow-dark .bg-purple-100 {
+  background-color: #39204e !important;
+}
+
+html.dark .bg-pink-50,
+html.stockflow-dark .bg-pink-50 {
+  background-color: #351827 !important;
+}
+
+html.dark .bg-pink-100,
+html.stockflow-dark .bg-pink-100 {
+  background-color: #481e34 !important;
+}
+
+html.dark .bg-yellow-50,
+html.stockflow-dark .bg-yellow-50 {
+  background-color: #332b0e !important;
+}
+
+html.dark .bg-yellow-100,
+html.stockflow-dark .bg-yellow-100 {
+  background-color: #453a12 !important;
+}
+
+html.dark .bg-indigo-50,
+html.stockflow-dark .bg-indigo-50 {
+  background-color: #171e3c !important;
+}
+
+html.dark .bg-indigo-100,
+html.stockflow-dark .bg-indigo-100 {
+  background-color: #222b55 !important;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+html.dark button,
+html.stockflow-dark button {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+/* Generic light buttons */
+html.dark button.bg-white,
+html.stockflow-dark button.bg-white {
+  background-color: #173554 !important;
+  color: #ffffff !important;
+  border-color: #32618f !important;
+}
+
+html.dark button.bg-gray-50,
+html.stockflow-dark button.bg-gray-50 {
+  background-color: #173554 !important;
+  color: #ffffff !important;
+}
+
+html.dark button.bg-gray-100,
+html.stockflow-dark button.bg-gray-100 {
+  background-color: #173554 !important;
+  color: #ffffff !important;
+}
+
+/* ============================================================
+   LINKS
+   ============================================================ */
+
+html.dark a,
+html.stockflow-dark a {
+  color: #7db7ff;
+}
+
+html.dark a:hover,
+html.stockflow-dark a:hover {
+  color: #b4d7ff;
+}
+
+/* Navigation links */
+html.dark nav a,
+html.stockflow-dark nav a {
+  color: #cbd8e8;
+}
+
+html.dark nav a:hover,
+html.stockflow-dark nav a:hover {
+  color: #ffffff;
+}
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+
+html.dark .shadow-sm,
+html.stockflow-dark .shadow-sm {
+  box-shadow:
+    0 4px 18px rgba(0, 0, 0, 0.2),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
+}
+
+html.dark .shadow,
+html.stockflow-dark .shadow {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.24) !important;
+}
+
+html.dark .shadow-md,
+html.stockflow-dark .shadow-md {
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.28) !important;
+}
+
+html.dark .shadow-lg,
+html.stockflow-dark .shadow-lg {
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.32) !important;
+}
+
+/* ============================================================
+   MODALS / DIALOGS
+   ============================================================ */
+
+html.dark [role="dialog"],
+html.stockflow-dark [role="dialog"] {
+  background-color: #102743 !important;
+  color: #ffffff !important;
+  border-color: #24496f !important;
+}
+
+html.dark dialog,
+html.stockflow-dark dialog {
+  background-color: #102743 !important;
+  color: #ffffff !important;
+  border-color: #24496f !important;
+}
+
+html.dark [class*="fixed"][class*="inset-0"],
+html.stockflow-dark [class*="fixed"][class*="inset-0"] {
+  color: #ffffff;
+}
+
+/* ============================================================
+   DIVIDERS
+   ============================================================ */
+
+html.dark hr,
+html.stockflow-dark hr {
+  border-color: #24496f !important;
+}
+
+/* ============================================================
+   BADGES
+   ============================================================ */
+
+html.dark .bg-green-100.text-green-700,
+html.stockflow-dark .bg-green-100.text-green-700 {
+  background-color: #12432d !important;
+  color: #4ade80 !important;
+}
+
+html.dark .bg-red-100.text-red-700,
+html.stockflow-dark .bg-red-100.text-red-700 {
+  background-color: #4a2027 !important;
+  color: #f87171 !important;
+}
+
+html.dark .bg-blue-100.text-blue-700,
+html.stockflow-dark .bg-blue-100.text-blue-700 {
+  background-color: #153557 !important;
+  color: #60a5fa !important;
+}
+
+html.dark .bg-orange-100.text-orange-700,
+html.stockflow-dark .bg-orange-100.text-orange-700 {
+  background-color: #4c2f15 !important;
+  color: #fb923c !important;
+}
+
+html.dark .bg-purple-100.text-purple-700,
+html.stockflow-dark .bg-purple-100.text-purple-700 {
+  background-color: #39204e !important;
+  color: #c084fc !important;
+}
+
+html.dark .bg-pink-100.text-pink-700,
+html.stockflow-dark .bg-pink-100.text-pink-700 {
+  background-color: #481e34 !important;
+  color: #f472b6 !important;
+}
+
+html.dark .bg-emerald-100.text-emerald-700,
+html.stockflow-dark .bg-emerald-100.text-emerald-700 {
+  background-color: #12483c !important;
+  color: #34d399 !important;
+}
+
+/* ============================================================
+   INLINE STYLE OVERRIDES
+   Important for older pages such as Demand Forecast.
+   ============================================================ */
+
+/* Inline white backgrounds */
+html.dark [style*="background: rgb(255, 255, 255)"],
+html.dark [style*="background:rgb(255,255,255)"],
+html.dark [style*="background: #ffffff"],
+html.dark [style*="background:#ffffff"],
+html.dark [style*="background: #fff"],
+html.dark [style*="background:#fff"],
+html.stockflow-dark [style*="background: rgb(255, 255, 255)"],
+html.stockflow-dark [style*="background:rgb(255,255,255)"],
+html.stockflow-dark [style*="background: #ffffff"],
+html.stockflow-dark [style*="background:#ffffff"],
+html.stockflow-dark [style*="background: #fff"],
+html.stockflow-dark [style*="background:#fff"] {
+  background: #102743 !important;
+}
+
+/* Inline light page backgrounds */
+html.dark [style*="background: #f4f9ff"],
+html.dark [style*="background:#f4f9ff"],
+html.dark [style*="background: rgb(248, 250, 252)"],
+html.stockflow-dark [style*="background: #f4f9ff"],
+html.stockflow-dark [style*="background:#f4f9ff"],
+html.stockflow-dark [style*="background: rgb(248, 250, 252)"] {
+  background: #071426 !important;
+}
+
+html.dark [style*="background: #eaf3ff"],
+html.dark [style*="background:#eaf3ff"],
+html.dark [style*="background: rgb(241, 245, 249)"],
+html.stockflow-dark [style*="background: #eaf3ff"],
+html.stockflow-dark [style*="background:#eaf3ff"],
+html.stockflow-dark [style*="background: rgb(241, 245, 249)"] {
+  background: #0b1b31 !important;
+}
+
+/* Inline borders */
+html.dark [style*="border: 1px solid #d5e6f7"],
+html.dark [style*="border:1px solid #d5e6f7"],
+html.dark [style*="border: 1px solid rgb(226, 232, 240)"],
+html.stockflow-dark [style*="border: 1px solid #d5e6f7"],
+html.stockflow-dark [style*="border:1px solid #d5e6f7"],
+html.stockflow-dark [style*="border: 1px solid rgb(226, 232, 240)"] {
+  border-color: #24496f !important;
+}
+
+/* Inline dark text */
+html.dark [style*="color: #0f172a"],
+html.dark [style*="color:#0f172a"],
+html.dark [style*="color: rgb(15, 23, 42)"],
+html.dark [style*="color: #12213a"],
+html.dark [style*="color:#12213a"],
+html.stockflow-dark [style*="color: #0f172a"],
+html.stockflow-dark [style*="color:#0f172a"],
+html.stockflow-dark [style*="color: rgb(15, 23, 42)"],
+html.stockflow-dark [style*="color: #12213a"],
+html.stockflow-dark [style*="color:#12213a"] {
+  color: #ffffff !important;
+}
+
+html.dark [style*="color: #334155"],
+html.dark [style*="color:#334155"],
+html.dark [style*="color: rgb(51, 65, 85)"],
+html.stockflow-dark [style*="color: #334155"],
+html.stockflow-dark [style*="color:#334155"],
+html.stockflow-dark [style*="color: rgb(51, 65, 85)"] {
+  color: #d7e1ed !important;
+}
+
+html.dark [style*="color: #64748b"],
+html.dark [style*="color:#64748b"],
+html.dark [style*="color: rgb(100, 116, 139)"],
+html.stockflow-dark [style*="color: #64748b"],
+html.stockflow-dark [style*="color:#64748b"],
+html.stockflow-dark [style*="color: rgb(100, 116, 139)"] {
+  color: #91afd0 !important;
+}
+
+/* ============================================================
+   SVG / ICONS
+   ============================================================ */
+
+html.dark svg,
+html.stockflow-dark svg {
+  color: inherit;
+}
+
+html.dark .text-gray-400 svg,
+html.stockflow-dark .text-gray-400 svg {
+  color: #8eadd0 !important;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+
+html.dark,
+html.stockflow-dark {
+  scrollbar-color: #24527d #071426;
+}
+
+html.dark ::-webkit-scrollbar,
 html.stockflow-dark ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 
+html.dark ::-webkit-scrollbar-track,
 html.stockflow-dark ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #071426;
 }
 
+html.dark ::-webkit-scrollbar-thumb,
 html.stockflow-dark ::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 8px;
+  background: #24527d;
+  border-radius: 999px;
 }
 
+html.dark ::-webkit-scrollbar-thumb:hover,
 html.stockflow-dark ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #326b9f;
 }
 
-@keyframes chartBarGrow {
-  from {
-    transform: scaleY(0);
-    opacity: 0;
+/* ============================================================
+   SELECTION
+   ============================================================ */
+
+html.dark ::selection,
+html.stockflow-dark ::selection {
+  background: rgba(59, 130, 246, 0.35);
+  color: #ffffff;
+}
+
+/* ============================================================
+   FOCUS ACCESSIBILITY
+   ============================================================ */
+
+html.dark button:focus-visible,
+html.dark a:focus-visible,
+html.dark input:focus-visible,
+html.dark select:focus-visible,
+html.dark textarea:focus-visible,
+html.stockflow-dark button:focus-visible,
+html.stockflow-dark a:focus-visible,
+html.stockflow-dark input:focus-visible,
+html.stockflow-dark select:focus-visible,
+html.stockflow-dark textarea:focus-visible {
+  outline: 2px solid #60a5fa !important;
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   HOVER SURFACES
+   ============================================================ */
+
+html.dark .hover\:bg-gray-50:hover,
+html.stockflow-dark .hover\:bg-gray-50:hover {
+  background-color: #173554 !important;
+}
+
+html.dark .hover\:bg-gray-100:hover,
+html.stockflow-dark .hover\:bg-gray-100:hover {
+  background-color: #20334f !important;
+}
+
+html.dark .hover\:bg-slate-50:hover,
+html.stockflow-dark .hover\:bg-slate-50:hover {
+  background-color: #172a43 !important;
+}
+
+/* ============================================================
+   DASHBOARD SPECIAL SURFACES
+   ============================================================ */
+
+html.dark main .bg-white,
+html.stockflow-dark main .bg-white {
+  color: #ffffff !important;
+}
+
+html.dark main .bg-white [class*="text-[#12213a]"],
+html.stockflow-dark main .bg-white [class*="text-[#12213a]"] {
+  color: #ffffff !important;
+}
+
+/* ============================================================
+   INVENTORY KPI VALUES
+   ============================================================ */
+
+html.dark main .text-2xl,
+html.stockflow-dark main .text-2xl {
+  color: #ffffff;
+}
+
+html.dark main .text-3xl,
+html.stockflow-dark main .text-3xl {
+  color: #ffffff;
+}
+
+/* Restore metric colors */
+html.dark main .text-blue-600,
+html.stockflow-dark main .text-blue-600 {
+  color: #60a5fa !important;
+}
+
+html.dark main .text-green-600,
+html.stockflow-dark main .text-green-600 {
+  color: #4ade80 !important;
+}
+
+html.dark main .text-orange-500,
+html.stockflow-dark main .text-orange-500 {
+  color: #fb923c !important;
+}
+
+/* ============================================================
+   PRINT
+   ============================================================ */
+
+@media print {
+  html.dark,
+  html.stockflow-dark,
+  html.dark body,
+  html.stockflow-dark body {
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 
-  to {
-    transform: scaleY(1);
-    opacity: 1;
+  html.dark *,
+  html.stockflow-dark * {
+    box-shadow: none !important;
   }
+}
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+
+@media (max-width: 768px) {
+  html.dark .overflow-x-auto,
+  html.stockflow-dark .overflow-x-auto {
+    scrollbar-width: thin;
+  }
+
+  html.dark table,
+  html.stockflow-dark table {
+    font-size: 12px;
+  }
+}
+
+/* ============================================================
+   STOCKFLOW FINAL BLUE/NAVY OVERRIDES
+   Dark mode: remove remaining neutral/white page surfaces.
+   ============================================================ */
+
+html.dark,
+html.stockflow-dark {
+  background-color: #071426 !important;
+}
+
+html.dark body,
+html.stockflow-dark body {
+  background-color: #071426 !important;
+}
+
+/* Neutral utility backgrounds used by older pages */
+html.dark .bg-white,
+html.stockflow-dark .bg-white {
+  background-color: #102743 !important;
+}
+
+html.dark .bg-gray-50,
+html.stockflow-dark .bg-gray-50,
+html.dark .bg-slate-50,
+html.stockflow-dark .bg-slate-50,
+html.dark .bg-neutral-50,
+html.stockflow-dark .bg-neutral-50 {
+  background-color: #071426 !important;
+}
+
+html.dark .bg-gray-100,
+html.stockflow-dark .bg-gray-100,
+html.dark .bg-slate-100,
+html.stockflow-dark .bg-slate-100,
+html.dark .bg-neutral-100,
+html.stockflow-dark .bg-neutral-100 {
+  background-color: #0b1b31 !important;
+}
+
+html.dark .bg-gray-200,
+html.stockflow-dark .bg-gray-200,
+html.dark .bg-slate-200,
+html.stockflow-dark .bg-slate-200,
+html.dark .bg-neutral-200,
+html.stockflow-dark .bg-neutral-200 {
+  background-color: #173554 !important;
+}
+
+/* Inventory table wrapper / white top strip */
+html.dark main table,
+html.stockflow-dark main table {
+  background-color: #0b1b31 !important;
+}
+
+html.dark main table thead,
+html.stockflow-dark main table thead {
+  background-color: #0a1c32 !important;
+}
+
+html.dark main table tbody,
+html.stockflow-dark main table tbody {
+  background-color: #102743 !important;
+}
+
+html.dark main table tbody tr,
+html.stockflow-dark main table tbody tr {
+  background-color: #102743 !important;
+}
+
+html.dark main table tbody tr:hover,
+html.stockflow-dark main table tbody tr:hover {
+  background-color: #173554 !important;
+}
+
+/* Common inventory/table container surfaces */
+html.dark main .rounded-xl.bg-white,
+html.stockflow-dark main .rounded-xl.bg-white,
+html.dark main .rounded-2xl.bg-white,
+html.stockflow-dark main .rounded-2xl.bg-white,
+html.dark main .rounded-lg.bg-white,
+html.stockflow-dark main .rounded-lg.bg-white {
+  background-color: #102743 !important;
+}
+
+/* Neutral buttons become blue/navy instead of grey */
+html.dark button.bg-gray-50,
+html.stockflow-dark button.bg-gray-50,
+html.dark button.bg-gray-100,
+html.stockflow-dark button.bg-gray-100,
+html.dark button.bg-slate-50,
+html.stockflow-dark button.bg-slate-50,
+html.dark button.bg-slate-100,
+html.stockflow-dark button.bg-slate-100 {
+  background-color: #173554 !important;
+  color: #ffffff !important;
+  border-color: #32618f !important;
+}
+
+html.dark button:hover.bg-gray-50,
+html.stockflow-dark button:hover.bg-gray-50,
+html.dark button:hover.bg-gray-100,
+html.stockflow-dark button:hover.bg-gray-100,
+html.dark button:hover.bg-slate-50,
+html.stockflow-dark button:hover.bg-slate-50,
+html.dark button:hover.bg-slate-100,
+html.stockflow-dark button:hover.bg-slate-100 {
+  background-color: #1d4267 !important;
+}
+
+/* Neutral text becomes blue-white, never flat grey */
+html.dark .text-gray-400,
+html.stockflow-dark .text-gray-400,
+html.dark .text-slate-400,
+html.stockflow-dark .text-slate-400,
+html.dark .text-neutral-400,
+html.stockflow-dark .text-neutral-400 {
+  color: #8eadd0 !important;
+}
+
+html.dark .text-gray-500,
+html.stockflow-dark .text-gray-500,
+html.dark .text-slate-500,
+html.stockflow-dark .text-slate-500,
+html.dark .text-neutral-500,
+html.stockflow-dark .text-neutral-500 {
+  color: #91afd0 !important;
+}
+
+html.dark .text-gray-600,
+html.stockflow-dark .text-gray-600,
+html.dark .text-slate-600,
+html.stockflow-dark .text-slate-600,
+html.dark .text-neutral-600,
+html.stockflow-dark .text-neutral-600 {
+  color: #bfd4e9 !important;
+}
+
+/* Neutral borders become blue */
+html.dark .border-gray-100,
+html.stockflow-dark .border-gray-100,
+html.dark .border-slate-100,
+html.stockflow-dark .border-slate-100,
+html.dark .border-neutral-100,
+html.stockflow-dark .border-neutral-100 {
+  border-color: #1d3d60 !important;
+}
+
+html.dark .border-gray-200,
+html.stockflow-dark .border-gray-200,
+html.dark .border-slate-200,
+html.stockflow-dark .border-slate-200,
+html.dark .border-neutral-200,
+html.stockflow-dark .border-neutral-200 {
+  border-color: #24496f !important;
+}
+
+html.dark .border-gray-300,
+html.stockflow-dark .border-gray-300,
+html.dark .border-slate-300,
+html.stockflow-dark .border-slate-300,
+html.dark .border-neutral-300,
+html.stockflow-dark .border-neutral-300 {
+  border-color: #32618f !important;
+}
+
+/* Inline white/light surfaces from older pages */
+html.dark [style*="background: #ffffff"],
+html.stockflow-dark [style*="background: #ffffff"],
+html.dark [style*="background:#ffffff"],
+html.stockflow-dark [style*="background:#ffffff"],
+html.dark [style*="background: rgb(255, 255, 255)"],
+html.stockflow-dark [style*="background: rgb(255, 255, 255)"] {
+  background: #102743 !important;
+}
+
+html.dark [style*="background: #f8fafc"],
+html.stockflow-dark [style*="background: #f8fafc"],
+html.dark [style*="background:#f8fafc"],
+html.stockflow-dark [style*="background:#f8fafc"],
+html.dark [style*="background: rgb(248, 250, 252)"],
+html.stockflow-dark [style*="background: rgb(248, 250, 252)"] {
+  background: #071426 !important;
+}
+
+html.dark [style*="background: #f1f5f9"],
+html.stockflow-dark [style*="background: #f1f5f9"],
+html.dark [style*="background:#f1f5f9"],
+html.stockflow-dark [style*="background:#f1f5f9"],
+html.dark [style*="background: rgb(241, 245, 249)"],
+html.stockflow-dark [style*="background: rgb(241, 245, 249)"] {
+  background: #0b1b31 !important;
+}
+
+/* White inline text containers */
+html.dark [style*="color: #64748b"],
+html.stockflow-dark [style*="color: #64748b"],
+html.dark [style*="color:#64748b"],
+html.stockflow-dark [style*="color:#64748b"] {
+  color: #91afd0 !important;
+}
+
+/* Keep semantic status colors untouched */
+html.dark .text-green-600,
+html.stockflow-dark .text-green-600 {
+  color: #4ade80 !important;
+}
+
+html.dark .text-blue-600,
+html.stockflow-dark .text-blue-600 {
+  color: #60a5fa !important;
+}
+
+html.dark .text-orange-500,
+html.stockflow-dark .text-orange-500 {
+  color: #fb923c !important;
+}
+
+html.dark .text-red-600,
+html.stockflow-dark .text-red-600 {
+  color: #f87171 !important;
+}
+
+/* Inventory legend/status controls */
+html.dark main .bg-gray-50,
+html.stockflow-dark main .bg-gray-50,
+html.dark main .bg-slate-50,
+html.stockflow-dark main .bg-slate-50 {
+  background-color: #071426 !important;
+}
+
+/* Scrollbar uses blue instead of grey */
+html.dark,
+html.stockflow-dark {
+  scrollbar-color: #24527d #071426;
+}
+
+html.dark ::-webkit-scrollbar-thumb,
+html.stockflow-dark ::-webkit-scrollbar-thumb {
+  background: #24527d;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover,
+html.stockflow-dark ::-webkit-scrollbar-thumb:hover {
+  background: #326b9f;
 }
