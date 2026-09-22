@@ -1,623 +1,192 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import PageLayout from "../../../components/layout/PageLayout";
+import { api, inr } from "../../../lib/api";
 
-type Product = {
-  id: string;
-  name: string;
-  sku: string;
-  stock: number;
-  price: number;
+type BOM = {
+  id: number;
+  product_id: number;
+  is_active: boolean;
+  lines: Array<{ component_product_id: number; quantity: number }>;
 };
 
-type BundleComponent = {
-  productId: string;
-  quantity: number;
-};
-
-type Bundle = {
-  id: string;
-  name: string;
-  sku: string;
-  components: BundleComponent[];
-};
-
-const products: Product[] = [
-  {
-    id: "p1",
-    name: "Bluetooth Speaker",
-    sku: "ELC-BT-608",
-    stock: 8,
-    price: 2800,
-  },
-  {
-    id: "p2",
-    name: "Hot Wheels Track Set",
-    sku: "TOY-HW-101",
-    stock: 31,
-    price: 1200,
-  },
-  {
-    id: "p3",
-    name: "Premium Cotton T-Shirt",
-    sku: "APP-TS-001",
-    stock: 50,
-    price: 650,
-  },
-  {
-    id: "p4",
-    name: "Wireless Mouse",
-    sku: "ELC-MS-201",
-    stock: 25,
-    price: 900,
-  },
-];
+type Product = { id: number; sku: string; name: string; selling_price: number };
 
 export default function BundlesPage() {
-  const [bundles, setBundles] = useState<Bundle[]>([
-    {
-      id: "BND-001",
-      name: "Entertainment Combo",
-      sku: "BND-ENT-001",
-      components: [
-        { productId: "p1", quantity: 1 },
-        { productId: "p2", quantity: 1 },
-      ],
-    },
+  const [products, setProducts] = useState<Product[]>([]);
+  const [boms, setBoms] = useState<BOM[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState("");
+  const [components, setComponents] = useState<Array<{ product_id: string; quantity: string }>>([
+    { product_id: "", quantity: "1" },
   ]);
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [bundleName, setBundleName] = useState("");
-  const [bundleSku, setBundleSku] = useState("");
-  const [components, setComponents] = useState<BundleComponent[]>([]);
+  useEffect(() => { load(); }, []);
 
-  const getProduct = (productId: string) =>
-    products.find((product) => product.id === productId);
-
-  const bundleCost = useMemo(() => {
-    return components.reduce((total, component) => {
-      const product = getProduct(component.productId);
-
-      return total + (product?.price || 0) * component.quantity;
-    }, 0);
-  }, [components]);
-
-  const availableBundles = useMemo(() => {
-    if (components.length === 0) return 0;
-
-    return Math.min(
-      ...components.map((component) => {
-        const product = getProduct(component.productId);
-
-        if (!product || component.quantity <= 0) {
-          return 0;
-        }
-
-        return Math.floor(product.stock / component.quantity);
-      })
-    );
-  }, [components]);
-
-  const addComponent = () => {
-    setComponents((current) => [
-      ...current,
-      {
-        productId: products[0].id,
-        quantity: 1,
-      },
-    ]);
-  };
-
-  const updateComponent = (
-    index: number,
-    field: "productId" | "quantity",
-    value: string
-  ) => {
-    setComponents((current) =>
-      current.map((component, componentIndex) => {
-        if (componentIndex !== index) {
-          return component;
-        }
-
-        return {
-          ...component,
-          [field]:
-            field === "quantity" ? Number(value) : value,
-        };
-      })
-    );
-  };
-
-  const removeComponent = (index: number) => {
-    setComponents((current) =>
-      current.filter((_, componentIndex) => componentIndex !== index)
-    );
-  };
-
-  const resetForm = () => {
-    setBundleName("");
-    setBundleSku("");
-    setComponents([]);
-  };
-
-  const handleCreateBundle = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!bundleName.trim() || !bundleSku.trim()) {
-      alert("Please enter Bundle Name and SKU.");
-      return;
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const prods = await api.products();
+      setProducts(prods as Product[]);
+      // Load BOMs for each product
+      const allBoms: BOM[] = [];
+      for (const p of (prods as Product[]).slice(0, 20)) {
+        try {
+          const bom = await api.request<BOM>(`/inventory/bom/${p.id}`);
+          if (bom) allBoms.push(bom);
+        } catch {}
+      }
+      setBoms(allBoms);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load bundles.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    if (components.length === 0) {
-      alert("Please add at least one component product.");
-      return;
+  async function createBundle() {
+    if (!selectedProduct || components.some(c => !c.product_id || !c.quantity)) return;
+    try {
+      setSaving(true);
+      await api.request("/inventory/bom", {
+        method: "POST",
+        body: JSON.stringify({
+          product_id: Number(selectedProduct),
+          lines: components.map(c => ({
+            component_product_id: Number(c.product_id),
+            quantity: Number(c.quantity),
+          })),
+        }),
+      });
+      setShowCreate(false);
+      setSelectedProduct("");
+      setComponents([{ product_id: "", quantity: "1" }]);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create bundle.");
+    } finally {
+      setSaving(false);
     }
+  }
 
-    const invalidComponent = components.some(
-      (component) =>
-        !component.productId || component.quantity <= 0
-    );
-
-    if (invalidComponent) {
-      alert("Please select valid products and quantities.");
-      return;
-    }
-
-    const newBundle: Bundle = {
-      id: `BND-${String(bundles.length + 1).padStart(3, "0")}`,
-      name: bundleName.trim(),
-      sku: bundleSku.trim().toUpperCase(),
-      components,
-    };
-
-    setBundles((current) => [...current, newBundle]);
-
-    resetForm();
-    setShowCreate(false);
-  };
+  const getProduct = (id: number) => products.find(p => p.id === id);
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-7xl">
-
-        {/* HEADER */}
+    <PageLayout>
+      <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Bundles & Kits
-            </h1>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Create product bundles using existing inventory items.
-            </p>
+            <h1 className="text-2xl font-bold text-gray-900">Product Bundles / BOM</h1>
+            <p className="mt-1 text-sm text-gray-500">Manage product bundles and bill of materials</p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-          >
+          <button onClick={() => setShowCreate(true)}
+            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
             + Create Bundle
           </button>
         </div>
 
-        {/* SUMMARY CARDS */}
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium text-slate-500">
-              Total Bundles
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {bundles.length}
-            </p>
+        {loading ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+            <p className="text-sm text-gray-500">Loading bundles...</p>
           </div>
-
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium text-slate-500">
-              Available Bundle Units
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {bundles.reduce((total, bundle) => {
-                if (bundle.components.length === 0) {
-                  return total;
-                }
-
-                const available = Math.min(
-                  ...bundle.components.map((component) => {
-                    const product = getProduct(component.productId);
-
-                    return product
-                      ? Math.floor(
-                          product.stock / component.quantity
-                        )
-                      : 0;
-                  })
-                );
-
-                return total + available;
-              }, 0)}
-            </p>
+        ) : boms.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-300 py-16 text-center">
+            <p className="text-4xl mb-3">📦</p>
+            <p className="text-sm text-gray-500">No bundles created yet</p>
+            <button onClick={() => setShowCreate(true)}
+              className="mt-4 rounded-lg bg-blue-600 px-6 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              Create First Bundle
+            </button>
           </div>
-
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium text-slate-500">
-              Component Products
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {new Set(
-                bundles.flatMap((bundle) =>
-                  bundle.components.map(
-                    (component) => component.productId
-                  )
-                )
-              ).size}
-            </p>
-          </div>
-
-        </div>
-
-        {/* BUNDLE TABLE */}
-        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-
-          <div className="border-b px-5 py-4">
-            <h2 className="font-semibold text-slate-900">
-              Bundle List
-            </h2>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">Bundle</th>
-                  <th className="px-5 py-3">SKU</th>
-                  <th className="px-5 py-3">Components</th>
-                  <th className="px-5 py-3">Bundle Cost</th>
-                  <th className="px-5 py-3">Available</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y">
-
-                {bundles.map((bundle) => {
-
-                  const cost = bundle.components.reduce(
-                    (total, component) => {
-                      const product = getProduct(component.productId);
-
+        ) : (
+          <div className="space-y-4">
+            {boms.map(bom => {
+              const parent = getProduct(bom.product_id);
+              return (
+                <div key={bom.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="font-semibold text-gray-900">{parent?.name ?? `Product #${bom.product_id}`}</p>
+                      <p className="text-xs text-gray-400">SKU: {parent?.sku} · {bom.lines.length} components</p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${bom.is_active ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                      {bom.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {bom.lines.map((line, i) => {
+                      const comp = getProduct(line.component_product_id);
                       return (
-                        total +
-                        (product?.price || 0) * component.quantity
-                      );
-                    },
-                    0
-                  );
-
-                  const available = Math.min(
-                    ...bundle.components.map((component) => {
-                      const product = getProduct(component.productId);
-
-                      return product
-                        ? Math.floor(
-                            product.stock / component.quantity
-                          )
-                        : 0;
-                    })
-                  );
-
-                  return (
-                    <tr key={bundle.id}>
-
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-900">
-                          {bundle.name}
-                        </p>
-
-                        <p className="text-xs text-slate-500">
-                          {bundle.id}
-                        </p>
-                      </td>
-
-                      <td className="px-5 py-4 font-medium text-slate-700">
-                        {bundle.sku}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="space-y-1">
-
-                          {bundle.components.map((component, componentIndex) => {
-                            const product = getProduct(
-                              component.productId
-                            );
-
-                            return (
-                              <div
-                                key={`${bundle.id}-${component.productId}-${componentIndex}`}
-                                className="text-xs text-slate-600"
-                              >
-                                {product?.name} × {component.quantity}
-                              </div>
-                            );
-                          })}
-
+                        <div key={i} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                          <span className="text-sm text-gray-700">{comp?.name ?? `Product #${line.component_product_id}`}</span>
+                          <span className="text-sm font-medium text-gray-900">× {line.quantity}</span>
                         </div>
-                      </td>
-
-                      <td className="px-5 py-4 font-medium">
-                        ₹{cost.toLocaleString("en-IN")}
-                      </td>
-
-                      <td className="px-5 py-4">
-
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            available > 0
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {available}
-                        </span>
-
-                      </td>
-
-                    </tr>
-                  );
-                })}
-
-              </tbody>
-            </table>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        )}
 
-        {/* CREATE BUNDLE MODAL */}
         {showCreate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-
-            <div className="w-full max-w-3xl rounded-xl bg-white shadow-2xl">
-
-              <div className="flex items-center justify-between border-b px-5 py-4">
-
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">
-                    Create Bundle / Kit
-                  </h2>
-
-                  <p className="mt-1 text-xs text-slate-500">
-                    Combine existing products into one sellable bundle.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    resetForm();
-                    setShowCreate(false);
-                  }}
-                  className="text-xl text-slate-400 hover:text-slate-700"
-                >
-                  ×
-                </button>
-
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setShowCreate(false)}>
+            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+              <h2 className="mb-4 text-xl font-bold text-gray-900">Create Bundle</h2>
+              <div className="mb-4">
+                <label className="mb-1 block text-sm font-medium text-gray-700">Parent Product *</label>
+                <select value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500">
+                  <option value="">Select product...</option>
+                  {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
+                </select>
               </div>
-
-              <form
-                onSubmit={handleCreateBundle}
-                className="space-y-5 p-5"
-              >
-
-                {/* BASIC DETAILS */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">
-                      Bundle Name
-                    </label>
-
-                    <input
-                      value={bundleName}
-                      onChange={(e) =>
-                        setBundleName(e.target.value)
-                      }
-                      placeholder="Example: Festival Combo"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
-                    />
+              <div className="mb-3">
+                <label className="mb-2 block text-sm font-medium text-gray-700">Components</label>
+                {components.map((c, i) => (
+                  <div key={i} className="flex gap-2 mb-2">
+                    <select value={c.product_id} onChange={e => {
+                      const updated = [...components];
+                      updated[i].product_id = e.target.value;
+                      setComponents(updated);
+                    }} className="flex-1 rounded-lg border border-gray-300 px-2 py-2 text-sm outline-none focus:border-blue-500">
+                      <option value="">Select component...</option>
+                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                    <input type="number" min={1} value={c.quantity} onChange={e => {
+                      const updated = [...components];
+                      updated[i].quantity = e.target.value;
+                      setComponents(updated);
+                    }} className="w-20 rounded-lg border border-gray-300 px-2 py-2 text-sm outline-none focus:border-blue-500" />
+                    {components.length > 1 && (
+                      <button onClick={() => setComponents(components.filter((_, j) => j !== i))}
+                        className="text-red-500 hover:text-red-700 px-2">✕</button>
+                    )}
                   </div>
-
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">
-                      Bundle SKU
-                    </label>
-
-                    <input
-                      value={bundleSku}
-                      onChange={(e) =>
-                        setBundleSku(e.target.value)
-                      }
-                      placeholder="Example: BND-FEST-001"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm uppercase outline-none focus:border-blue-500"
-                    />
-                  </div>
-
-                </div>
-
-                {/* COMPONENT PRODUCTS */}
-                <div>
-
-                  <div className="mb-3 flex items-center justify-between">
-
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        Component Products
-                      </h3>
-
-                      <p className="text-xs text-slate-500">
-                        Select products and required quantities.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={addComponent}
-                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      + Add Component
-                    </button>
-
-                  </div>
-
-                  {components.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-                      No component products added.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-
-                      {components.map((component, index) => {
-
-                        const product = getProduct(
-                          component.productId
-                        );
-
-                        return (
-                          <div
-                            key={index}
-                            className="grid grid-cols-1 gap-3 rounded-lg border bg-slate-50 p-3 md:grid-cols-[1fr_120px_auto]"
-                          >
-
-                            <select
-                              value={component.productId}
-                              onChange={(e) =>
-                                updateComponent(
-                                  index,
-                                  "productId",
-                                  e.target.value
-                                )
-                              }
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                            >
-                              {products.map((item) => (
-                                <option
-                                  key={item.id}
-                                  value={item.id}
-                                >
-                                  {item.name} ({item.sku})
-                                </option>
-                              ))}
-                            </select>
-
-                            <input
-                              type="number"
-                              min="1"
-                              value={component.quantity}
-                              onChange={(e) =>
-                                updateComponent(
-                                  index,
-                                  "quantity",
-                                  e.target.value
-                                )
-                              }
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                            />
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeComponent(index)
-                              }
-                              className="rounded-lg px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
-                            >
-                              Remove
-                            </button>
-
-                            <div className="md:col-span-3 text-xs text-slate-500">
-                              Available stock:{" "}
-                              <span className="font-semibold text-slate-700">
-                                {product?.stock ?? 0}
-                              </span>
-                            </div>
-
-                          </div>
-                        );
-                      })}
-
-                    </div>
-                  )}
-                </div>
-
-                {/* PREVIEW */}
-                <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
-                    <div>
-                      <p className="text-xs text-blue-600">
-                        Bundle Cost
-                      </p>
-
-                      <p className="mt-1 text-lg font-bold text-blue-900">
-                        ₹{bundleCost.toLocaleString("en-IN")}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-blue-600">
-                        Available Bundles
-                      </p>
-
-                      <p className="mt-1 text-lg font-bold text-blue-900">
-                        {components.length > 0
-                          ? availableBundles
-                          : 0}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-blue-600">
-                        Components
-                      </p>
-
-                      <p className="mt-1 text-lg font-bold text-blue-900">
-                        {components.length}
-                      </p>
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* ACTIONS */}
-                <div className="flex justify-end gap-3 border-t pt-4">
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetForm();
-                      setShowCreate(false);
-                    }}
-                    className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-                  >
-                    Create Bundle
-                  </button>
-
-                </div>
-
-              </form>
+                ))}
+                <button onClick={() => setComponents([...components, { product_id: "", quantity: "1" }])}
+                  className="text-sm text-blue-600 hover:underline">+ Add Component</button>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowCreate(false)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={createBundle} disabled={saving}
+                  className="flex-1 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                  {saving ? "Creating..." : "Create Bundle"}
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
-    </main>
+    </PageLayout>
   );
 }
