@@ -190,7 +190,7 @@ export default function InventoryPage() {
 
   try {
     const storedProducts =
-      localStorage.getItem("inventory-products");
+      sessionStorage.getItem("inventory-products");
 
     const localProducts: Product[] =
       storedProducts
@@ -442,7 +442,7 @@ export default function InventoryPage() {
   // --------------------------------------------------
 
   function handleView(product: Product) {
-  localStorage.setItem(
+  sessionStorage.setItem(
     "inventory-view-product",
     JSON.stringify(product)
   );
@@ -606,7 +606,7 @@ export default function InventoryPage() {
     product,
   ];
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     "inventory-products",
     JSON.stringify(updatedProducts)
   );

@@ -354,7 +354,7 @@ export default function PurchaseRequestsPage() {
   }
 
   // Get existing Purchase Orders
-  const savedOrders = localStorage.getItem(
+  const savedOrders = sessionStorage.getItem(
     "stockflow-purchase-orders"
   );
 
@@ -456,7 +456,7 @@ export default function PurchaseRequestsPage() {
     ...purchaseOrders,
   ];
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     "stockflow-purchase-orders",
     JSON.stringify(
       updatedPurchaseOrders

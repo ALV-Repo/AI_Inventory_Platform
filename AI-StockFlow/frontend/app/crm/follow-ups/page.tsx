@@ -77,14 +77,14 @@ export default function FollowUpsPage() {
   const [followUps, setFollowUps] = useState<FollowUp[]>(() => {
     if (typeof window === "undefined") return initialFollowUps;
 
-    const saved = localStorage.getItem("stockflow-crm-followups");
+    const saved = sessionStorage.getItem("stockflow-crm-followups");
     return saved ? JSON.parse(saved) : initialFollowUps;
   });
 
   const [interactions, setInteractions] = useState<Interaction[]>(() => {
     if (typeof window === "undefined") return initialInteractions;
 
-    const saved = localStorage.getItem("stockflow-crm-interactions");
+    const saved = sessionStorage.getItem("stockflow-crm-interactions");
     return saved ? JSON.parse(saved) : initialInteractions;
   });
 
@@ -109,14 +109,14 @@ export default function FollowUpsPage() {
   });
 
   useEffect(() => {
-    localStorage.setItem(
+    sessionStorage.setItem(
       "stockflow-crm-followups",
       JSON.stringify(followUps)
     );
   }, [followUps]);
 
   useEffect(() => {
-    localStorage.setItem(
+    sessionStorage.setItem(
       "stockflow-crm-interactions",
       JSON.stringify(interactions)
     );

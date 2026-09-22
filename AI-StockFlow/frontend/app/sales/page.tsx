@@ -307,6 +307,11 @@ const [syncingQueue, setSyncingQueue] =
   const [search, setSearch] =
     useState("");
 
+  // MD change #4 — Category filters
+  const [activeCategory, setActiveCategory] = useState<string>("All");
+
+  const CATEGORIES = ["All", "Toys", "Electronics", "Home", "Sports", "Stationery"];
+
   /* =========================================================
      CART
      ========================================================= */
@@ -418,7 +423,7 @@ useEffect(() => {
   setIsOnline(navigator.onLine);
 
   const savedQueue =
-    localStorage.getItem("stockflow-offline-sales");
+    sessionStorage.getItem("stockflow-offline-sales");
 
   if (savedQueue) {
     try {
@@ -429,7 +434,7 @@ useEffect(() => {
         setOfflineQueue(parsed);
       }
     } catch {
-      localStorage.removeItem(
+      sessionStorage.removeItem(
         "stockflow-offline-sales"
       );
     }
@@ -473,7 +478,7 @@ useEffect(() => {
     return;
   }
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     "stockflow-offline-sales",
     JSON.stringify(offlineQueue)
   );
@@ -496,12 +501,10 @@ async function syncOfflineSales() {
     try {
       await createSale(queuedSale.payload);
 
-      console.log(
         "Offline sale synced successfully:",
         queuedSale.id
       );
     } catch (error) {
-      console.error(
         "Offline sale sync failed:",
         queuedSale.id,
         error
@@ -590,7 +593,6 @@ async function syncOfflineSales() {
           )
       );
     } catch (error) {
-      console.error(
         "Unable to load inventory products:",
         error
       );
@@ -622,7 +624,6 @@ async function syncOfflineSales() {
 
       setSalesSummary(summary);
     } catch (error) {
-      console.error(
         "Unable to load today's sales:",
         error
       );
@@ -667,23 +668,18 @@ useEffect(() => {
 
   const filteredProducts =
     useMemo(() => {
-      const query =
-        search.trim().toLowerCase();
-
-      if (!query) {
-        return products;
-      }
-
-      return products.filter(
-        (product) =>
-          product.name
-            .toLowerCase()
-            .includes(query) ||
-          product.sku
-            .toLowerCase()
-            .includes(query)
-      );
-    }, [products, search]);
+      const query = search.trim().toLowerCase();
+      return products.filter((product) => {
+        const matchSearch = !query ||
+          product.name.toLowerCase().includes(query) ||
+          product.sku.toLowerCase().includes(query);
+        const rawProduct = product as Record<string, unknown>;
+        const productCategory = String(rawProduct.category ?? "").toLowerCase();
+        const matchCategory = activeCategory === "All" ||
+          productCategory.includes(activeCategory.toLowerCase());
+        return matchSearch && matchCategory;
+      });
+    }, [products, search, activeCategory]);
 
   /* =========================================================
      CART CALCULATIONS
@@ -1062,7 +1058,6 @@ return;
         ),
       };
 
-      console.log(
         "Creating sale with payload:",
         payload
       );
@@ -1072,7 +1067,6 @@ return;
           payload
         );
 
-      console.log(
         "Sale created successfully:",
         createdSale
       );
@@ -1126,7 +1120,6 @@ setShowReceipt(true);
 
       await loadTodaySales();
     } catch (error) {
-      console.error(
         "Sale creation error:",
         error
       );
@@ -1433,6 +1426,26 @@ setShowReceipt(true);
 
                 </div>
 
+              </div>
+
+              {/* Category Filters — MD change #4 */}
+              <div className="border-b border-slate-200 px-4 pb-3 pt-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setActiveCategory(cat)}
+                      className={`rounded-full px-3 py-1 text-[10px] font-semibold transition ${
+                        activeCategory === cat
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Products List */}
@@ -1947,6 +1960,25 @@ setShowReceipt(true);
                   {processing
                     ? "Processing..."
                     : "Complete Sale"}
+                </button>
+
+                {/* Cancel Sale — MD change #8 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (cart.length === 0) return;
+                    if (window.confirm("Cancel this sale? The cart will be cleared.")) {
+                      clearCart();
+                      setCustomer("");
+                      setDiscount(0);
+                      setPaymentMethod("Cash");
+                      setSaleError(null);
+                    }
+                  }}
+                  disabled={cart.length === 0}
+                  className="mt-2 h-9 w-full rounded-md border border-red-200 bg-red-50 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ✕ Cancel Sale
                 </button>
 
               </div>

@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.local
 .coverage
 htmlcov/
 .pytest_cache/
@@ -14,3 +15,15 @@ dist/
 build/
 *.log
 .DS_Store
+
+# Database files — NEVER commit these
+*.db
+*.sqlite
+*.sqlite3
+test_*.db
+stockflow_demo.db
+
+# Secrets
+*.pem
+*.key
+secrets/

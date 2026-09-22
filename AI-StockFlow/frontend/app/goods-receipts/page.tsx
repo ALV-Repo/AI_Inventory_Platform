@@ -154,7 +154,7 @@ const [submittedAt, setSubmittedAt] =
     useState("");
 
     useEffect(() => {
-  const savedGRN = localStorage.getItem(
+  const savedGRN = sessionStorage.getItem(
     "stockflow-last-grn"
   );
 
@@ -181,7 +181,7 @@ const [submittedAt, setSubmittedAt] =
       setItems(data.items);
     }
   } catch {
-    localStorage.removeItem(
+    sessionStorage.removeItem(
       "stockflow-last-grn"
     );
   }
@@ -561,7 +561,7 @@ const [submittedAt, setSubmittedAt] =
   setGrnNumber(generatedGRN);
   setSubmittedAt(now);
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     "stockflow-last-grn",
     JSON.stringify({
       grnNumber: generatedGRN,

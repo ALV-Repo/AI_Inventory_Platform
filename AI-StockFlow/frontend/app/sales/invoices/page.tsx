@@ -110,13 +110,13 @@ export default function InvoicesPage() {
     return initialInvoices;
   }
 
-  const saved = localStorage.getItem("stockflow-invoices");
+  const saved = sessionStorage.getItem("stockflow-invoices");
 
   return saved ? JSON.parse(saved) : initialInvoices;
 });
 
 useEffect(() => {
-  localStorage.setItem("stockflow-invoices", JSON.stringify(invoices));
+  sessionStorage.setItem("stockflow-invoices", JSON.stringify(invoices));
 }, [invoices]);
 
 const [invoicePrefix, setInvoicePrefix] = useState("INV-");

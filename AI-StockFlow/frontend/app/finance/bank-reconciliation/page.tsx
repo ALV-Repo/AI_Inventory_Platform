@@ -73,7 +73,7 @@ export default function BankReconciliationPage() {
   const [importMessage, setImportMessage] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("stockflow-bank-reconciliation");
+    const saved = sessionStorage.getItem("stockflow-bank-reconciliation");
 
     if (saved) {
       try {
@@ -85,7 +85,7 @@ export default function BankReconciliationPage() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(
+    sessionStorage.setItem(
       "stockflow-bank-reconciliation",
       JSON.stringify(transactions)
     );

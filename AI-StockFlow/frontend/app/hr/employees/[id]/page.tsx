@@ -194,7 +194,7 @@ export default function EmployeeProfilePage({
 const [employee, setEmployee] = useState(initialEmployee);
 
   useEffect(() => {
-    const savedEmployee = localStorage.getItem(
+    const savedEmployee = sessionStorage.getItem(
       `stockflow-hr-employee-${id}`
     );
 
@@ -226,7 +226,7 @@ const handleSaveEmployee = () => {
 
   setEmployee(updatedEmployee);
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     `stockflow-hr-employee-${id}`,
     JSON.stringify(updatedEmployee)
   );
