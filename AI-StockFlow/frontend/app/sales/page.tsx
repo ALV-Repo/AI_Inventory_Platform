@@ -501,14 +501,7 @@ async function syncOfflineSales() {
     try {
       await createSale(queuedSale.payload);
 
-        "Offline sale synced successfully:",
-        queuedSale.id
-      );
-    } catch (error) {
-        "Offline sale sync failed:",
-        queuedSale.id,
-        error
-      );
+    } catch {
 
       remaining.push(queuedSale);
     }
