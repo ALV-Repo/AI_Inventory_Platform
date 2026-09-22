@@ -19,43 +19,29 @@ export async function request<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  if (
-    options.body &&
-    !headers.has("Content-Type")
-  ) {
-    headers.set(
-      "Content-Type",
-      "application/json"
-    );
+  if (options.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
 
   let response: Response;
 
   try {
-    response = await fetch(
-      `${BASE_URL}${endpoint}`,
-      {
-        ...options,
-        headers,
-      }
-    );
+    response = await fetch(`${BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
   } catch {
     throw new Error(
       "Cannot connect to backend. Make sure FastAPI is running on port 8000."
     );
   }
 
-  const contentType =
-    response.headers.get("content-type") ?? "";
+  const contentType = response.headers.get("content-type") ?? "";
 
   let data: unknown = null;
 
   try {
-    if (
-      contentType.includes(
-        "application/json"
-      )
-    ) {
+    if (contentType.includes("application/json")) {
       data = await response.json();
     } else {
       data = await response.text();
@@ -70,51 +56,29 @@ export async function request<T>(
       sessionStorage.removeItem("sf_refresh");
     }
 
-    let message =
-      `Request failed with status ${response.status}`;
+    let message = `Request failed with status ${response.status}`;
 
     if (
       typeof data === "object" &&
       data !== null &&
       "detail" in data
     ) {
-      const detail = (
-        data as {
-          detail?: unknown;
-        }
-      ).detail;
-
+      const detail = (data as { detail?: unknown }).detail;
       message =
         typeof detail === "string"
           ? detail
-          : JSON.stringify(
-              detail,
-              null,
-              2
-            );
+          : JSON.stringify(detail, null, 2);
     } else if (
       typeof data === "object" &&
       data !== null &&
       "message" in data
     ) {
-      const apiMessage = (
-        data as {
-          message?: unknown;
-        }
-      ).message;
-
+      const apiMessage = (data as { message?: unknown }).message;
       message =
         typeof apiMessage === "string"
           ? apiMessage
-          : JSON.stringify(
-              apiMessage,
-              null,
-              2
-            );
-    } else if (
-      typeof data === "string" &&
-      data.trim()
-    ) {
+          : JSON.stringify(apiMessage, null, 2);
+    } else if (typeof data === "string" && data.trim()) {
       message = data;
     }
 

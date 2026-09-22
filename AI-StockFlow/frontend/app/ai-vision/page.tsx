@@ -105,9 +105,7 @@ export default function AIVisionPage() {
         !navigator.mediaDevices ||
         !navigator.mediaDevices.getUserMedia
       ) {
-        setCameraError(
-          "Camera access is not supported in this browser."
-        );
+        setCameraError("");
 
         return;
       }
@@ -143,14 +141,10 @@ export default function AIVisionPage() {
 
       setCameraActive(true);
       setScanStatus("Camera Active");
-      setMessage(
-        "Camera ready. Position the product inside the scan frame."
-      );
+      setMessage( "Camera ready. Position the product inside the scan frame." );
     } catch (error) {
 
-      setCameraError(
-        "Unable to access the camera. Please allow camera permission and try again."
-      );
+      setCameraError("");
 
       setCameraActive(false);
       setScanStatus("Ready");
@@ -187,9 +181,7 @@ export default function AIVisionPage() {
       streamRef.current?.getVideoTracks()[0];
 
     if (!track) {
-      setMessage(
-        "Start the camera before using the flash."
-      );
+      setMessage( "Camera ready. Position the product inside the scan frame." );
 
       return;
     }
@@ -200,9 +192,7 @@ export default function AIVisionPage() {
     if (
       !("torch" in capabilities)
     ) {
-      setMessage(
-        "Flash control is not supported by this device/browser."
-      );
+      setMessage( "Camera ready. Position the product inside the scan frame." );
 
       return;
     }
@@ -221,21 +211,15 @@ export default function AIVisionPage() {
       );
     } catch (error) {
 
-      setMessage(
-        "Unable to change the flashlight setting."
-      );
+      setMessage( "Camera ready. Position the product inside the scan frame." );
     }
   };
 
   const processScan = () => {
     setIsProcessing(true);
-    setScanStatus(
-      "Product Detected"
-    );
+    setScanStatus("Camera Active");
 
-    setMessage(
-      "AI is analyzing the captured image..."
-    );
+    setMessage( "Camera ready. Position the product inside the scan frame." );
 
     setTimeout(() => {
       const product =
@@ -257,9 +241,7 @@ export default function AIVisionPage() {
 
       setIsProcessing(false);
 
-      setMessage(
-        "Product detected successfully."
-      );
+      setMessage( "Camera ready. Position the product inside the scan frame." );
     }, 900);
   };
 
@@ -268,9 +250,7 @@ export default function AIVisionPage() {
       !videoRef.current ||
       !cameraActive
     ) {
-      setMessage(
-        "Start the camera first."
-      );
+      setMessage( "Camera ready. Position the product inside the scan frame." );
 
       return;
     }
@@ -279,9 +259,7 @@ export default function AIVisionPage() {
       videoRef.current;
 
     const canvas =
-      document.createElement(
-        "canvas"
-      );
+      document.createElement( "canvas" );
 
     canvas.width =
       video.videoWidth ||
@@ -295,9 +273,7 @@ export default function AIVisionPage() {
       canvas.getContext("2d");
 
     if (!context) {
-      setMessage(
-        "Unable to capture image."
-      );
+      setMessage( "Camera ready. Position the product inside the scan frame." );
 
       return;
     }
@@ -312,7 +288,6 @@ export default function AIVisionPage() {
 
     const image =
       canvas.toDataURL(
-        "image/jpeg",
         0.85
       );
 
@@ -334,13 +309,10 @@ export default function AIVisionPage() {
     }
 
     if (
-      !file.type.startsWith(
-        "image/"
+      !file.type.startsWith("image/");
       )
     ) {
-      setMessage(
-        "Please select an image file."
-      );
+      setMessage( "Camera ready. Position the product inside the scan frame." );
 
       return;
     }
@@ -354,15 +326,12 @@ export default function AIVisionPage() {
 
       if (
         typeof result ===
-        "string"
       ) {
         setCapturedImage(
           result
         );
 
-        setScanStatus(
-          "Product Detected"
-        );
+        setScanStatus("Camera Active");
 
         processScan();
       }
@@ -386,9 +355,7 @@ export default function AIVisionPage() {
       return;
     }
 
-    setScanStatus(
-      "Confirmed"
-    );
+    setScanStatus("Camera Active");
 
     setMessage(
       mode === "shelf"
@@ -539,10 +506,8 @@ export default function AIVisionPage() {
               <span
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${
                   scanStatus ===
-                  "Confirmed"
                     ? "bg-green-50 text-green-600"
                     : scanStatus ===
-                      "Product Detected"
                     ? "bg-blue-50 text-blue-600"
                     : cameraActive
                     ? "bg-green-50 text-green-600"
@@ -1103,12 +1068,10 @@ export default function AIVisionPage() {
                     }
                     disabled={
                       scanStatus ===
-                      "Confirmed"
                     }
                     className="w-full rounded-lg bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {scanStatus ===
-                    "Confirmed"
                       ? "✓ Scan Confirmed"
                       : mode === "shelf"
                       ? "✓ Confirm Shelf Scan"

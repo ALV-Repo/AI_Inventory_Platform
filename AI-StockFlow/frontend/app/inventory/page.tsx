@@ -45,18 +45,9 @@ type Product = {
 };
 
 const categories = [
-  "All",
-  "Electronics",
-  "Toys",
-  "Sports",
-  "Seasonal",
-  "Home",
 ];
 
 const warehouses = [
-  "Main Store",
-  "Warehouse A",
-  "Warehouse B",
 ];
 
 function getAvailable(product: Product) {
@@ -100,22 +91,18 @@ function mapInventoryProduct(
     name:
       item.name ??
       item.product_name ??
-      "",
 
     sku:
       item.sku ??
       item.code ??
-      "",
 
     category:
       item.category ??
       item.category_name ??
-      "Uncategorized",
 
     warehouse:
       item.warehouse ??
       item.warehouse_name ??
-      "Main Store",
 
     onHand: Number(
       item.on_hand ??
@@ -164,7 +151,6 @@ export default function InventoryPage() {
   const {
     products: inventoryProducts,
     loading,
-    error,
   } = useInventory();
 
   /*
@@ -277,7 +263,6 @@ export default function InventoryPage() {
 
   const [adjustmentType, setAdjustmentType] =
     useState<
-      "increase" | "decrease"
     >("increase");
 
   const [
@@ -420,21 +405,18 @@ export default function InventoryPage() {
     products.filter(
       (product) =>
         getStatus(product) !==
-        "Healthy"
     ).length;
 
   const lowStockCount =
     products.filter(
       (product) =>
         getStatus(product) ===
-        "Low Stock"
     ).length;
 
   const outOfStockCount =
     products.filter(
       (product) =>
         getStatus(product) ===
-        "Out of Stock"
     ).length;
 
   // --------------------------------------------------
@@ -443,7 +425,6 @@ export default function InventoryPage() {
 
   function handleView(product: Product) {
   sessionStorage.setItem(
-    "inventory-view-product",
     JSON.stringify(product)
   );
 
@@ -464,14 +445,11 @@ export default function InventoryPage() {
       !newProduct.sku.trim()
     ) {
       alert(
-        "Please enter product name and SKU."
-      );
       return;
     }
 
     const quantity =
       newProduct.productType ===
-      "Simple"
         ? Number(newProduct.quantity)
         : 0;
 
@@ -491,19 +469,14 @@ export default function InventoryPage() {
       Number.isNaN(unitCost)
     ) {
       alert(
-        "Please enter valid numbers."
-      );
       return;
     }
 
     if (
       newProduct.productType ===
-      "Variable"
     ) {
       if (newVariants.length === 0) {
         alert(
-          "Please add at least one product variant."
-        );
         return;
       }
 
@@ -515,8 +488,6 @@ export default function InventoryPage() {
 
       if (invalidVariant) {
         alert(
-          "Please enter a SKU for every product variant."
-        );
         return;
       }
 
@@ -536,8 +507,6 @@ export default function InventoryPage() {
 
       if (hasDuplicateVariantSku) {
         alert(
-          "Each product variant must have a unique SKU."
-        );
         return;
       }
     }
@@ -564,7 +533,6 @@ export default function InventoryPage() {
 
       onHand:
         newProduct.productType ===
-        "Variable"
           ? newVariants.reduce(
               (
                 total,
@@ -595,7 +563,6 @@ export default function InventoryPage() {
 
       variants:
         newProduct.productType ===
-        "Variable"
           ? newVariants
           : [],
     };
@@ -607,7 +574,6 @@ export default function InventoryPage() {
   ];
 
   sessionStorage.setItem(
-    "inventory-products",
     JSON.stringify(updatedProducts)
   );
 
@@ -618,14 +584,10 @@ export default function InventoryPage() {
       name: "",
       sku: "",
       productType:
-        "Simple",
       category:
-        "Electronics",
       warehouse:
-        "Main Store",
       quantity: "",
       reorderPoint:
-        "10",
       unitCost: "",
     });
 
@@ -633,9 +595,7 @@ export default function InventoryPage() {
 
     setShowAddProduct(false);
 
-    alert(
-      "Product added successfully."
-    );
+    alert( "Please enter product name and SKU." );
   }
 
   // --------------------------------------------------
@@ -666,8 +626,6 @@ export default function InventoryPage() {
       !editingProduct.sku.trim()
     ) {
       alert(
-        "Please enter product name and SKU."
-      );
       return;
     }
 
@@ -678,8 +636,6 @@ export default function InventoryPage() {
       editingProduct.onHand < 0
     ) {
       alert(
-        "Enter a valid stock quantity."
-      );
       return;
     }
 
@@ -690,8 +646,6 @@ export default function InventoryPage() {
       editingProduct.reorderPoint < 0
     ) {
       alert(
-        "Enter a valid reorder point."
-      );
       return;
     }
 
@@ -702,8 +656,6 @@ export default function InventoryPage() {
       editingProduct.unitCost < 0
     ) {
       alert(
-        "Enter a valid unit cost."
-      );
       return;
     }
 
@@ -730,9 +682,7 @@ export default function InventoryPage() {
 
     setEditingProduct(null);
 
-    alert(
-      "Product updated successfully."
-    );
+    alert( "Please enter product name and SKU." );
   }
 
   // --------------------------------------------------
@@ -744,9 +694,7 @@ export default function InventoryPage() {
   ) {
     setSelectedProduct(product);
 
-    setAdjustmentType(
-      "increase"
-    );
+    setAdjustmentType( "increase" );
 
     setAdjustmentQuantity("");
 
@@ -773,8 +721,6 @@ export default function InventoryPage() {
       quantity <= 0
     ) {
       alert(
-        "Enter a valid quantity."
-      );
       return;
     }
 
@@ -785,8 +731,6 @@ export default function InventoryPage() {
         selectedProduct.onHand
     ) {
       alert(
-        "Quantity cannot be greater than current stock."
-      );
       return;
     }
 
@@ -803,7 +747,6 @@ export default function InventoryPage() {
 
             const newOnHand =
               adjustmentType ===
-              "increase"
                 ? product.onHand +
                   quantity
                 : Math.max(
@@ -825,9 +768,7 @@ export default function InventoryPage() {
 
     setSelectedProduct(null);
 
-    alert(
-      "Stock adjusted successfully."
-    );
+    alert( "Please enter product name and SKU." );
   }
 
   // --------------------------------------------------
@@ -879,8 +820,6 @@ export default function InventoryPage() {
       quantity <= 0
     ) {
       alert(
-        "Enter a valid transfer quantity."
-      );
       return;
     }
 
@@ -889,8 +828,6 @@ export default function InventoryPage() {
       !transferTo
     ) {
       alert(
-        "Please select both warehouses."
-      );
       return;
     }
 
@@ -899,8 +836,6 @@ export default function InventoryPage() {
       transferTo
     ) {
       alert(
-        "Source and destination warehouses must be different."
-      );
       return;
     }
 
@@ -909,8 +844,6 @@ export default function InventoryPage() {
       transferProduct.onHand
     ) {
       alert(
-        "Transfer quantity cannot exceed current stock."
-      );
       return;
     }
 
@@ -999,8 +932,6 @@ export default function InventoryPage() {
       physical < 0
     ) {
       alert(
-        "Enter a valid physical quantity."
-      );
       return;
     }
 
@@ -1023,9 +954,7 @@ export default function InventoryPage() {
 
     setCycleProduct(null);
 
-    alert(
-      "Cycle count completed successfully."
-    );
+    alert( "Please enter product name and SKU." );
   }
 
   // --------------------------------------------------
@@ -1057,9 +986,7 @@ export default function InventoryPage() {
     if (!found) {
       setBarcodeProduct(null);
 
-      alert(
-        "No product found for this barcode or SKU."
-      );
+      alert( "Please enter product name and SKU." );
 
       return;
     }
@@ -1228,7 +1155,6 @@ export default function InventoryPage() {
 
               <p className="mt-2 text-2xl font-bold text-blue-600">
                 {totalUnits.toLocaleString(
-                  "en-IN"
                 )}
               </p>
 
@@ -1585,7 +1511,6 @@ export default function InventoryPage() {
                             <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">
                               {
                                 product.productType ??
-                                "Simple"
                               }
                             </span>
 
@@ -1640,10 +1565,8 @@ export default function InventoryPage() {
                             <span
                               className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
                                 status ===
-                                "Healthy"
                                   ? "bg-green-100 text-green-700"
                                   : status ===
-                                    "Low Stock"
                                   ? "bg-orange-100 text-orange-700"
                                   : "bg-red-100 text-red-700"
                               }`}
@@ -1976,7 +1899,6 @@ export default function InventoryPage() {
                               type="text"
                               value={
                                 variant.size ??
-                                ""
                               }
                               onChange={(e) =>
                                 setNewVariants(
@@ -2011,7 +1933,6 @@ export default function InventoryPage() {
                               type="text"
                               value={
                                 variant.color ??
-                                ""
                               }
                               onChange={(e) =>
                                 setNewVariants(
@@ -3873,10 +3794,8 @@ export default function InventoryPage() {
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
                         getStatus(barcodeProduct) ===
-                        "Healthy"
                           ? "bg-green-100 text-green-700"
                           : getStatus(barcodeProduct) ===
-                            "Low Stock"
                           ? "bg-orange-100 text-orange-700"
                           : "bg-red-100 text-red-700"
                       }`}

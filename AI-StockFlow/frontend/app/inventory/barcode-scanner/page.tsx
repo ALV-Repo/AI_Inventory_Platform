@@ -183,9 +183,7 @@ export default function BarcodeScannerPage() {
   const [scanHistory, setScanHistory] =
     useState<ScanRecord[]>(initialScans);
 
-  const [action, setAction] = useState<"Stock In" | "Stock Out">(
-    "Stock In"
-  );
+  const [action, setAction] = useState<"Stock In" | "Stock Out">( "Stock In" );
 
   const [quantity, setQuantity] = useState(1);
 

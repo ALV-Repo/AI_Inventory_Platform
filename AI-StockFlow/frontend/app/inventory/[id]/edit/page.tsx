@@ -14,8 +14,6 @@ export default function EditProductPage() {
   const [category, setCategory] = useState("Toys");
   const [warehouse, setWarehouse] = useState("Main Store");
   const [description, setDescription] = useState(
-    "High-speed Hot Wheels track set with multiple racing configurations."
-  );
   const [price, setPrice] = useState("4200");
   const [stock, setStock] = useState("24");
 

@@ -136,8 +136,6 @@ export default function OCRDataEntryPage() {
         !navigator.mediaDevices.getUserMedia
       ) {
         setCameraError(
-          "Camera access is not supported by this browser."
-        );
         return;
       }
 
@@ -179,9 +177,7 @@ export default function OCRDataEntryPage() {
 
       setCameraActive(false);
 
-      setCameraError(
-        "Unable to access the camera. Please allow camera permission and try again."
-      );
+      setCameraError("");
     }
   };
 
@@ -210,8 +206,6 @@ export default function OCRDataEntryPage() {
 
     if (!track) {
       setMessage(
-        "Start the camera before using flash."
-      );
       return;
     }
 
@@ -223,8 +217,6 @@ export default function OCRDataEntryPage() {
         !("torch" in capabilities)
       ) {
         setMessage(
-          "Flash control is not supported on this device."
-        );
         return;
       }
 
@@ -241,18 +233,14 @@ export default function OCRDataEntryPage() {
       );
     } catch (error) {
 
-      setMessage(
-        "Unable to change flash setting."
-      );
+      setMessage("");
     }
   };
 
   const performOCR = () => {
     setIsScanning(true);
     setScanComplete(false);
-    setMessage(
-      "AI OCR is reading the document..."
-    );
+    setMessage("");
 
     setTimeout(() => {
       setFields(
@@ -264,9 +252,7 @@ export default function OCRDataEntryPage() {
       setIsScanning(false);
       setScanComplete(true);
 
-      setMessage(
-        "OCR completed successfully. Review the extracted fields before saving."
-      );
+      setMessage("");
     }, 1400);
   };
 
@@ -276,8 +262,6 @@ export default function OCRDataEntryPage() {
       !cameraActive
     ) {
       setMessage(
-        "Start the camera first."
-      );
       return;
     }
 
@@ -285,9 +269,7 @@ export default function OCRDataEntryPage() {
       cameraRef.current;
 
     const canvas =
-      document.createElement(
-        "canvas"
-      );
+      document.createElement( "canvas" );
 
     canvas.width =
       video.videoWidth || 1280;
@@ -300,8 +282,6 @@ export default function OCRDataEntryPage() {
 
     if (!context) {
       setMessage(
-        "Unable to capture the image."
-      );
       return;
     }
 
@@ -315,7 +295,6 @@ export default function OCRDataEntryPage() {
 
     const image =
       canvas.toDataURL(
-        "image/jpeg",
         0.88
       );
 
@@ -337,13 +316,10 @@ export default function OCRDataEntryPage() {
     }
 
     if (
-      !file.type.startsWith(
-        "image/"
+      !file.type.startsWith("image/");
       )
     ) {
       setMessage(
-        "Please select an image file."
-      );
       return;
     }
 
@@ -353,7 +329,6 @@ export default function OCRDataEntryPage() {
     reader.onload = () => {
       if (
         typeof reader.result ===
-        "string"
       ) {
         setCapturedImage(
           reader.result
@@ -452,13 +427,11 @@ export default function OCRDataEntryPage() {
             <button
               type="button"
               onClick={() =>
-                changeScanType(
-                  "invoice"
+                changeScanType("invoice");
                 )
               }
               className={`rounded-lg px-4 py-3 text-sm font-semibold transition ${
                 scanType ===
-                "invoice"
                   ? "bg-[#12213a] text-white"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
@@ -469,13 +442,11 @@ export default function OCRDataEntryPage() {
             <button
               type="button"
               onClick={() =>
-                changeScanType(
-                  "label"
+                changeScanType("invoice");
                 )
               }
               className={`rounded-lg px-4 py-3 text-sm font-semibold transition ${
                 scanType ===
-                "label"
                   ? "bg-[#12213a] text-white"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
@@ -501,7 +472,6 @@ export default function OCRDataEntryPage() {
 
                 <h2 className="font-semibold text-[#12213a]">
                   {scanType ===
-                  "invoice"
                     ? "Invoice Scanner"
                     : "Label Scanner"}
                 </h2>
@@ -560,14 +530,12 @@ export default function OCRDataEntryPage() {
 
                     <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-4xl">
                       {scanType ===
-                      "invoice"
                         ? "📄"
                         : "🏷️"}
                     </div>
 
                     <h3 className="text-lg font-semibold text-white">
                       {scanType ===
-                      "invoice"
                         ? "Invoice Camera Ready"
                         : "Label Camera Ready"}
                     </h3>
@@ -904,7 +872,6 @@ export default function OCRDataEntryPage() {
 
             <p className="mt-2 text-lg font-bold text-[#12213a]">
               {scanType ===
-              "invoice"
                 ? "Supplier Invoice"
                 : "Product Label"}
             </p>

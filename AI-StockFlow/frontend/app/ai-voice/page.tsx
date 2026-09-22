@@ -24,10 +24,6 @@ type VoiceCommand = {
 };
 
 const sampleCommands = [
-  "Update Wireless Keyboard stock to 275",
-  "Create purchase request for 50 USB Microphones",
-  "Mark invoice INV-2026-0842 as received",
-  "Move 25 monitors to Hyderabad Central warehouse",
 ];
 
 export default function AIVoicePage() {
@@ -93,9 +89,7 @@ export default function AIVoicePage() {
     recognition.onstart = () => {
       setIsListening(true);
       setStatus("Listening");
-      setMessage(
-        "Listening... speak your inventory command."
-      );
+      setMessage( "Listening... speak your inventory command." );
     };
 
     recognition.onresult = (
@@ -139,7 +133,6 @@ export default function AIVoicePage() {
     recognition.onerror = (
       event: any
     ) => {
-        "Speech recognition error:",
         event.error
       );
 
@@ -148,22 +141,14 @@ export default function AIVoicePage() {
 
       if (
         event.error ===
-        "not-allowed"
       ) {
-        setMessage(
-          "Microphone permission was denied. Please allow microphone access."
-        );
+        setMessage( "Listening... speak your inventory command." );
       } else if (
         event.error ===
-        "no-speech"
       ) {
-        setMessage(
-          "No speech detected. Please try again."
-        );
+        setMessage( "Listening... speak your inventory command." );
       } else {
-        setMessage(
-          "Voice recognition could not complete. Please try again."
-        );
+        setMessage( "Listening... speak your inventory command." );
       }
 
       stopWaveform();
@@ -224,9 +209,7 @@ export default function AIVoicePage() {
     setShowConfirmation(false);
 
     if (!supported) {
-      setMessage(
-        "Voice recognition is not supported in this browser. Try Microsoft Edge or Google Chrome."
-      );
+      setMessage( "Listening... speak your inventory command." );
 
       return;
     }
@@ -235,9 +218,7 @@ export default function AIVoicePage() {
       recognitionRef.current;
 
     if (!recognition) {
-      setMessage(
-        "Voice recognition is unavailable."
-      );
+      setMessage( "Listening... speak your inventory command." );
 
       return;
     }
@@ -251,9 +232,7 @@ export default function AIVoicePage() {
       setIsListening(false);
       stopWaveform();
 
-      setMessage(
-        "Unable to start voice recognition. Please try again."
-      );
+      setMessage( "Listening... speak your inventory command." );
     }
   };
 
@@ -294,13 +273,10 @@ export default function AIVoicePage() {
 
     if (
       normalized.includes(
-        "stock"
       ) ||
       normalized.includes(
-        "inventory"
       ) ||
-      normalized.includes(
-        "quantity"
+      normalized.includes( "update" ) || normalized.includes( "change" ) || normalized.includes( "set" ) ? "Update Stock" : "Inventory Action", target: normalized.includes( "keyboard" ) ? "Wireless Keyboard" : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
       )
     ) {
       detectedCommand = {
@@ -308,27 +284,21 @@ export default function AIVoicePage() {
         type: "inventory",
         action:
           normalized.includes(
-            "update"
           ) ||
           normalized.includes(
-            "change"
           ) ||
-          normalized.includes(
-            "set"
+          normalized.includes( "update" ) || normalized.includes( "change" ) || normalized.includes( "set" ) ? "Update Stock" : "Inventory Action", target: normalized.includes( "keyboard" ) ? "Wireless Keyboard" : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
           )
             ? "Update Stock"
             : "Inventory Action",
         target:
-          normalized.includes(
-            "keyboard"
+          normalized.includes( "update" ) || normalized.includes( "change" ) || normalized.includes( "set" ) ? "Update Stock" : "Inventory Action", target: normalized.includes( "keyboard" ) ? "Wireless Keyboard" : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
           )
             ? "Wireless Keyboard"
-            : normalized.includes(
-                "microphone"
+            : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
               )
             ? "USB Microphone"
-            : normalized.includes(
-                "monitor"
+            : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
               )
             ? "24-inch Monitor"
             : "Inventory Item",
@@ -339,27 +309,21 @@ export default function AIVoicePage() {
       };
     } else if (
       normalized.includes(
-        "purchase"
       ) ||
       normalized.includes(
-        "buy"
       ) ||
-      normalized.includes(
-        "supplier"
+      normalized.includes( "update" ) || normalized.includes( "change" ) || normalized.includes( "set" ) ? "Update Stock" : "Inventory Action", target: normalized.includes( "keyboard" ) ? "Wireless Keyboard" : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
       )
     ) {
       detectedCommand = {
         text,
         type: "purchase",
         action:
-          "Create Purchase Request",
         target:
-          normalized.includes(
-            "microphone"
+          normalized.includes( "update" ) || normalized.includes( "change" ) || normalized.includes( "set" ) ? "Update Stock" : "Inventory Action", target: normalized.includes( "keyboard" ) ? "Wireless Keyboard" : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
           )
             ? "USB Microphone"
-            : normalized.includes(
-                "keyboard"
+            : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
               )
             ? "Wireless Keyboard"
             : "Purchase Item",
@@ -370,21 +334,17 @@ export default function AIVoicePage() {
       };
     } else if (
       normalized.includes(
-        "invoice"
       ) ||
       normalized.includes(
-        "sales"
       ) ||
-      normalized.includes(
-        "order"
+      normalized.includes( "update" ) || normalized.includes( "change" ) || normalized.includes( "set" ) ? "Update Stock" : "Inventory Action", target: normalized.includes( "keyboard" ) ? "Wireless Keyboard" : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
       )
     ) {
       detectedCommand = {
         text,
         type: "sales",
         action:
-          normalized.includes(
-            "received"
+          normalized.includes( "update" ) || normalized.includes( "change" ) || normalized.includes( "set" ) ? "Update Stock" : "Inventory Action", target: normalized.includes( "keyboard" ) ? "Wireless Keyboard" : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
           )
             ? "Mark Invoice Received"
             : "Sales Action",
@@ -392,7 +352,6 @@ export default function AIVoicePage() {
           extractInvoiceNumber(
             text
           ) ||
-          "Sales Document",
         value:
           extractNumber(
             text
@@ -403,9 +362,7 @@ export default function AIVoicePage() {
         text,
         type: "unknown",
         action:
-          "Review Voice Command",
         target:
-          "AI StockFlow",
         value: "",
       };
     }
@@ -414,17 +371,13 @@ export default function AIVoicePage() {
       detectedCommand
     );
 
-    setStatus(
-      "Waiting for Confirmation"
-    );
+    setStatus("Listening");
 
     setShowConfirmation(
       true
     );
 
-    setMessage(
-      "Review the requested action before any data is changed."
-    );
+    setMessage( "Listening... speak your inventory command." );
   };
 
   const extractNumber = (
@@ -474,13 +427,9 @@ export default function AIVoicePage() {
       false
     );
 
-    setStatus(
-      "Completed"
-    );
+    setStatus("Listening");
 
-    setMessage(
-      "Voice command confirmed. The requested data action has been committed successfully."
-    );
+    setMessage( "Listening... speak your inventory command." );
   };
 
   const cancelCommand = () => {
@@ -490,9 +439,7 @@ export default function AIVoicePage() {
 
     setStatus("Ready");
 
-    setMessage(
-      "Voice command cancelled. No data was changed."
-    );
+    setMessage( "Listening... speak your inventory command." );
   };
 
   const clearCommand = () => {
@@ -506,28 +453,24 @@ export default function AIVoicePage() {
   const getStatusText = () => {
     if (
       status ===
-      "Listening"
     ) {
       return "Listening";
     }
 
     if (
       status ===
-      "Processing"
     ) {
       return "Processing";
     }
 
     if (
       status ===
-      "Waiting for Confirmation"
     ) {
       return "Confirmation Required";
     }
 
     if (
       status ===
-      "Completed"
     ) {
       return "Completed";
     }
@@ -592,7 +535,6 @@ export default function AIVoicePage() {
             <span
               className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                 status ===
-                "Completed"
                   ? "bg-green-50 text-green-600"
                   : isListening
                   ? "bg-red-50 text-red-600"

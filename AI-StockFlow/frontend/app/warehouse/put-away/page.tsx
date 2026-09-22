@@ -222,8 +222,6 @@ export default function PutAwayPage() {
       selectedTask.suggestedBin.toLowerCase()
     ) {
       setMessage(
-        "Please scan and confirm the correct destination bin first."
-      );
       return;
     }
 

@@ -262,8 +262,6 @@ export default function PurchaseRequestsPage() {
 
     const nextNumber = String(requests.length + 1).padStart(
       3,
-      "0"
-    );
 
     const createdRequest: PurchaseRequest = {
       id: Date.now().toString(),
@@ -354,9 +352,7 @@ export default function PurchaseRequestsPage() {
   }
 
   // Get existing Purchase Orders
-  const savedOrders = sessionStorage.getItem(
-    "stockflow-purchase-orders"
-  );
+  const savedOrders = sessionStorage.getItem( "stockflow-purchase-orders" );
 
   let purchaseOrders: any[] = [];
 
@@ -417,7 +413,6 @@ export default function PurchaseRequestsPage() {
 
     orderDate:
       new Date().toLocaleDateString(
-        "en-GB",
         {
           day: "2-digit",
           month: "short",
@@ -457,7 +452,6 @@ export default function PurchaseRequestsPage() {
   ];
 
   sessionStorage.setItem(
-    "stockflow-purchase-orders",
     JSON.stringify(
       updatedPurchaseOrders
     )
@@ -726,12 +720,6 @@ export default function PurchaseRequestsPage() {
 
                 {(
                   [
-                    "All",
-                    "Draft",
-                    "Pending Approval",
-                    "Approved",
-                    "Rejected",
-                    "Converted",
                   ] as const
                 ).map((status) => (
                   <button

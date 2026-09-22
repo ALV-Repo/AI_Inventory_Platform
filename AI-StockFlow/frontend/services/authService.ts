@@ -30,8 +30,7 @@ export async function login(
       {
         method: "POST",
         headers: {
-          "Content-Type":
-            "application/x-www-form-urlencoded",
+          "Content-Type": "application/x-www-form-urlencoded",
           Accept: "application/json",
         },
         body: formData.toString(),
@@ -49,11 +48,7 @@ export async function login(
   let data: unknown = null;
 
   try {
-    if (
-      contentType.includes(
-        "application/json"
-      )
-    ) {
+    if (contentType.includes("application/json")) {
       data = await response.json();
     } else {
       data = await response.text();
@@ -67,25 +62,12 @@ export async function login(
       typeof data === "object" &&
       data !== null &&
       "detail" in data
-        ? String(
-            (
-              data as {
-                detail?: unknown;
-              }
-            ).detail
-          )
+        ? String((data as { detail?: unknown }).detail)
         : typeof data === "object" &&
           data !== null &&
           "message" in data
-        ? String(
-            (
-              data as {
-                message?: unknown;
-              }
-            ).message
-          )
-        : typeof data === "string" &&
-          data
+        ? String((data as { message?: unknown }).message)
+        : typeof data === "string" && data
         ? data
         : `Login failed with status ${response.status}`;
 
@@ -103,30 +85,15 @@ export async function login(
     );
   }
 
-  const loginData =
-    data as LoginResponse;
+  const loginData = data as LoginResponse;
 
-  /*
-   * Store only authentication tokens.
-   * Use sessionStorage instead of localStorage.
-   */
-  if (
-    typeof window !== "undefined"
-  ) {
-    sessionStorage.setItem(
-      "sf_access",
-      loginData.access_token
-    );
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem("sf_access", loginData.access_token);
 
     if (loginData.refresh_token) {
-      sessionStorage.setItem(
-        "sf_refresh",
-        loginData.refresh_token
-      );
+      sessionStorage.setItem("sf_refresh", loginData.refresh_token);
     } else {
-      sessionStorage.removeItem(
-        "sf_refresh"
-      );
+      sessionStorage.removeItem("sf_refresh");
     }
   }
 

@@ -586,9 +586,6 @@ async function syncOfflineSales() {
           )
       );
     } catch (error) {
-        "Unable to load inventory products:",
-        error
-      );
 
       setProductsError(
         error instanceof Error
@@ -617,9 +614,6 @@ async function syncOfflineSales() {
 
       setSalesSummary(summary);
     } catch (error) {
-        "Unable to load today's sales:",
-        error
-      );
 
       setSummaryError(
         error instanceof Error
@@ -1113,9 +1107,6 @@ setShowReceipt(true);
 
       await loadTodaySales();
     } catch (error) {
-        "Sale creation error:",
-        error
-      );
 
       setSaleError(
         error instanceof Error

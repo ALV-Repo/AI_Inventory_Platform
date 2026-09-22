@@ -96,9 +96,7 @@ function normalizeProducts(
 async function fetchInventory(): Promise<
   InventoryProduct[]
 > {
-  const data = await request<unknown>(
-    "/inventory/products"
-  );
+  const data = await request<unknown>("/inventory/products");
 
   return normalizeProducts(data);
 }
@@ -143,7 +141,6 @@ export function useInventory(): UseInventoryResult {
   return {
     products,
     loading,
-    error,
     refresh: loadInventory,
   };
 }

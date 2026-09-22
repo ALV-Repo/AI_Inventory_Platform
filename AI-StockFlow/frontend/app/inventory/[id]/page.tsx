@@ -56,7 +56,6 @@ const products: Product[] = [
     category: "Toys",
     warehouse: "Main Store",
     description:
-      "High-speed Hot Wheels track set with multiple racing configurations.",
     variants: [
       {
         id: 101,
@@ -94,7 +93,6 @@ const products: Product[] = [
     category: "Electronics",
     warehouse: "Main Store",
     description:
-      "Portable Bluetooth speaker with wireless connectivity and rechargeable battery.",
     variants: [
       {
         id: 201,
@@ -132,7 +130,6 @@ const products: Product[] = [
     category: "Sports",
     warehouse: "Warehouse A",
     description:
-      "Professional size 5 football suitable for training and outdoor matches.",
     variants: [
       {
         id: 301,
@@ -161,7 +158,6 @@ const products: Product[] = [
     category: "Seasonal",
     warehouse: "Main Store",
     description:
-      "Decorative artificial Christmas tree suitable for home and office use.",
     variants: [
       {
         id: 401,
@@ -298,9 +294,7 @@ const storedProduct: Product | undefined =
   typeof window !== "undefined"
     ? (() => {
         try {
-          const stored = sessionStorage.getItem(
-            "inventory-view-product"
-          );
+          const stored = sessionStorage.getItem( "inventory-view-product" );
 
           if (!stored) {
             return undefined;
@@ -321,7 +315,6 @@ return {
         name:
           variant.name ||
           parsed.name ||
-          "Variant",
         sku: variant.sku || "",
         color: variant.color || "Standard",
         size: variant.size || "Standard",
@@ -353,20 +346,16 @@ const product: Product | undefined = apiProduct
         apiProduct.name ??
         apiProduct.product_name ??
         fallbackProduct?.name ??
-        "",
       category:
         apiProduct.category ??
         apiProduct.category_name ??
         fallbackProduct?.category ??
-        "",
       warehouse:
         apiProduct.warehouse ??
         apiProduct.warehouse_name ??
         fallbackProduct?.warehouse ??
-        "Main Store",
       description:
         fallbackProduct?.description ??
-        "Inventory product details and stock information.",
       variants:
         fallbackProduct?.variants ??
         [
@@ -375,7 +364,6 @@ const product: Product | undefined = apiProduct
             name:
               apiProduct.name ??
               apiProduct.product_name ??
-              "Standard",
             sku:
               apiProduct.sku ??
               apiProduct.code ??
@@ -517,7 +505,6 @@ const product: Product | undefined = apiProduct
           warehouse:
             apiProduct.warehouse ??
             apiProduct.warehouse_name ??
-            "Main Store",
           onHand: Number(
             apiProduct.current_stock ??
               apiProduct.quantity ??
@@ -590,8 +577,6 @@ const product: Product | undefined = apiProduct
 
     if (!scannedSku) {
       setScannerMessage(
-        "Please scan or enter a SKU."
-      );
       return;
     }
 
@@ -611,9 +596,7 @@ const product: Product | undefined = apiProduct
 
       setScannerInput("");
     } else {
-      setScannerMessage(
-        "No product variant found for this barcode/SKU."
-      );
+      setScannerMessage("");
     }
   };
 
@@ -640,8 +623,6 @@ const product: Product | undefined = apiProduct
 
     if (duplicate) {
       alert(
-        "A bin with this code already exists in this warehouse."
-      );
       return;
     }
 
@@ -1465,7 +1446,6 @@ const product: Product | undefined = apiProduct
                   reference: "GRN-2026-0091",
                   quantity: "+10",
                   description:
-                    "Goods received into Main Store.",
                   positive: true,
                 },
                 {
@@ -1474,7 +1454,6 @@ const product: Product | undefined = apiProduct
                   reference: "SO-2026-0148",
                   quantity: "-5",
                   description:
-                    "Stock deducted after completed sale.",
                   positive: false,
                 },
                 {
@@ -1483,7 +1462,6 @@ const product: Product | undefined = apiProduct
                   reference: "ADJ-2026-0012",
                   quantity: "+2",
                   description:
-                    "Manual stock adjustment recorded.",
                   positive: true,
                 },
                 {
@@ -1492,7 +1470,6 @@ const product: Product | undefined = apiProduct
                   reference: "TRF-2026-0045",
                   quantity: "-5",
                   description:
-                    "Stock transferred from Main Store.",
                   positive: false,
                 },
               ].map((activity) => (
@@ -1834,7 +1811,6 @@ const product: Product | undefined = apiProduct
                     onKeyDown={handleScannerKeyDown}
                     placeholder={
                       selectedVariant?.sku ??
-                      "Enter SKU"
                     }
                     autoComplete="off"
                     className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 font-mono text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -1849,8 +1825,7 @@ const product: Product | undefined = apiProduct
                 {scannerMessage && (
                   <div
                     className={`mt-4 rounded-lg border p-3 text-xs font-semibold ${
-                      scannerMessage.startsWith(
-                        "Product found"
+                      scannerMessage.startsWith("Product found");
                       )
                         ? "border-green-200 bg-green-50 text-green-700"
                         : "border-red-200 bg-red-50 text-red-700"
@@ -1904,8 +1879,6 @@ const product: Product | undefined = apiProduct
 
                       if (!scannedSku) {
                         setScannerMessage(
-                          "Please scan or enter a SKU."
-                        );
                         return;
                       }
 
@@ -1927,9 +1900,7 @@ const product: Product | undefined = apiProduct
 
                         setScannerInput("");
                       } else {
-                        setScannerMessage(
-                          "No product variant found for this barcode/SKU."
-                        );
+                        setScannerMessage("");
                       }
                     }}
                     className="rounded-lg bg-[#12213a] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1d3055]"
