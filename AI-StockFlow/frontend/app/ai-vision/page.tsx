@@ -147,7 +147,6 @@ export default function AIVisionPage() {
         "Camera ready. Position the product inside the scan frame."
       );
     } catch (error) {
-      console.error(error);
 
       setCameraError(
         "Unable to access the camera. Please allow camera permission and try again."
@@ -221,7 +220,6 @@ export default function AIVisionPage() {
         !flashEnabled
       );
     } catch (error) {
-      console.error(error);
 
       setMessage(
         "Unable to change the flashlight setting."

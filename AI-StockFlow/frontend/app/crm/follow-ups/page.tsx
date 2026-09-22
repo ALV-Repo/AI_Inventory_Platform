@@ -1,576 +1,174 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import PageLayout from "../../../components/layout/PageLayout";
+import { api, fmtDate } from "../../../lib/api";
 
-type FollowUpStatus = "Scheduled" | "Completed" | "Overdue";
-
-type FollowUp = {
-  id: string;
-  lead: string;
-  company: string;
-  date: string;
-  time: string;
-  type: string;
-  notes: string;
-  status: FollowUpStatus;
+type Activity = {
+  id: number;
+  lead_id: number;
+  activity_type: string;
+  description: string;
+  due_date?: string;
+  completed: boolean;
+  completed_at?: string;
+  created_at: string;
 };
 
-type Interaction = {
-  id: string;
-  lead: string;
-  date: string;
-  type: string;
-  notes: string;
+type Lead = {
+  id: number;
+  name: string;
+  status: string;
+  activities?: Activity[];
 };
 
-const initialFollowUps: FollowUp[] = [
-  {
-    id: "FU-001",
-    lead: "Rahul Mehta",
-    company: "Apex Retail Solutions",
-    date: "2026-09-08",
-    time: "10:30",
-    type: "Call",
-    notes: "Discuss inventory management requirements.",
-    status: "Scheduled",
-  },
-  {
-    id: "FU-002",
-    lead: "Priya Shah",
-    company: "Green Valley Stores",
-    date: "2026-09-06",
-    time: "14:00",
-    type: "Meeting",
-    notes: "Product demonstration.",
-    status: "Completed",
-  },
-  {
-    id: "FU-003",
-    lead: "Arjun Rao",
-    company: "Metro Office Supplies",
-    date: "2026-09-05",
-    time: "11:00",
-    type: "Email",
-    notes: "Send quotation and pricing details.",
-    status: "Overdue",
-  },
-];
+const typeColor = (t: string) => ({
+  call: "bg-blue-50 text-blue-700",
+  email: "bg-purple-50 text-purple-700",
+  meeting: "bg-green-50 text-green-700",
+  note: "bg-gray-100 text-gray-700",
+  follow_up: "bg-orange-50 text-orange-700",
+}[t?.toLowerCase()] ?? "bg-gray-100 text-gray-700");
 
-const initialInteractions: Interaction[] = [
-  {
-    id: "INT-001",
-    lead: "Rahul Mehta",
-    date: "2026-09-04",
-    type: "Call",
-    notes: "Initial discussion completed.",
-  },
-  {
-    id: "INT-002",
-    lead: "Priya Shah",
-    date: "2026-09-03",
-    type: "Meeting",
-    notes: "Demo completed successfully.",
-  },
-];
+export default function CRMFollowUpsPage() {
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [allActivities, setAllActivities] = useState<(Activity & { lead_name: string })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState<"all" | "pending" | "completed">("pending");
 
-export default function FollowUpsPage() {
-  const [followUps, setFollowUps] = useState<FollowUp[]>(() => {
-    if (typeof window === "undefined") return initialFollowUps;
+  useEffect(() => { load(); }, []);
 
-    const saved = sessionStorage.getItem("stockflow-crm-followups");
-    return saved ? JSON.parse(saved) : initialFollowUps;
-  });
+  async function load() {
+    try {
+      setLoading(true);
+      setError("");
+      const leadsData = await api.crm.leads();
+      setLeads(leadsData);
 
-  const [interactions, setInteractions] = useState<Interaction[]>(() => {
-    if (typeof window === "undefined") return initialInteractions;
-
-    const saved = sessionStorage.getItem("stockflow-crm-interactions");
-    return saved ? JSON.parse(saved) : initialInteractions;
-  });
-
-  const [showAdd, setShowAdd] = useState(false);
-  const [showInteraction, setShowInteraction] = useState(false);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-
-  const [form, setForm] = useState({
-    lead: "",
-    company: "",
-    date: "",
-    time: "",
-    type: "Call",
-    notes: "",
-  });
-
-  const [interactionForm, setInteractionForm] = useState({
-    lead: "",
-    type: "Call",
-    notes: "",
-  });
-
-  useEffect(() => {
-    sessionStorage.setItem(
-      "stockflow-crm-followups",
-      JSON.stringify(followUps)
-    );
-  }, [followUps]);
-
-  useEffect(() => {
-    sessionStorage.setItem(
-      "stockflow-crm-interactions",
-      JSON.stringify(interactions)
-    );
-  }, [interactions]);
-
-  const filteredFollowUps = useMemo(() => {
-    return followUps.filter((item) => {
-      const matchesSearch =
-        item.lead.toLowerCase().includes(search.toLowerCase()) ||
-        item.company.toLowerCase().includes(search.toLowerCase()) ||
-        item.type.toLowerCase().includes(search.toLowerCase());
-
-      const matchesStatus =
-        statusFilter === "All" || item.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [followUps, search, statusFilter]);
-
-  const scheduled = followUps.filter(
-    (item) => item.status === "Scheduled"
-  ).length;
-
-  const completed = followUps.filter(
-    (item) => item.status === "Completed"
-  ).length;
-
-  const overdue = followUps.filter(
-    (item) => item.status === "Overdue"
-  ).length;
-
-  function addFollowUp() {
-    if (!form.lead.trim() || !form.date || !form.time) {
-      alert("Please enter lead, date and time.");
-      return;
+      // Load activities for all leads
+      const activitiesWithLead: (Activity & { lead_name: string })[] = [];
+      for (const lead of leadsData.slice(0, 20)) {
+        try {
+          const acts = await api.crm.activities(lead.id);
+          (acts as Activity[]).forEach(a => {
+            activitiesWithLead.push({ ...a, lead_name: lead.name });
+          });
+        } catch {}
+      }
+      // Sort by due_date
+      activitiesWithLead.sort((a, b) => {
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      });
+      setAllActivities(activitiesWithLead);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load follow-ups.");
+    } finally {
+      setLoading(false);
     }
-
-    const newFollowUp: FollowUp = {
-      id: `FU-${String(followUps.length + 1).padStart(3, "0")}`,
-      lead: form.lead,
-      company: form.company,
-      date: form.date,
-      time: form.time,
-      type: form.type,
-      notes: form.notes,
-      status: "Scheduled",
-    };
-
-    setFollowUps((current) => [newFollowUp, ...current]);
-
-    setForm({
-      lead: "",
-      company: "",
-      date: "",
-      time: "",
-      type: "Call",
-      notes: "",
-    });
-
-    setShowAdd(false);
   }
 
-  function updateStatus(id: string, status: FollowUpStatus) {
-    setFollowUps((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, status } : item
-      )
-    );
-  }
-
-  function addInteraction() {
-    if (!interactionForm.lead.trim() || !interactionForm.notes.trim()) {
-      alert("Please enter lead and interaction notes.");
-      return;
+  async function completeActivity(id: number) {
+    try {
+      await api.crm.completeActivity(id);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to mark complete.");
     }
-
-    const newInteraction: Interaction = {
-      id: `INT-${String(interactions.length + 1).padStart(3, "0")}`,
-      lead: interactionForm.lead,
-      date: new Date().toISOString().split("T")[0],
-      type: interactionForm.type,
-      notes: interactionForm.notes,
-    };
-
-    setInteractions((current) => [newInteraction, ...current]);
-
-    setInteractionForm({
-      lead: "",
-      type: "Call",
-      notes: "",
-    });
-
-    setShowInteraction(false);
   }
+
+  const filtered = useMemo(() => allActivities.filter(a => {
+    if (filter === "pending") return !a.completed;
+    if (filter === "completed") return a.completed;
+    return true;
+  }), [allActivities, filter]);
+
+  const pending = allActivities.filter(a => !a.completed).length;
+  const overdue = allActivities.filter(a =>
+    !a.completed && a.due_date && new Date(a.due_date) < new Date()
+  ).length;
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              CRM Follow-ups
-            </h1>
-            <p className="text-sm text-slate-500">
-              Schedule follow-ups, reminders and customer interactions.
-            </p>
-          </div>
+    <PageLayout>
+      <div className="mx-auto max-w-5xl px-6 py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">CRM Follow-ups</h1>
+          <p className="mt-1 text-sm text-gray-500">Scheduled activities and interactions across all leads</p>
+        </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowInteraction(true)}
-              className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold"
-            >
-              + Log Interaction
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+        <div className="mb-6 grid grid-cols-3 gap-4">
+          {[
+            { label: "Total Activities", value: allActivities.length },
+            { label: "Pending", value: pending, color: "text-yellow-600" },
+            { label: "Overdue", value: overdue, color: "text-red-600" },
+          ].map(c => (
+            <div key={c.label} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-gray-500">{c.label}</p>
+              <p className={`mt-2 text-2xl font-bold ${c.color ?? "text-gray-900"}`}>{loading ? "..." : c.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-5 flex gap-2">
+          {(["all", "pending", "completed"] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`rounded-lg px-4 py-2 text-sm font-medium capitalize transition ${filter === f ? "bg-blue-600 text-white" : "border border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+              {f}
             </button>
-
-            <button
-              onClick={() => setShowAdd(true)}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-            >
-              + Schedule Follow-up
-            </button>
-          </div>
+          ))}
+          <button onClick={load} className="ml-auto rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Refresh</button>
         </div>
 
-        <div className="mb-6 grid gap-4 md:grid-cols-4">
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">TOTAL FOLLOW-UPS</p>
-            <p className="mt-2 text-2xl font-bold">{followUps.length}</p>
-          </div>
-
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">SCHEDULED</p>
-            <p className="mt-2 text-2xl font-bold text-blue-600">
-              {scheduled}
-            </p>
-          </div>
-
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">COMPLETED</p>
-            <p className="mt-2 text-2xl font-bold text-green-600">
-              {completed}
-            </p>
-          </div>
-
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">OVERDUE</p>
-            <p className="mt-2 text-2xl font-bold text-red-600">
-              {overdue}
-            </p>
-          </div>
-        </div>
-
-        <div className="mb-4 rounded-xl border bg-white p-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search lead, company or activity..."
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="All">All Statuses</option>
-              <option value="Scheduled">Scheduled</option>
-              <option value="Completed">Completed</option>
-              <option value="Overdue">Overdue</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="mb-6 overflow-hidden rounded-xl border bg-white">
-          <div className="border-b p-4">
-            <h2 className="font-semibold">Scheduled Follow-ups</h2>
-            <p className="text-xs text-slate-500">
-              Manage upcoming calls, meetings and reminders.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Lead</th>
-                  <th className="px-4 py-3">Date & Time</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Notes</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Action</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredFollowUps.map((item) => (
-                  <tr key={item.id} className="border-t">
-                    <td className="px-4 py-3">
-                      <div className="font-semibold">{item.lead}</div>
-                      <div className="text-xs text-slate-400">
-                        {item.company}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div>{item.date}</div>
-                      <div className="text-xs text-slate-400">
-                        {item.time}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">{item.type}</td>
-
-                    <td className="max-w-xs px-4 py-3 text-xs text-slate-600">
-                      {item.notes}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
-                        {item.status}
+        <div className="space-y-3">
+          {loading ? (
+            <div className="py-16 text-center">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+              <p className="text-sm text-gray-500">Loading activities...</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-white py-16 text-center">
+              <p className="text-4xl mb-3">✅</p>
+              <p className="text-sm text-gray-500">No {filter} activities</p>
+            </div>
+          ) : filtered.map(act => {
+            const isOverdue = !act.completed && act.due_date && new Date(act.due_date) < new Date();
+            return (
+              <div key={act.id} className={`rounded-xl border bg-white p-4 shadow-sm ${isOverdue ? "border-red-200" : "border-gray-200"} ${act.completed ? "opacity-60" : ""}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${typeColor(act.activity_type)}`}>
+                        {act.activity_type.replace("_", " ")}
                       </span>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <select
-                        value={item.status}
-                        onChange={(e) =>
-                          updateStatus(
-                            item.id,
-                            e.target.value as FollowUpStatus
-                          )
-                        }
-                        className="rounded border px-2 py-1 text-xs"
-                      >
-                        <option value="Scheduled">Scheduled</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Overdue">Overdue</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="border-t p-3 text-xs text-slate-500">
-            Showing {filteredFollowUps.length} of {followUps.length} follow-ups
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border bg-white">
-          <div className="border-b p-4">
-            <h2 className="font-semibold">Interaction Timeline</h2>
-            <p className="text-xs text-slate-500">
-              All logged interactions against leads and customers.
-            </p>
-          </div>
-
-          <div className="divide-y">
-            {interactions.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start justify-between p-4"
-              >
-                <div>
-                  <div className="font-semibold">{item.lead}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {item.date} · {item.type}
+                      <span className="text-sm font-semibold text-gray-900">{act.lead_name}</span>
+                      {isOverdue && <span className="text-xs font-semibold text-red-600">OVERDUE</span>}
+                    </div>
+                    <p className="text-sm text-gray-600">{act.description}</p>
+                    {act.due_date && (
+                      <p className={`mt-1 text-xs ${isOverdue ? "text-red-500" : "text-gray-400"}`}>
+                        Due: {fmtDate(act.due_date)}
+                      </p>
+                    )}
                   </div>
-                  <div className="mt-2 text-sm text-slate-600">
-                    {item.notes}
-                  </div>
+                  {!act.completed && (
+                    <button onClick={() => completeActivity(act.id)}
+                      className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
+                      ✓ Mark Done
+                    </button>
+                  )}
+                  {act.completed && (
+                    <span className="text-xs text-green-600 font-semibold">✓ Completed</span>
+                  )}
                 </div>
-
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">
-                  {item.id}
-                </span>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </div>
-
-      {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold">Schedule Follow-up</h2>
-              <button
-                onClick={() => setShowAdd(false)}
-                className="text-slate-500"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid gap-3">
-              <input
-                placeholder="Lead / Customer"
-                value={form.lead}
-                onChange={(e) =>
-                  setForm({ ...form, lead: e.target.value })
-                }
-                className="rounded-lg border px-3 py-2 text-sm"
-              />
-
-              <input
-                placeholder="Company"
-                value={form.company}
-                onChange={(e) =>
-                  setForm({ ...form, company: e.target.value })
-                }
-                className="rounded-lg border px-3 py-2 text-sm"
-              />
-
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) =>
-                    setForm({ ...form, date: e.target.value })
-                  }
-                  className="rounded-lg border px-3 py-2 text-sm"
-                />
-
-                <input
-                  type="time"
-                  value={form.time}
-                  onChange={(e) =>
-                    setForm({ ...form, time: e.target.value })
-                  }
-                  className="rounded-lg border px-3 py-2 text-sm"
-                />
-              </div>
-
-              <select
-                value={form.type}
-                onChange={(e) =>
-                  setForm({ ...form, type: e.target.value })
-                }
-                className="rounded-lg border px-3 py-2 text-sm"
-              >
-                <option>Call</option>
-                <option>Meeting</option>
-                <option>Email</option>
-                <option>WhatsApp</option>
-                <option>Visit</option>
-              </select>
-
-              <textarea
-                placeholder="Follow-up notes / reminder"
-                value={form.notes}
-                onChange={(e) =>
-                  setForm({ ...form, notes: e.target.value })
-                }
-                className="min-h-24 rounded-lg border px-3 py-2 text-sm"
-              />
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setShowAdd(false)}
-                className="rounded-lg border px-4 py-2 text-sm"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={addFollowUp}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Schedule
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showInteraction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold">Log Interaction</h2>
-              <button
-                onClick={() => setShowInteraction(false)}
-                className="text-slate-500"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid gap-3">
-              <input
-                placeholder="Lead / Customer"
-                value={interactionForm.lead}
-                onChange={(e) =>
-                  setInteractionForm({
-                    ...interactionForm,
-                    lead: e.target.value,
-                  })
-                }
-                className="rounded-lg border px-3 py-2 text-sm"
-              />
-
-              <select
-                value={interactionForm.type}
-                onChange={(e) =>
-                  setInteractionForm({
-                    ...interactionForm,
-                    type: e.target.value,
-                  })
-                }
-                className="rounded-lg border px-3 py-2 text-sm"
-              >
-                <option>Call</option>
-                <option>Meeting</option>
-                <option>Email</option>
-                <option>WhatsApp</option>
-                <option>Visit</option>
-              </select>
-
-              <textarea
-                placeholder="Interaction notes"
-                value={interactionForm.notes}
-                onChange={(e) =>
-                  setInteractionForm({
-                    ...interactionForm,
-                    notes: e.target.value,
-                  })
-                }
-                className="min-h-24 rounded-lg border px-3 py-2 text-sm"
-              />
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setShowInteraction(false)}
-                className="rounded-lg border px-4 py-2 text-sm"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={addInteraction}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Save Interaction
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </main>
+    </PageLayout>
   );
 }

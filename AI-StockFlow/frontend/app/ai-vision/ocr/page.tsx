@@ -176,7 +176,6 @@ export default function OCRDataEntryPage() {
           : "Camera ready. Position the product label inside the scan frame."
       );
     } catch (error) {
-      console.error(error);
 
       setCameraActive(false);
 
@@ -241,7 +240,6 @@ export default function OCRDataEntryPage() {
         !flashEnabled
       );
     } catch (error) {
-      console.error(error);
 
       setMessage(
         "Unable to change flash setting."

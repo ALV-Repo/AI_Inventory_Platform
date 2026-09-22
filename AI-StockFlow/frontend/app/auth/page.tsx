@@ -24,7 +24,6 @@ export default function AuthPage() {
 
       router.push("/dashboard");
     } catch (error) {
-      console.error("LOGIN ERROR:", error);
 
       if (error instanceof Error) {
         setError(error.message);

@@ -139,7 +139,6 @@ export default function AIVoicePage() {
     recognition.onerror = (
       event: any
     ) => {
-      console.error(
         "Speech recognition error:",
         event.error
       );
@@ -248,7 +247,6 @@ export default function AIVoicePage() {
 
       recognition.start();
     } catch (error) {
-      console.error(error);
 
       setIsListening(false);
       stopWaveform();

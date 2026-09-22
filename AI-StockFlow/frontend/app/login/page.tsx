@@ -31,7 +31,6 @@ export default function LoginPage() {
       
       router.push("/dashboard");
     } catch (err) {
-      console.error("LOGIN ERROR:", err);
 
       if (err instanceof Error) {
         setError(err.message);

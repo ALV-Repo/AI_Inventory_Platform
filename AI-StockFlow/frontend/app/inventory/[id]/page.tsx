@@ -298,7 +298,7 @@ const storedProduct: Product | undefined =
   typeof window !== "undefined"
     ? (() => {
         try {
-          const stored = localStorage.getItem(
+          const stored = sessionStorage.getItem(
             "inventory-view-product"
           );
 

@@ -395,6 +395,9 @@ export const api = {
   },
 
   // ── Audit Logs ─────────────────────────────────────────────────────────────
+  // Expose raw request for pages needing custom endpoints
+  request: <T>(path: string, init?: RequestInit) => request<T>(path, init ?? {}),
+
   auditLogs: {
     list: (limit = 200) => request<unknown[]>(`/audit-logs?limit=${limit}`),
   },
