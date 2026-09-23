@@ -55,7 +55,7 @@ const products: Product[] = [
     name: "Hot Wheels Track Set",
     category: "Toys",
     warehouse: "Main Store",
-    description:
+    description: "",
     variants: [
       {
         id: 101,
@@ -92,7 +92,7 @@ const products: Product[] = [
     name: "Bluetooth Speaker",
     category: "Electronics",
     warehouse: "Main Store",
-    description:
+    description: "",
     variants: [
       {
         id: 201,
@@ -129,7 +129,7 @@ const products: Product[] = [
     name: "Football Size 5",
     category: "Sports",
     warehouse: "Warehouse A",
-    description:
+    description: "",
     variants: [
       {
         id: 301,
@@ -157,7 +157,7 @@ const products: Product[] = [
     name: "Christmas Tree 4ft",
     category: "Seasonal",
     warehouse: "Main Store",
-    description:
+    description: "",
     variants: [
       {
         id: 401,
@@ -345,17 +345,17 @@ const product: Product | undefined = apiProduct
       name:
         apiProduct.name ??
         apiProduct.product_name ??
-        fallbackProduct?.name ??
+        fallbackProduct?.name ?? "Unknown",
       category:
         apiProduct.category ??
         apiProduct.category_name ??
-        fallbackProduct?.category ??
+        fallbackProduct?.category ?? null,
       warehouse:
         apiProduct.warehouse ??
         apiProduct.warehouse_name ??
-        fallbackProduct?.warehouse ??
+        fallbackProduct?.warehouse ?? null,
       description:
-        fallbackProduct?.description ??
+        fallbackProduct?.description ?? null,
       variants:
         fallbackProduct?.variants ??
         [
@@ -363,7 +363,7 @@ const product: Product | undefined = apiProduct
             id: Number(apiProduct.id) * 1000,
             name:
               apiProduct.name ??
-              apiProduct.product_name ??
+              apiProduct.product_name ?? `Product ${apiProduct.id}`,
             sku:
               apiProduct.sku ??
               apiProduct.code ??
@@ -504,7 +504,7 @@ const product: Product | undefined = apiProduct
         {
           warehouse:
             apiProduct.warehouse ??
-            apiProduct.warehouse_name ??
+            apiProduct.warehouse_name ?? null,
           onHand: Number(
             apiProduct.current_stock ??
               apiProduct.quantity ??
@@ -622,7 +622,7 @@ const product: Product | undefined = apiProduct
     );
 
     if (duplicate) {
-      alert(
+        alert("Invalid transfer quantity or insufficient stock.");
       return;
     }
 
@@ -1445,7 +1445,7 @@ const product: Product | undefined = apiProduct
                   type: "Stock In",
                   reference: "GRN-2026-0091",
                   quantity: "+10",
-                  description:
+                  description: "Stock received from supplier",
                   positive: true,
                 },
                 {
@@ -1453,7 +1453,7 @@ const product: Product | undefined = apiProduct
                   type: "Sale",
                   reference: "SO-2026-0148",
                   quantity: "-5",
-                  description:
+                  description: "Sold to customer",
                   positive: false,
                 },
                 {
@@ -1461,7 +1461,7 @@ const product: Product | undefined = apiProduct
                   type: "Adjustment",
                   reference: "ADJ-2026-0012",
                   quantity: "+2",
-                  description:
+                  description: "Manual stock adjustment",
                   positive: true,
                 },
                 {
@@ -1469,7 +1469,7 @@ const product: Product | undefined = apiProduct
                   type: "Transfer",
                   reference: "TRF-2026-0045",
                   quantity: "-5",
-                  description:
+                  description: "Transfer between warehouses",
                   positive: false,
                 },
               ].map((activity) => (

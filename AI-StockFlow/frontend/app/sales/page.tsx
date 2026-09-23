@@ -115,6 +115,7 @@ function normalizeProduct(
       : "";
 
   const priceValue =
+    product.selling_price ??
     product.price ??
     product.cost_price ??
     0;
@@ -960,7 +961,7 @@ try {
           DEFAULT_WAREHOUSE_ID,
         channel: "POS",
         payment_mode:
-          paymentMethod,
+          paymentMethod.toLowerCase().replace(" ", "_"),
         lines: cart.map(
           (item) => ({
             product_id: item.id,
@@ -1033,7 +1034,7 @@ return;
         channel: "POS",
 
         payment_mode:
-          paymentMethod,
+          paymentMethod.toLowerCase().replace(" ", "_"),
 
         lines: cart.map(
           (item) => ({
@@ -1045,18 +1046,12 @@ return;
         ),
       };
 
-        "Creating sale with payload:",
-        payload
-      );
 
       const createdSale =
         await createSale(
           payload
         );
 
-        "Sale created successfully:",
-        createdSale
-      );
 
       /*
        * Sale succeeded.

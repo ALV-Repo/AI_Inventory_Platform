@@ -498,9 +498,14 @@ def list_purchase_orders(
             "supplier_id": order.supplier_id,
             "warehouse_id": order.warehouse_id,
             "status": order.status,
+            "order_date": str(order.order_date) if order.order_date else None,
+            "expected_date": str(order.expected_date) if order.expected_date else None,
             "subtotal": order.subtotal,
             "tax_amount": order.tax_amount,
             "total": order.total,
+            "due_date": str(order.due_date) if order.due_date else None,
+            "outstanding": order.outstanding,
+            "created_by_ai": getattr(order, "created_by_ai", False),
         }
         for order in orders
     ]

@@ -328,7 +328,7 @@ export default function OCRDataEntryPage() {
 
     reader.onload = () => {
       if (
-        typeof reader.result ===
+        typeof reader.result === "string"
       ) {
         setCapturedImage(
           reader.result
@@ -431,7 +431,7 @@ export default function OCRDataEntryPage() {
                 )
               }
               className={`rounded-lg px-4 py-3 text-sm font-semibold transition ${
-                scanType ===
+                scanType === "invoice"
                   ? "bg-[#12213a] text-white"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
@@ -446,7 +446,7 @@ export default function OCRDataEntryPage() {
                 )
               }
               className={`rounded-lg px-4 py-3 text-sm font-semibold transition ${
-                scanType ===
+                scanType === "label"
                   ? "bg-[#12213a] text-white"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
@@ -471,7 +471,7 @@ export default function OCRDataEntryPage() {
               <div>
 
                 <h2 className="font-semibold text-[#12213a]">
-                  {scanType ===
+                  {scanType === "invoice"
                     ? "Invoice Scanner"
                     : "Label Scanner"}
                 </h2>
@@ -529,13 +529,13 @@ export default function OCRDataEntryPage() {
                   <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
 
                     <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-4xl">
-                      {scanType ===
+                      {scanType === "invoice"
                         ? "📄"
                         : "🏷️"}
                     </div>
 
                     <h3 className="text-lg font-semibold text-white">
-                      {scanType ===
+                      {scanType === "invoice"
                         ? "Invoice Camera Ready"
                         : "Label Camera Ready"}
                     </h3>
@@ -871,7 +871,7 @@ export default function OCRDataEntryPage() {
             </p>
 
             <p className="mt-2 text-lg font-bold text-[#12213a]">
-              {scanType ===
+              {scanType === "invoice"
                 ? "Supplier Invoice"
                 : "Product Label"}
             </p>

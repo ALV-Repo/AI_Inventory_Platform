@@ -325,7 +325,7 @@ export default function AIVisionPage() {
         reader.result;
 
       if (
-        typeof result ===
+        typeof result === "string"
       ) {
         setCapturedImage(
           result
@@ -505,9 +505,9 @@ export default function AIVisionPage() {
 
               <span
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  scanStatus ===
+                  scanStatus === "success"
                     ? "bg-green-50 text-green-600"
-                    : scanStatus ===
+                    : scanStatus === "scanning"
                     ? "bg-blue-50 text-blue-600"
                     : cameraActive
                     ? "bg-green-50 text-green-600"
@@ -1067,11 +1067,11 @@ export default function AIVisionPage() {
                       confirmScan
                     }
                     disabled={
-                      scanStatus ===
+                      scanStatus === "scanning"
                     }
                     className="w-full rounded-lg bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {scanStatus ===
+                    {scanStatus === "success"
                       ? "✓ Scan Confirmed"
                       : mode === "shelf"
                       ? "✓ Confirm Shelf Scan"

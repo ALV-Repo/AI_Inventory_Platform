@@ -140,11 +140,11 @@ export default function AIVoicePage() {
       setStatus("Ready");
 
       if (
-        event.error ===
+        event.error === "not-allowed"
       ) {
         setMessage( "Listening... speak your inventory command." );
       } else if (
-        event.error ===
+        event.error === "network"
       ) {
         setMessage( "Listening... speak your inventory command." );
       } else {
@@ -318,8 +318,8 @@ export default function AIVoicePage() {
       detectedCommand = {
         text,
         type: "purchase",
-        action:
-        target:
+        action: "Purchase",
+        target: "Inventory Item",
           normalized.includes( "update" ) || normalized.includes( "change" ) || normalized.includes( "set" ) ? "Update Stock" : "Inventory Action", target: normalized.includes( "keyboard" ) ? "Wireless Keyboard" : normalized.includes( "microphone" ) ? "USB Microphone" : normalized.includes( "monitor" ) ? "24-inch Monitor" : "Inventory Item", value: extractNumber( text ), };
           )
             ? "USB Microphone"
@@ -361,8 +361,8 @@ export default function AIVoicePage() {
       detectedCommand = {
         text,
         type: "unknown",
-        action:
-        target:
+        action: "",
+        target: "",
         value: "",
       };
     }
@@ -452,25 +452,25 @@ export default function AIVoicePage() {
 
   const getStatusText = () => {
     if (
-      status ===
+      status === "recording"
     ) {
       return "Listening";
     }
 
     if (
-      status ===
+      status === "paused"
     ) {
       return "Processing";
     }
 
     if (
-      status ===
+      status === "stopped"
     ) {
       return "Confirmation Required";
     }
 
     if (
-      status ===
+      status === "idle"
     ) {
       return "Completed";
     }
@@ -534,7 +534,7 @@ export default function AIVoicePage() {
 
             <span
               className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                status ===
+                 status === "idle"
                   ? "bg-green-50 text-green-600"
                   : isListening
                   ? "bg-red-50 text-red-600"

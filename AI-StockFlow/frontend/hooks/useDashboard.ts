@@ -115,7 +115,37 @@ export default function useDashboard() {
         apiFetch<ReorderSuggestion[]>("/ai/reorder-suggestions").catch(() => []),
         apiFetch<{ items: unknown[] }>("/ai/dead-stock").then(r => r.items ?? []).catch(() => []),
       ]);
-      setSummary(s as DashboardSummary);
+      // Flatten nested backend response to flat DashboardSummary
+      const raw = s as Record<string, unknown>;
+      const today = (raw.today ?? {}) as Record<string, unknown>;
+      const period = (raw.period ?? {}) as Record<string, unknown>;
+      const inventory = (raw.inventory ?? {}) as Record<string, unknown>;
+
+      // If backend returns flat (already mapped), use as-is
+      // If backend returns nested, flatten it
+      const isNested = 'today' in raw && 'period' in raw;
+
+      const flat: DashboardSummary = isNested ? {
+        revenue_today:   Number(today.revenue ?? 0),
+        revenue_30_days: Number(period.revenue ?? 0),
+        revenue_period:  Number(period.revenue ?? 0),
+        gross_profit:    Number(period.gross_profit ?? 0),
+        gross_margin:    Number(period.margin_pct ?? 0),
+        stock_value:     Number(inventory.value ?? 0),
+        total_skus:      Number(inventory.sku_count ?? 0),
+        needs_reorder:   Number(inventory.low_stock_count ?? 0),
+        out_of_stock:    Number(inventory.out_of_stock_count ?? 0),
+        orders_today:    Number(today.orders ?? 0),
+        orders_30_days:  Number(period.orders ?? 0),
+        period_orders:   Number(period.orders ?? 0),
+        orders:          Number(period.orders ?? 0),
+        revenue_change_pct: Number(period.revenue_change_pct ?? 0),
+        period_days:     Number(period.days ?? 30),
+        health_score:    raw.health_score as DashboardSummary['health_score'],
+        ...raw,
+      } : raw as unknown as DashboardSummary;
+
+      setSummary(flat);
       setReorderSuggestions(Array.isArray(r) ? r : []);
       setDeadStock(Array.isArray(d) ? d : []);
     } catch (e: unknown) {
